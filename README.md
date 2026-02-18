@@ -1,14 +1,14 @@
 # FairSplit MVP
 
-A monorepo web-first app for two partners to track monthly incomes and expenses, then compute fair end-of-month settlement based on income proportion.
+A monorepo web-first app to track monthly incomes and expenses, then compute fair end-of-month settlement based on income proportion.
 
 ## Stack
 
 - `apps/web`: Next.js App Router, TypeScript, Tailwind, React Hook Form + Zod
 - `apps/api`: Express + TypeScript + Prisma client
-- `packages/db`: Prisma schema, SQL migration, seed script
+- `packages/db`: Prisma schema and SQL migrations
 - `packages/shared`: Shared validation + settlement logic + unit tests
-- Database: PostgreSQL (Docker Compose)
+- Database: PostgreSQL (local Docker for dev, or hosted Postgres like Supabase)
 
 ## Settlement Logic
 
@@ -35,15 +35,18 @@ Given a selected month:
 
 ## Data Model
 
-- `User`: `id`, `name`, `createdAt`
-- `MonthlyIncome`: `id`, `month` (`YYYY-MM`), `userId`, `amount`
-- `Expense`: `id`, `month`, `date`, `description`, `category`, `amount`, `paidByUserId`
+- `Household`: top-level tenant boundary.
+- `User`: participant with optional auth linkage (`email`, `authUserId`) and `householdId`.
+- `MonthlyIncome`: income rows per user/month, household-scoped.
+- `Expense`: expense rows per month, household-scoped.
   - Optional installment metadata: `isInstallment`, `installmentSeriesId`, `installmentNumber`, `installmentTotal`, `installmentAmount`, `installmentSource`, `originalTotalAmount`, `createdFromSeries`
+- `Category`, `SuperCategory`, `ExpenseTemplate`, `MonthlyExchangeRate`: household-scoped.
 
 Constraints:
 
 - multiple `MonthlyIncome` rows are allowed per `month + userId`
-- amount fields validated as `>= 0` at API layer
+- one non-null `authUserId` maps to exactly one `User`
+- one non-null email per household (case-insensitive)
 
 ## API
 
@@ -80,7 +83,40 @@ Settlement response:
 }
 ```
 
-## Local Setup
+## Environment Setup
+
+Use per-workspace env files in this monorepo:
+
+- `apps/web/.env.local`
+- `apps/api/.env`
+- `packages/db/.env`
+
+Example values:
+
+`apps/web/.env.local`
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4000/api
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+`apps/api/.env`
+
+```bash
+DATABASE_URL=postgresql://... # local or hosted Postgres
+API_PORT=4000
+```
+
+`packages/db/.env`
+
+```bash
+DATABASE_URL=postgresql://... # local or hosted Postgres
+TEST_DATABASE_URL=postgresql://... # required for API integration tests
+```
+
+## Local Setup (Docker Postgres)
 
 1. Install dependencies:
 
@@ -88,7 +124,7 @@ Settlement response:
 pnpm install
 ```
 
-2. Start PostgreSQL:
+2. Start local PostgreSQL:
 
 ```bash
 docker compose up -d
@@ -101,13 +137,7 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
-4. Seed sample data (current month):
-
-```bash
-pnpm db:seed
-```
-
-5. Run API + web together:
+4. Run API + web together:
 
 ```bash
 pnpm dev
@@ -120,15 +150,26 @@ pnpm dev
 
 The web app now starts at a login flow (`/login`) when no session cookie is present.
 
-Set these in your web environment:
+After clicking the magic link, `/auth/callback` calls `POST /api/auth/link` to map or create the FairSplit user and store a session cookie.
+
+If Supabase redirects to `/login#access_token=...`, the login page auto-forwards to `/auth/callback`.
+
+## Supabase Migration + Data Import (recommended order)
+
+1. Point `apps/api/.env` and `packages/db/.env` `DATABASE_URL` to Supabase (`sslmode=require`).
+2. Run migrations:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+pnpm db:migrate
 ```
 
-After clicking the magic link, `/auth/callback` calls `POST /api/auth/link` to map or create the FairSplit user.
+3. Import existing local data as data-only:
+
+```bash
+pg_dump -n public --data-only --exclude-table=public._prisma_migrations --exclude-table-data=public.\"SuperCategory\" \
+  \"postgresql://postgres:postgres@localhost:5433/fairsplit\" > /tmp/fairsplit_data.sql
+psql \"postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres?sslmode=require\" < /tmp/fairsplit_data.sql
+```
 
 ## Tests + Build
 
@@ -158,30 +199,8 @@ pnpm build
 pnpm lint
 ```
 
-## Seeded Sample
-
-Seed creates two users (`Alex`, `Sam`) for the current month with incomes and expenses so dashboard settlement is visible immediately.
-
 ## Notes
 
-- This MVP models two users in seeded UI flow but schema and settlement logic support multiple users.
 - If `totalIncome == 0` and expenses are non-zero, settlement endpoint returns `400` with a friendly message.
 - Installments are first-class expenses. Future installments are generated lazily when a month is fetched.
-- Legacy descriptions like `C.17/18` can be backfilled with:
-
-```bash
-pnpm --filter @fairsplit/db backfill:installments
-```
-
-- Household/auth backfill for existing Nacho/Tatiana data:
-
-```bash
-pnpm db:migrate
-pnpm --filter @fairsplit/db backfill:household-auth-link
-```
-
-- After validating linked users and first-login behavior, run hardening SQL manually:
-
-```bash
-psql "$DATABASE_URL" -f packages/db/prisma/harden-household-auth-link.sql
-```
+- Logout route: `GET /logout` clears the local session cookie.
