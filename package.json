@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.4.1",
   "scripts": {
+    "prebuild": "pnpm --filter @fairsplit/db prisma:generate",
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",

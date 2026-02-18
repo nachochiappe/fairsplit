@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "echo 'No dev server for @fairsplit/db'",
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm prisma:generate && tsc -p tsconfig.json",
     "test": "echo 'No tests for @fairsplit/db'",
     "lint": "echo 'No lint step for @fairsplit/db'",
     "prisma:generate": "prisma generate",
