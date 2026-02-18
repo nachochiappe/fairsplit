@@ -77,12 +77,14 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
         <NavItem href="/incomes" label="Incomes" month={month} />
         <NavItem href="/expenses" label="Expenses" month={month} />
         <NavItem href="/settings" label="Settings" month={month} />
-        <Link
-          href="/logout"
-          className="rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800"
-        >
-          Logout
-        </Link>
+        <form action="/logout" method="post">
+          <button
+            type="submit"
+            className="rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800"
+          >
+            Logout
+          </button>
+        </form>
       </nav>
 
       <div className="space-y-8">
