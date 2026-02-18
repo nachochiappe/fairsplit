@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String            @id @default(cuid())
+  name             String
+  email            String?
+  authUserId       String?
+  householdId      String?
+  household        Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  incomes          MonthlyIncome[]
+  paidExpenses     Expense[]         @relation("ExpensePaidByUser")
+  fixedTemplates   ExpenseTemplate[] @relation("TemplatePaidByUser")
+
+  @@unique([authUserId])
+  @@index([householdId])
+}
+
+model MonthlyIncome {
+  id          String   @id @default(cuid())
+  month       String   @db.VarChar(7)
+  description String
+  amount      Decimal  @db.Decimal(14, 2)
+  amountOriginal Decimal @db.Decimal(14, 2)
+  currencyCode String   @db.VarChar(3) @default("ARS")
+  fxRateUsed   Decimal  @db.Decimal(14, 6) @default(1)
+  householdId  String?
+  household    Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([month])
+  @@index([month, userId, id])
+  @@index([userId])
+  @@index([householdId])
+  @@index([householdId, month])
+}
+
+model Category {
+  id               String            @id @default(cuid())
+  name             String
+  householdId      String?
+  household        Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  superCategoryId  String?
+  superCategory    SuperCategory?    @relation(fields: [superCategoryId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  archivedAt       DateTime?
+  expenses         Expense[]
+  expenseTemplates ExpenseTemplate[]
+
+  @@index([archivedAt, name])
+  @@index([superCategoryId])
+  @@index([householdId])
+  @@unique([householdId, name])
+}
+
+model SuperCategory {
+  id         String     @id @default(cuid())
+  name       String
+  slug       String
+  householdId String?
+  household  Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  color      String     @default("#64748b")
+  icon       String?
+  sortOrder  Int        @default(0)
+  isSystem   Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  archivedAt DateTime?
+  categories Category[]
+
+  @@index([archivedAt, sortOrder, name])
+  @@index([householdId])
+  @@unique([householdId, slug])
+}
+
+model Expense {
+  id                 String   @id @default(cuid())
+  month              String   @db.VarChar(7)
+  date               DateTime
+  description        String
+  categoryId         String
+  category           Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  amountOriginal     Decimal  @db.Decimal(14, 2)
+  amountArs          Decimal  @db.Decimal(14, 2)
+  currencyCode       String   @db.VarChar(3) @default("ARS")
+  fxRateUsed         Decimal  @db.Decimal(14, 6) @default(1)
+  isInstallment      Boolean  @default(false)
+  installmentSeriesId String?
+  installmentNumber   Int?
+  installmentTotal    Int?
+  installmentAmount   Decimal? @db.Decimal(14, 2)
+  installmentSource   String?
+  originalTotalAmount Decimal? @db.Decimal(14, 2)
+  createdFromSeries   Boolean  @default(false)
+  householdId        String?
+  household          Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  templateId         String?
+  template           ExpenseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  paidByUserId       String
+  paidByUser         User     @relation("ExpensePaidByUser", fields: [paidByUserId], references: [id], onDelete: Restrict)
+
+  @@index([month])
+  @@index([month, isInstallment])
+  @@index([paidByUserId])
+  @@index([categoryId])
+  @@index([templateId])
+  @@index([templateId, month])
+  @@index([month, templateId])
+  @@index([month, date, id])
+  @@index([installmentSeriesId, installmentNumber])
+  @@unique([month, templateId])
+  @@unique([installmentSeriesId, month])
+  @@index([householdId])
+  @@index([householdId, month])
+}
+
+model ExpenseTemplate {
+  id             String   @id @default(cuid())
+  description    String
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  amountOriginal Decimal  @db.Decimal(14, 2)
+  amountArs      Decimal  @db.Decimal(14, 2)
+  currencyCode   String   @db.VarChar(3) @default("ARS")
+  fxRate         Decimal  @db.Decimal(14, 6)
+  dayOfMonth     Int
+  isActive       Boolean  @default(true)
+  householdId    String?
+  household      Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  paidByUserId   String
+  paidByUser     User     @relation("TemplatePaidByUser", fields: [paidByUserId], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  expenses       Expense[]
+
+  @@index([isActive])
+  @@index([isActive, createdAt])
+  @@index([categoryId])
+  @@index([paidByUserId])
+  @@index([householdId])
+}
+
+model MonthlyExchangeRate {
+  id           String   @id @default(cuid())
+  month        String   @db.VarChar(7)
+  currencyCode String   @db.VarChar(3)
+  rateToArs    Decimal  @db.Decimal(14, 6)
+  householdId  String?
+  household    Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([month, currencyCode])
+  @@index([month])
+  @@index([householdId])
+}
+
+model Household {
+  id              String              @id @default(cuid())
+  name            String
+  createdAt       DateTime            @default(now())
+  users           User[]
+  incomes         MonthlyIncome[]
+  expenses        Expense[]
+  expenseTemplates ExpenseTemplate[]
+  categories      Category[]
+  superCategories SuperCategory[]
+  exchangeRates   MonthlyExchangeRate[]
+}

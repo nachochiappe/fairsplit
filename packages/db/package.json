@@ -1,0 +1,25 @@
+{
+  "name": "@fairsplit/db",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "scripts": {
+    "dev": "echo 'No dev server for @fairsplit/db'",
+    "build": "tsc -p tsconfig.json",
+    "test": "echo 'No tests for @fairsplit/db'",
+    "lint": "echo 'No lint step for @fairsplit/db'",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.4.1",
+    "tsx": "^4.19.2"
+  }
+}

@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f8fbff;
+  --foreground: #0f1b35;
+  --surface: #ffffff;
+  --surface-soft: #eef4ff;
+  --stroke: #d9e3f3;
+  --brand-strong: #1d4ed8;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% 6%, #dbeafe 0%, rgba(219, 234, 254, 0) 42%),
+    radial-gradient(circle at 88% 0%, #ffedd5 0%, rgba(255, 237, 213, 0) 33%),
+    linear-gradient(180deg, #f8fbff 0%, #f4f8ff 100%);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-tap-highlight-color: rgba(18, 32, 26, 0.15);
+  min-height: 100vh;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+a,
+button {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+button {
+  cursor: pointer;
+}
+
+input:not([type='checkbox']):not([type='radio']),
+select,
+textarea {
+  min-height: 44px;
+}
+
+*:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-strong) 90%, white 10%);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #dbeafe;
+  color: #0b1f5f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
