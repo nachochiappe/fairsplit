@@ -48,12 +48,14 @@ export function Nav({ month }: { month: string }) {
           </Link>
         );
       })}
-      <Link
-        className="rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-        href="/logout"
-      >
-        Logout
-      </Link>
+      <form action="/logout" method="post">
+        <button
+          type="submit"
+          className="rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+        >
+          Logout
+        </button>
+      </form>
     </nav>
   );
 }
