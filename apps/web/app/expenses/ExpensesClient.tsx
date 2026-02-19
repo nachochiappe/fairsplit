@@ -706,7 +706,11 @@ export function ExpensesClient({
             <h2 className="text-base font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</h2>
             <label className="block text-sm">
               <span className="mb-1 block text-slate-700">Date</span>
-              <input className={fieldClass} type="date" {...form.register('date')} />
+              <input
+                className={`${fieldClass} leading-tight [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
+                type="date"
+                {...form.register('date')}
+              />
             </label>
             <label className="block text-sm">
               <span className="mb-1 block text-slate-700">Description</span>
