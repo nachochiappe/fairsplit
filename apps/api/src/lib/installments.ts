@@ -128,6 +128,9 @@ export async function ensureInstallmentsForMonth(month: string): Promise<void> {
       .sort((a, b) => b.month.localeCompare(a.month) || b.id.localeCompare(a.id))[0];
 
     const sourceRow = latestPrior ?? anchor;
+    if (!sourceRow.householdId) {
+      continue;
+    }
     const day = sourceRow.date.getUTCDate();
     const date = monthToDate(month, day);
     const schedule = buildScheduleFromSeries(anchor);
@@ -146,6 +149,7 @@ export async function ensureInstallmentsForMonth(month: string): Promise<void> {
           amountArs,
           currencyCode: sourceRow.currencyCode,
           fxRateUsed,
+          householdId: sourceRow.householdId,
           paidByUserId: sourceRow.paidByUserId,
           isInstallment: true,
           installmentSeriesId: seriesId,

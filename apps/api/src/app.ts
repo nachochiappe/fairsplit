@@ -965,6 +965,14 @@ export const createApp = (): Express => {
       return res.status(400).json({ error: 'Category must exist and be active.' });
     }
 
+    const householdId = existingUser.householdId ?? category.householdId ?? null;
+    if (!householdId) {
+      return res.status(400).json({ error: 'User and category must belong to a household.' });
+    }
+    if (existingUser.householdId && category.householdId && existingUser.householdId !== category.householdId) {
+      return res.status(400).json({ error: 'User and category must belong to the same household.' });
+    }
+
     const currencyCode = parsed.data.currencyCode;
     const fxRateUsed = await resolveFxRateForMonth({
       month: parsed.data.month,
@@ -992,6 +1000,7 @@ export const createApp = (): Express => {
           currencyCode,
           fxRate: fxRateUsed,
           paidByUserId: parsed.data.paidByUserId,
+          householdId,
           dayOfMonth,
           isActive: true,
         },
@@ -1009,6 +1018,7 @@ export const createApp = (): Express => {
         amountArs,
         currencyCode,
         fxRateUsed,
+        householdId,
         templateId,
         paidByUserId: parsed.data.paidByUserId,
         isInstallment: installmentPayload.isInstallment,
