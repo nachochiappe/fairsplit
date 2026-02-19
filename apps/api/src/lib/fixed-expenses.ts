@@ -37,7 +37,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
   const warnings: string[] = [];
   const templates = await prisma.expenseTemplate.findMany({
     where: { isActive: true },
-    include: { category: true },
+    include: { category: true, paidByUser: { select: { householdId: true } } },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -98,6 +98,11 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
     const fxRateUsed = monthRate ?? template.fxRate.toFixed(6);
     const amountOriginal = template.amountOriginal.toFixed(2);
     const amountArs = toArsAmount(amountOriginal, fxRateUsed);
+    const householdId = template.householdId ?? template.paidByUser.householdId;
+    if (!householdId) {
+      warnings.push(`Fixed expense \"${template.description}\" was skipped because it has no household context.`);
+      continue;
+    }
 
     try {
       await prisma.expense.create({
@@ -110,6 +115,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
           amountArs,
           currencyCode: template.currencyCode,
           fxRateUsed,
+          householdId,
           templateId: template.id,
           paidByUserId: template.paidByUserId,
           isInstallment: false,
