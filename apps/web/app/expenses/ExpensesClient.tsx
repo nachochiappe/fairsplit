@@ -45,6 +45,7 @@ const secondaryButtonClass =
   'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const smallButtonClass =
   'rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+const SEARCH_DEBOUNCE_MS = 350;
 
 function getTodayDateInputValue() {
   const now = new Date();
@@ -227,6 +228,7 @@ export function ExpensesClient({
   const [pageSize, setPageSize] = useState<10 | 25 | 50>(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [selectedPaidByUserId, setSelectedPaidByUserId] = useState<string>('all');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<ExpenseTypeFilter>('all');
@@ -378,7 +380,7 @@ export function ExpensesClient({
   const loadMonthData = useCallback(async () => {
     const [expenseData, rates] = await Promise.all([
       getExpenses(month, {
-        search: searchQuery || undefined,
+        search: debouncedSearchQuery || undefined,
         categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
         paidByUserId: selectedPaidByUserId === 'all' ? undefined : selectedPaidByUserId,
         type: selectedTypeFilter === 'all' ? undefined : selectedTypeFilter,
@@ -390,7 +392,7 @@ export function ExpensesClient({
     setExpenses(expenseData.expenses);
     setWarnings(expenseData.warnings);
     setExchangeRates(rates);
-  }, [month, searchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
+  }, [month, debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
 
   useEffect(() => {
     setUsers(initialUsers);
@@ -431,8 +433,16 @@ export function ExpensesClient({
   }, [isMobileViewport, pageSize]);
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
+  }, [debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
 
   useEffect(() => {
     void loadMonthData().catch((loadError) => {
