@@ -48,10 +48,10 @@ export function Nav({ month }: { month: string }) {
           </Link>
         );
       })}
-      <form action="/logout" method="post">
+      <form action="/logout" method="post" className="h-full">
         <button
           type="submit"
-          className="rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className="h-full w-full rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
         >
           Logout
         </button>
