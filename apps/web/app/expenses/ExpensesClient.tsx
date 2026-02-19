@@ -27,6 +27,7 @@ type ScopeAction = 'update' | 'delete';
 type ExpenseTypeFilter = 'all' | 'oneTime' | 'fixed' | 'installment';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
+type ExpenseSectionKey = 'fixed' | 'oneTime' | 'installment';
 const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
 type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const currencyCodeSchema = z.enum(supportedCurrencyCodes);
@@ -43,8 +44,6 @@ const primaryButtonClass =
   'rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const secondaryButtonClass =
   'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-const smallButtonClass =
-  'rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
 const SEARCH_DEBOUNCE_MS = 350;
 
 function getTodayDateInputValue() {
@@ -225,8 +224,12 @@ export function ExpensesClient({
   const [error, setError] = useState<string | null>(null);
   const [newFxCurrency, setNewFxCurrency] = useState<SupportedCurrencyCode>('USD');
   const [newFxRate, setNewFxRate] = useState('');
-  const [pageSize, setPageSize] = useState<10 | 25 | 50>(10);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(10);
+  const [sectionPages, setSectionPages] = useState<Record<ExpenseSectionKey, number>>({
+    fixed: 1,
+    oneTime: 1,
+    installment: 1,
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
@@ -269,13 +272,6 @@ export function ExpensesClient({
     if (sortDirection !== 'desc') count += 1;
     return count;
   }, [selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortDirection, sortField]);
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(expenses.length / pageSize)), [expenses.length, pageSize]);
-  const paginatedExpenses = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return expenses.slice(start, start + pageSize);
-  }, [currentPage, expenses, pageSize]);
-  const pageStart = expenses.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const pageEnd = Math.min(currentPage * pageSize, expenses.length);
   const filteredSubtotalArs = useMemo(
     () => expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [expenses],
@@ -298,17 +294,14 @@ export function ExpensesClient({
         .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [expenses],
   );
-  const paginatedFixedExpenses = useMemo(
-    () => paginatedExpenses.filter((expense) => expense.fixed.enabled),
-    [paginatedExpenses],
+  const fixedExpenses = useMemo(() => expenses.filter((expense) => expense.fixed.enabled), [expenses]);
+  const installmentExpenses = useMemo(
+    () => expenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
+    [expenses],
   );
-  const paginatedInstallmentExpenses = useMemo(
-    () => paginatedExpenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
-    [paginatedExpenses],
-  );
-  const paginatedOneTimeExpenses = useMemo(
-    () => paginatedExpenses.filter((expense) => !expense.fixed.enabled && !expense.installment),
-    [paginatedExpenses],
+  const oneTimeExpenses = useMemo(
+    () => expenses.filter((expense) => !expense.fixed.enabled && !expense.installment),
+    [expenses],
   );
 
   const form = useForm<ExpenseForm>({
@@ -425,6 +418,14 @@ export function ExpensesClient({
     setExchangeRates(rates);
   }, [month, debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
 
+  const resetSectionPages = useCallback(() => {
+    setSectionPages({
+      fixed: 1,
+      oneTime: 1,
+      installment: 1,
+    });
+  }, []);
+
   useEffect(() => {
     setUsers(initialUsers);
     setExpenses(initialExpenses);
@@ -432,13 +433,9 @@ export function ExpensesClient({
     setCategories(initialCategories);
     setExchangeRates(initialExchangeRates);
     setError(null);
-    setCurrentPage(1);
+    resetSectionPages();
     resetForm(initialUsers[0]?.id ?? '', initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
-  }, [initialCategories, initialExchangeRates, initialExpenses, initialUsers, initialWarnings, resetForm]);
-
-  useEffect(() => {
-    setCurrentPage((previousPage) => Math.min(previousPage, totalPages));
-  }, [totalPages]);
+  }, [initialCategories, initialExchangeRates, initialExpenses, initialUsers, initialWarnings, resetForm, resetSectionPages]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -456,12 +453,12 @@ export function ExpensesClient({
   }, []);
 
   useEffect(() => {
-    if (!isMobileViewport || pageSize === 10) {
+    if (!isMobileViewport || maxRowsPerSection === 10) {
       return;
     }
-    setPageSize(10);
-    setCurrentPage(1);
-  }, [isMobileViewport, pageSize]);
+    setMaxRowsPerSection(10);
+    resetSectionPages();
+  }, [isMobileViewport, maxRowsPerSection, resetSectionPages]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -472,8 +469,19 @@ export function ExpensesClient({
   }, [searchQuery]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
+    resetSectionPages();
+  }, [debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection, resetSectionPages]);
+
+  useEffect(() => {
+    setSectionPages((previousPages) => ({
+      fixed: Math.min(previousPages.fixed, Math.max(1, Math.ceil(fixedExpenses.length / maxRowsPerSection))),
+      oneTime: Math.min(previousPages.oneTime, Math.max(1, Math.ceil(oneTimeExpenses.length / maxRowsPerSection))),
+      installment: Math.min(
+        previousPages.installment,
+        Math.max(1, Math.ceil(installmentExpenses.length / maxRowsPerSection)),
+      ),
+    }));
+  }, [fixedExpenses.length, oneTimeExpenses.length, installmentExpenses.length, maxRowsPerSection]);
 
   useEffect(() => {
     void loadMonthData().catch((loadError) => {
@@ -713,6 +721,69 @@ export function ExpensesClient({
       setSaving(false);
     }
   };
+
+  const sectionSummaries = useMemo(() => {
+    const sectionData: Array<{
+      key: ExpenseSectionKey;
+      title: string;
+      subtitle: string;
+      subtotalArs: number;
+      allRows: Expense[];
+      emptyMessage: string;
+    }> = [
+      {
+        key: 'fixed',
+        title: 'Recurring expenses',
+        subtitle: 'Recurring monthly costs',
+        subtotalArs: fixedSubtotalArs,
+        allRows: fixedExpenses,
+        emptyMessage: 'No recurring expenses in the current results',
+      },
+      {
+        key: 'oneTime',
+        title: 'One-time expenses',
+        subtitle: 'Variable purchases',
+        subtotalArs: oneTimeSubtotalArs,
+        allRows: oneTimeExpenses,
+        emptyMessage: hasActiveFilters ? 'No one-time expenses match the current filters' : 'No one-time expenses yet for this month',
+      },
+      {
+        key: 'installment',
+        title: 'Installments',
+        subtitle: 'Purchases paid across multiple months',
+        subtotalArs: installmentSubtotalArs,
+        allRows: installmentExpenses,
+        emptyMessage: hasActiveFilters ? 'No installments match the current filters' : 'No installments yet for this month',
+      },
+    ];
+
+    return sectionData.map((section) => {
+      const totalRows = section.allRows.length;
+      const currentPage = sectionPages[section.key];
+      const totalPages = Math.max(1, Math.ceil(totalRows / maxRowsPerSection));
+      const page = Math.min(currentPage, totalPages);
+      const startIndex = (page - 1) * maxRowsPerSection;
+      const rows = section.allRows.slice(startIndex, startIndex + maxRowsPerSection);
+      return {
+        ...section,
+        rows,
+        totalRows,
+        currentPage: page,
+        totalPages,
+        showSectionPager: totalRows > maxRowsPerSection,
+      };
+    });
+  }, [
+    fixedSubtotalArs,
+    fixedExpenses,
+    hasActiveFilters,
+    installmentExpenses,
+    installmentSubtotalArs,
+    maxRowsPerSection,
+    oneTimeExpenses,
+    oneTimeSubtotalArs,
+    sectionPages,
+  ]);
 
   return (
     <AppShell
@@ -975,79 +1046,27 @@ export function ExpensesClient({
               <div className="border-b border-slate-200 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      Showing {pageStart}-{pageEnd} of {expenses.length}
-                    </p>
+                    <p className="text-sm font-semibold text-slate-800">Showing {expenses.length} filtered results</p>
                     <p className="text-xs text-slate-500">Filtered results for this month</p>
                     <p className="text-xs font-medium text-slate-600">Subtotal (filtered): ARS {formatMoney(filteredSubtotalArs)}</p>
                   </div>
-                  <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
-                    <label className="hidden items-center gap-2 text-sm text-slate-700 md:flex" htmlFor="expense-page-size">
-                      <span className="font-medium">Rows</span>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto">
+                    <label className="flex items-center gap-2 text-sm text-slate-700" htmlFor="expense-page-size">
+                      <span className="font-medium">Max rows per section</span>
                       <select
                         className={`${compactFieldClass} min-w-20 rounded-lg px-3 py-2`}
                         id="expense-page-size"
                         onChange={(event) => {
-                          setPageSize(Number(event.target.value) as 10 | 25 | 50);
-                          setCurrentPage(1);
+                          setMaxRowsPerSection(Number(event.target.value) as 10 | 25 | 50);
+                          resetSectionPages();
                         }}
-                        value={pageSize}
+                        value={maxRowsPerSection}
                       >
                         <option value={10}>10</option>
                         <option value={25}>25</option>
                         <option value={50}>50</option>
                       </select>
                     </label>
-                    <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 md:flex">
-                      <button
-                        className={smallButtonClass}
-                        disabled={currentPage === 1}
-                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                        type="button"
-                      >
-                        Prev
-                      </button>
-                      <span className="min-w-20 text-center text-sm font-medium text-slate-700">
-                        {currentPage} / {totalPages}
-                      </span>
-                      <button
-                        className={smallButtonClass}
-                        disabled={currentPage === totalPages}
-                        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                        type="button"
-                      >
-                        Next
-                      </button>
-                    </div>
-                    <div className="flex justify-center md:hidden">
-                      <div className="flex w-full max-w-xs items-center justify-between rounded-2xl bg-slate-100 px-2 py-1.5">
-                        <button
-                          aria-label="Previous page"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={currentPage === 1}
-                          onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                          type="button"
-                        >
-                          <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-                            <path d="m15 18-6-6 6-6" />
-                          </svg>
-                        </button>
-                        <span className="min-w-16 text-center text-xl font-semibold tracking-tight text-slate-700">
-                          {currentPage} / {totalPages}
-                        </span>
-                        <button
-                          aria-label="Next page"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={currentPage === totalPages}
-                          onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                          type="button"
-                        >
-                          <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-                            <path d="m9 18 6-6-6-6" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1168,7 +1187,7 @@ export function ExpensesClient({
                               setSelectedTypeFilter('all');
                               setSortField('date');
                               setSortDirection('desc');
-                              setCurrentPage(1);
+                              resetSectionPages();
                             }}
                             type="button"
                           >
@@ -1181,32 +1200,7 @@ export function ExpensesClient({
                 </div>
               </div>
               <div className="space-y-5 p-4">
-                {[
-                  {
-                    key: 'fixed',
-                    title: 'Recurring expenses',
-                    subtitle: 'Recurring monthly costs',
-                    subtotalArs: fixedSubtotalArs,
-                    rows: paginatedFixedExpenses,
-                    emptyMessage: 'No recurring expenses in the current results',
-                  },
-                  {
-                    key: 'one-time',
-                    title: 'One-time expenses',
-                    subtitle: 'Variable purchases',
-                    subtotalArs: oneTimeSubtotalArs,
-                    rows: paginatedOneTimeExpenses,
-                    emptyMessage: hasActiveFilters ? 'No one-time expenses match the current filters' : 'No one-time expenses yet for this month',
-                  },
-                  {
-                    key: 'installment',
-                    title: 'Installments',
-                    subtitle: 'Purchases paid across multiple months',
-                    subtotalArs: installmentSubtotalArs,
-                    rows: paginatedInstallmentExpenses,
-                    emptyMessage: hasActiveFilters ? 'No installments match the current filters' : 'No installments yet for this month',
-                  },
-                ].map((section) => (
+                {sectionSummaries.map((section) => (
                   <section key={section.key} className="overflow-hidden rounded-xl border border-slate-200/80">
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -1215,7 +1209,7 @@ export function ExpensesClient({
                           className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${
                             section.key === 'fixed'
                               ? 'bg-blue-100 text-blue-700'
-                              : section.key === 'one-time'
+                              : section.key === 'oneTime'
                                 ? 'bg-orange-100 text-orange-700'
                                 : 'bg-violet-100 text-violet-700'
                           }`}
@@ -1227,7 +1221,7 @@ export function ExpensesClient({
                               <path d="M21 12a9 9 0 0 1-15.1 6.36" />
                               <path d="M21 20v-6h-6" />
                             </svg>
-                          ) : section.key === 'one-time' ? (
+                          ) : section.key === 'oneTime' ? (
                             <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" viewBox="0 0 24 24">
                               <rect height="14" rx="2.5" width="14" x="5" y="7" />
                               <path d="M9 7V5a3 3 0 0 1 6 0v2" />
@@ -1347,6 +1341,47 @@ export function ExpensesClient({
                         </tbody>
                       </table>
                     </div>
+                    {section.showSectionPager ? (
+                      <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3">
+                        <p className="text-sm font-medium text-slate-600">
+                          Showing {section.rows.length} of {section.totalRows} results
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <button
+                            aria-label={`Previous ${section.title} page`}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={section.currentPage === 1}
+                            onClick={() =>
+                              setSectionPages((previous) => ({
+                                ...previous,
+                                [section.key]: Math.max(1, section.currentPage - 1),
+                              }))
+                            }
+                            type="button"
+                          >
+                            <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path d="m15 18-6-6 6-6" />
+                            </svg>
+                          </button>
+                          <button
+                            aria-label={`Next ${section.title} page`}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={section.currentPage === section.totalPages}
+                            onClick={() =>
+                              setSectionPages((previous) => ({
+                                ...previous,
+                                [section.key]: Math.min(section.totalPages, section.currentPage + 1),
+                              }))
+                            }
+                            type="button"
+                          >
+                            <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path d="m9 18 6-6-6-6" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
                 ))}
               </div>

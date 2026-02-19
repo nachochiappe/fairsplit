@@ -42,22 +42,28 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
   });
 
   const templateIds = templates.map((template) => template.id);
-  const existingTemplateIds =
+  const templateExpenseRows =
     templateIds.length > 0
-      ? new Set(
-          (
-            await prisma.expense.findMany({
-              where: {
-                month,
-                templateId: { in: templateIds },
-              },
-              select: { templateId: true },
-            })
-          )
-            .map((row) => row.templateId)
-            .filter((value): value is string => Boolean(value)),
-        )
-      : new Set<string>();
+      ? await prisma.expense.findMany({
+          where: { templateId: { in: templateIds } },
+          select: { templateId: true, month: true },
+        })
+      : [];
+
+  const existingTemplateIds = new Set<string>();
+  const firstMonthByTemplateId = new Map<string, string>();
+  for (const row of templateExpenseRows) {
+    if (!row.templateId) {
+      continue;
+    }
+    if (row.month === month) {
+      existingTemplateIds.add(row.templateId);
+    }
+    const currentFirstMonth = firstMonthByTemplateId.get(row.templateId);
+    if (!currentFirstMonth || row.month < currentFirstMonth) {
+      firstMonthByTemplateId.set(row.templateId, row.month);
+    }
+  }
 
   const currencies = Array.from(
     new Set(
@@ -86,6 +92,11 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
       warnings.push(
         `Recurring expense \"${template.description}\" was skipped because category \"${template.category.name}\" is archived.`,
       );
+      continue;
+    }
+
+    const firstMonth = firstMonthByTemplateId.get(template.id);
+    if (firstMonth && month < firstMonth) {
       continue;
     }
 
