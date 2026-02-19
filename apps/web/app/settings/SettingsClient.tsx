@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
 import {
   archiveCategory,
@@ -20,6 +21,10 @@ interface SettingsClientProps {
   month: string;
   initialCategories: Category[];
   initialSuperCategories: SuperCategory[];
+}
+
+function formatCountLabel(count: number, singular: string, plural: string): string {
+  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
 export function SettingsClient({ month, initialCategories, initialSuperCategories }: SettingsClientProps) {
@@ -398,36 +403,69 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
             {sortedActiveSuperCategories.map((superCategory) => (
               <div
                 key={superCategory.id}
-                className="flex flex-col gap-4 px-4 py-5 text-sm transition-colors hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-5"
+                className="flex items-start justify-between gap-3 px-4 py-4 text-sm transition-colors hover:bg-slate-50 sm:items-center sm:px-5"
               >
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex min-w-0 items-start gap-3">
                   {renderSuperCategoryIcon(superCategory.name)}
-                  <p className="min-w-0 text-xl font-semibold text-slate-800">
-                    {superCategory.name}
-                    <span className="ml-3 text-base font-medium text-slate-400">
-                      {superCategory.categoryCount} categories • {superCategory.isSystem ? 'System' : 'Custom'}
-                    </span>
-                  </p>
+                  <div className="min-w-0">
+                    <p className="min-w-0 text-lg font-semibold text-slate-800 sm:text-xl">
+                      {superCategory.name}
+                    </p>
+                    <p className="text-sm font-medium text-slate-400 sm:text-base">
+                      {formatCountLabel(superCategory.categoryCount, 'category', 'categories')} •{' '}
+                      {superCategory.isSystem ? 'System' : 'Custom'}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60"
+                <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
+                  <ActionButton
+                    action="rename"
+                    aria-label={`Rename ${superCategory.name}`}
+                    className="h-9 w-9 sm:hidden"
                     disabled={saving}
                     onClick={() => void onRenameSuperCategory(superCategory)}
-                    type="button"
+                    size="icon"
+                  >
+                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </ActionButton>
+                  <ActionButton
+                    action="rename"
+                    className="hidden sm:inline-flex"
+                    disabled={saving}
+                    onClick={() => void onRenameSuperCategory(superCategory)}
                   >
                     Rename
-                  </button>
+                  </ActionButton>
                   {!superCategory.isSystem ? (
-                    <button
-                      className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-60"
+                    <ActionButton
+                      action="archive"
+                      aria-label={`Archive ${superCategory.name}`}
+                      className="h-9 w-9 sm:hidden"
                       disabled={saving}
                       onClick={() => void onArchiveSuperCategory(superCategory)}
-                      type="button"
+                      size="icon"
+                    >
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M3 7h18" />
+                        <path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7" />
+                        <path d="M9 11h6" />
+                        <path d="M9 3h6l1 4H8z" />
+                      </svg>
+                    </ActionButton>
+                  ) : null}
+                  {!superCategory.isSystem ? (
+                    <ActionButton
+                      action="archive"
+                      className="hidden sm:inline-flex"
+                      disabled={saving}
+                      onClick={() => void onArchiveSuperCategory(superCategory)}
                     >
                       Archive
-                    </button>
+                    </ActionButton>
                   ) : null}
                 </div>
               </div>
@@ -500,7 +538,7 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
                   : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'
               }
             >
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start justify-between gap-3 lg:items-center">
                 <div className="min-w-0">
                   <div className="flex items-start gap-3">
                     <span
@@ -524,7 +562,7 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
                           <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M5 2.5A2.5 2.5 0 0 0 2.5 5v10A2.5 2.5 0 0 0 5 17.5h10a2.5 2.5 0 0 0 2.5-2.5V5A2.5 2.5 0 0 0 15 2.5H5Zm1 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h6a1 1 0 1 1 0 2H6Z" />
                           </svg>
-                          {category.expenseCount.toLocaleString()} expenses
+                          {formatCountLabel(category.expenseCount, 'expense', 'expenses')}
                         </span>
                         <span aria-hidden="true" className="h-1 w-1 rounded-full bg-slate-300" />
                         <span className="inline-flex items-center gap-1">
@@ -537,13 +575,13 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
                     </div>
                   </div>
                   {!category.archivedAt ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                    <div className="mt-3 flex items-center gap-2 text-sm">
                       <label className="font-medium text-slate-500" htmlFor={`group-${category.id}`}>
                         Map to:
                       </label>
                       <select
                         id={`group-${category.id}`}
-                        className="h-7 min-h-7 min-w-[116px] rounded-[16px] border border-slate-300 bg-slate-50 px-2 text-xs text-slate-700"
+                        className="h-7 min-h-7 min-w-0 max-w-[180px] flex-1 rounded-[16px] border border-slate-300 bg-slate-50 px-2 text-xs text-slate-700"
                         disabled={saving}
                         onChange={(event) => void onAssignCategory(category, event.target.value)}
                         value={category.superCategoryId ?? 'unassigned'}
@@ -563,21 +601,47 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
                 </div>
 
                 {!category.archivedAt ? (
-                  <div className="flex flex-wrap items-center gap-2 lg:self-start">
-                    <button
-                      className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200"
+                  <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
+                    <ActionButton
+                      action="rename"
+                      aria-label={`Rename ${category.name}`}
+                      className="h-9 w-9 lg:hidden"
                       onClick={() => void onRenameCategory(category)}
-                      type="button"
+                      size="icon"
+                    >
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </ActionButton>
+                    <ActionButton
+                      action="rename"
+                      className="hidden lg:inline-flex"
+                      onClick={() => void onRenameCategory(category)}
                     >
                       Rename
-                    </button>
-                    <button
-                      className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+                    </ActionButton>
+                    <ActionButton
+                      action="archive"
+                      aria-label={`Archive ${category.name}`}
+                      className="h-9 w-9 lg:hidden"
                       onClick={() => void onArchiveCategory(category)}
-                      type="button"
+                      size="icon"
+                    >
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M3 7h18" />
+                        <path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7" />
+                        <path d="M9 11h6" />
+                        <path d="M9 3h6l1 4H8z" />
+                      </svg>
+                    </ActionButton>
+                    <ActionButton
+                      action="archive"
+                      className="hidden lg:inline-flex"
+                      onClick={() => void onArchiveCategory(category)}
                     >
                       Archive
-                    </button>
+                    </ActionButton>
                   </div>
                 ) : null}
               </div>

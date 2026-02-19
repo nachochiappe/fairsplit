@@ -38,7 +38,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
   };
 
   return (
-    <main id="main-content" className="mx-auto min-h-screen w-full max-w-6xl px-4 py-8 md:px-6 md:py-10">
+    <main id="main-content" className="mx-auto min-h-screen w-full max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
       <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
@@ -77,10 +77,10 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
         <NavItem href="/incomes" label="Incomes" month={month} />
         <NavItem href="/expenses" label="Expenses" month={month} />
         <NavItem href="/settings" label="Settings" month={month} />
-        <form action="/logout" method="post">
+        <form action="/logout" method="post" className="h-full">
           <button
             type="submit"
-            className="rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800"
+            className="h-full w-full rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           >
             Logout
           </button>
@@ -130,7 +130,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
         </section>
 
         <section className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <table className="min-w-full text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <caption className="sr-only">Monthly settlement by partner</caption>
             <thead className="bg-slate-50/85 text-slate-500">
               <tr>
@@ -257,6 +257,10 @@ function formatMonthLabel(month: string): string {
   }).format(new Date(year, monthNumber - 1, 1));
 }
 
+function formatCountLabel(count: number, singular: string, plural: string): string {
+  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+}
+
 function CategoryPieChart({
   slices,
 }: {
@@ -354,7 +358,7 @@ function CategoryPieChart({
                 <div>
                   <p className="text-xl font-semibold leading-tight text-slate-900">{group.name}</p>
                   <p className="mt-1 text-sm text-slate-500">
-                    {group.categories.length} categories • {formatMoney(group.totalArs)}
+                    {formatCountLabel(group.categories.length, 'category', 'categories')} • {formatMoney(group.totalArs)}
                   </p>
                 </div>
               </div>
@@ -401,7 +405,9 @@ function CategoryPieChart({
         ))}
       </ul>
       <p className="text-sm text-slate-500 lg:col-span-2">
-        Showing data from <span className="font-semibold text-slate-700">{slices.length}</span> categories across{' '}
+        Showing data from{' '}
+        <span className="font-semibold text-slate-700">{formatCountLabel(slices.length, 'category', 'categories')}</span>{' '}
+        across{' '}
         <span className="font-semibold text-slate-700">{groups.length}</span> groups.
       </p>
     </div>

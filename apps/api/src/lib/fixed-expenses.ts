@@ -84,7 +84,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
   for (const template of templates) {
     if (template.category.archivedAt) {
       warnings.push(
-        `Fixed expense \"${template.description}\" was skipped because category \"${template.category.name}\" is archived.`,
+        `Recurring expense \"${template.description}\" was skipped because category \"${template.category.name}\" is archived.`,
       );
       continue;
     }
@@ -100,7 +100,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
     const amountArs = toArsAmount(amountOriginal, fxRateUsed);
     const householdId = template.householdId ?? template.paidByUser.householdId;
     if (!householdId) {
-      warnings.push(`Fixed expense \"${template.description}\" was skipped because it has no household context.`);
+      warnings.push(`Recurring expense \"${template.description}\" was skipped because it has no household context.`);
       continue;
     }
 
@@ -124,7 +124,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
       });
     } catch (error) {
       warnings.push(
-        `Fixed expense \"${template.description}\" could not be generated (${error instanceof Error ? error.message : 'unknown error'}).`,
+        `Recurring expense \"${template.description}\" could not be generated (${error instanceof Error ? error.message : 'unknown error'}).`,
       );
     }
   }

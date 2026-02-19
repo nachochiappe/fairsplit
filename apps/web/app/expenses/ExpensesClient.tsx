@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { AppShell } from '../../components/AppShell';
+import { ActionButton } from '../../components/ActionButton';
 import { MonthSelector } from '../../components/MonthSelector';
 import { formatMoney } from '../../lib/currency';
 import {
@@ -44,6 +45,16 @@ const secondaryButtonClass =
   'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const smallButtonClass =
   'rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+
+function getTodayDateInputValue() {
+  const now = new Date();
+  const timezoneOffsetMs = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
+}
+
+function dateInputValueToMonth(value: string) {
+  return value.slice(0, 7);
+}
 
 function toSupportedCurrencyCode(value: string): SupportedCurrencyCode {
   const normalizedValue = value.trim().toUpperCase();
@@ -221,11 +232,18 @@ export function ExpensesClient({
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<ExpenseTypeFilter>('all');
   const [sortField, setSortField] = useState<ExpenseSortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
     [categories],
+  );
+  const sortedActiveCategories = useMemo(
+    () => [...activeCategories].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+    [activeCategories],
   );
   const hasActiveFilters = useMemo(
     () =>
@@ -235,6 +253,19 @@ export function ExpensesClient({
       selectedTypeFilter !== 'all',
     [searchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter],
   );
+  const hasActiveControls = useMemo(
+    () => hasActiveFilters || sortField !== 'date' || sortDirection !== 'desc',
+    [hasActiveFilters, sortDirection, sortField],
+  );
+  const mobileControlsCount = useMemo(() => {
+    let count = 0;
+    if (selectedCategoryId !== 'all') count += 1;
+    if (selectedPaidByUserId !== 'all') count += 1;
+    if (selectedTypeFilter !== 'all') count += 1;
+    if (sortField !== 'date') count += 1;
+    if (sortDirection !== 'desc') count += 1;
+    return count;
+  }, [selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortDirection, sortField]);
   const totalPages = useMemo(() => Math.max(1, Math.ceil(expenses.length / pageSize)), [expenses.length, pageSize]);
   const paginatedExpenses = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -250,7 +281,7 @@ export function ExpensesClient({
   const form = useForm<ExpenseForm>({
     resolver: zodResolver(expenseSchema),
     defaultValues: {
-      date: `${month}-01`,
+      date: getTodayDateInputValue(),
       description: '',
       categoryId: initialCategories.find((category) => category.archivedAt === null)?.id ?? '',
       amount: 0,
@@ -326,7 +357,7 @@ export function ExpensesClient({
   const resetForm = useCallback(
     (defaultUserId: string, defaultCategoryId: string) => {
       form.reset({
-        date: `${month}-01`,
+        date: getTodayDateInputValue(),
         description: '',
         categoryId: defaultCategoryId,
         amount: 0,
@@ -341,7 +372,7 @@ export function ExpensesClient({
         totalAmount: undefined,
       });
     },
-    [form, month],
+    [form],
   );
 
   const loadMonthData = useCallback(async () => {
@@ -375,6 +406,29 @@ export function ExpensesClient({
   useEffect(() => {
     setCurrentPage((previousPage) => Math.min(previousPage, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const syncMobileViewport = () => {
+      setIsMobileViewport(mediaQuery.matches);
+    };
+
+    syncMobileViewport();
+    mediaQuery.addEventListener('change', syncMobileViewport);
+    return () => mediaQuery.removeEventListener('change', syncMobileViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileViewport || pageSize === 10) {
+      return;
+    }
+    setPageSize(10);
+    setCurrentPage(1);
+  }, [isMobileViewport, pageSize]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -482,7 +536,7 @@ export function ExpensesClient({
       }
 
       setEditingExpenseId(null);
-      resetForm(users[0]?.id ?? '', activeCategories[0]?.id ?? '');
+      resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
       await loadMonthData();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Failed to save expense');
@@ -533,6 +587,41 @@ export function ExpensesClient({
     }
   };
 
+  const cloneExpense = async (expense: Expense) => {
+    const today = getTodayDateInputValue();
+
+    try {
+      setSaving(true);
+      setError(null);
+
+      await createExpense({
+        month: dateInputValueToMonth(today),
+        date: today,
+        description: expense.description,
+        categoryId: expense.categoryId,
+        amount: expense.installment ? undefined : Number(expense.amountOriginal),
+        currencyCode: expense.currencyCode,
+        fxRate: Number(expense.fxRateUsed),
+        paidByUserId: expense.paidByUserId,
+        fixed: { enabled: expense.fixed.enabled },
+        installment: expense.installment
+          ? {
+              enabled: true,
+              count: expense.installment.total,
+              entryMode: 'perInstallment',
+              perInstallmentAmount: Number(expense.amountOriginal),
+            }
+          : undefined,
+      });
+
+      await loadMonthData();
+    } catch (cloneError) {
+      setError(cloneError instanceof Error ? cloneError.message : 'Failed to clone expense');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const confirmScopedAction = async (scope: ApplyScope) => {
     if (!scopeDialog) {
       return;
@@ -550,7 +639,7 @@ export function ExpensesClient({
 
       setScopeDialog(null);
       setEditingExpenseId(null);
-      resetForm(users[0]?.id ?? '', activeCategories[0]?.id ?? '');
+      resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
       await loadMonthData();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Failed to apply action');
@@ -582,7 +671,7 @@ export function ExpensesClient({
     <AppShell
       month={month}
       title="Monthly Expenses"
-      subtitle="Track each expense, category, currency and fixed templates"
+      subtitle="Track each expense, category, currency and recurring expenses"
       rightSlot={<MonthSelector month={month} />}
     >
       {scopeDialog ? (
@@ -597,7 +686,7 @@ export function ExpensesClient({
       <div className="space-y-4">
         {warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-semibold">Fixed expense generation warnings</p>
+            <p className="font-semibold">Recurring expense generation warnings</p>
             <ul className="mt-2 list-disc pl-5">
               {warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
@@ -612,8 +701,8 @@ export function ExpensesClient({
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[360px_1fr]">
-          <form className={`${cardClass} space-y-3`} onSubmit={submit}>
+        <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
+          <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit}>
             <h2 className="text-base font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</h2>
             <label className="block text-sm">
               <span className="mb-1 block text-slate-700">Date</span>
@@ -626,7 +715,7 @@ export function ExpensesClient({
             <label className="block text-sm">
               <span className="mb-1 block text-slate-700">Category</span>
               <select className={fieldClass} {...form.register('categoryId')}>
-                {activeCategories.map((category) => (
+                {sortedActiveCategories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
@@ -634,7 +723,7 @@ export function ExpensesClient({
               </select>
             </label>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2">
               <label className="block text-sm">
                 <span className="mb-1 block text-slate-700">Currency</span>
                 <select className={fieldClass} {...form.register('currencyCode')}>
@@ -660,7 +749,7 @@ export function ExpensesClient({
 
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" {...form.register('fixedEnabled')} />
-              Fixed expense template
+              Recurring expense
             </label>
             {editingExpenseId ? (
               <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -740,7 +829,7 @@ export function ExpensesClient({
                   type="button"
                   onClick={() => {
                     setEditingExpenseId(null);
-                    resetForm(users[0]?.id ?? '', activeCategories[0]?.id ?? '');
+                    resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
                   }}
                 >
                   Cancel
@@ -749,37 +838,53 @@ export function ExpensesClient({
             </div>
           </form>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <section className={cardClass}>
-              <h3 className="text-sm font-semibold text-slate-900">Month-start FX defaults (to ARS)</h3>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr_auto]">
-                <select
-                  className={fieldClass}
-                  onChange={(e) => setNewFxCurrency(e.target.value as SupportedCurrencyCode)}
-                  value={newFxCurrency}
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-slate-900">Month-start FX defaults (to ARS)</h3>
+                <button
+                  aria-controls="fx-defaults-panel"
+                  aria-expanded={isMobileFxOpen}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
+                  onClick={() => setIsMobileFxOpen((isOpen) => !isOpen)}
+                  type="button"
                 >
-                  {fxCurrencies.map((currencyCode) => (
-                    <option key={currencyCode} value={currencyCode}>
-                      {currencyCode}
-                    </option>
-                  ))}
-                </select>
-                <input className={fieldClass} min="0" onChange={(e) => setNewFxRate(e.target.value)} placeholder="Rate" step="0.000001" type="number" value={newFxRate} />
-                <button className={primaryButtonClass} onClick={() => void onSaveExchangeRate()} type="button">
-                  Save
+                  <svg aria-hidden="true" className={`h-5 w-5 transition-transform ${isMobileFxOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
                 </button>
               </div>
-              <div className="mt-3 space-y-1 text-sm text-slate-700">
-                {exchangeRates.length === 0 ? <p>No FX defaults for this month.</p> : null}
-                {exchangeRates.map((rate) => (
-                  <p key={rate.id}>
-                    {rate.currencyCode}: {formatFxRate(rate.rateToArs)}
-                  </p>
-                ))}
+
+              <div className={`${isMobileFxOpen ? 'mt-3 block' : 'hidden'} md:mt-3 md:block`} id="fx-defaults-panel">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr_auto]">
+                  <select
+                    className={fieldClass}
+                    onChange={(e) => setNewFxCurrency(e.target.value as SupportedCurrencyCode)}
+                    value={newFxCurrency}
+                  >
+                    {fxCurrencies.map((currencyCode) => (
+                      <option key={currencyCode} value={currencyCode}>
+                        {currencyCode}
+                      </option>
+                    ))}
+                  </select>
+                  <input className={fieldClass} min="0" onChange={(e) => setNewFxRate(e.target.value)} placeholder="Rate" step="0.000001" type="number" value={newFxRate} />
+                  <button className={primaryButtonClass} onClick={() => void onSaveExchangeRate()} type="button">
+                    Save
+                  </button>
+                </div>
+                <div className="mt-3 space-y-1 text-sm text-slate-700">
+                  {exchangeRates.length === 0 ? <p>No FX defaults for this month.</p> : null}
+                  {exchangeRates.map((rate) => (
+                    <p key={rate.id}>
+                      {rate.currencyCode}: {formatFxRate(rate.rateToArs)}
+                    </p>
+                  ))}
+                </div>
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+            <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -789,8 +894,8 @@ export function ExpensesClient({
                     <p className="text-xs text-slate-500">Filtered results for this month</p>
                     <p className="text-xs font-medium text-slate-600">Subtotal (filtered): ARS {formatMoney(filteredSubtotalArs)}</p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="flex items-center gap-2 text-sm text-slate-700" htmlFor="expense-page-size">
+                  <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+                    <label className="hidden items-center gap-2 text-sm text-slate-700 md:flex" htmlFor="expense-page-size">
                       <span className="font-medium">Rows</span>
                       <select
                         className={`${compactFieldClass} min-w-20 rounded-lg px-3 py-2`}
@@ -806,7 +911,7 @@ export function ExpensesClient({
                         <option value={50}>50</option>
                       </select>
                     </label>
-                    <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1">
+                    <div className="hidden items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 md:flex">
                       <button
                         className={smallButtonClass}
                         disabled={currentPage === 1}
@@ -827,184 +932,278 @@ export function ExpensesClient({
                         Next
                       </button>
                     </div>
+                    <div className="flex justify-center md:hidden">
+                      <div className="flex w-full max-w-xs items-center justify-between rounded-2xl bg-slate-100 px-2 py-1.5">
+                        <button
+                          aria-label="Previous page"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                          type="button"
+                        >
+                          <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path d="m15 18-6-6 6-6" />
+                          </svg>
+                        </button>
+                        <span className="min-w-16 text-center text-xl font-semibold tracking-tight text-slate-700">
+                          {currentPage} / {totalPages}
+                        </span>
+                        <button
+                          aria-label="Next page"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                          disabled={currentPage === totalPages}
+                          onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                          type="button"
+                        >
+                          <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path d="m9 18 6-6-6-6" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
               <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-4">
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
-                  <label className="lg:col-span-5">
-                    <span className={tableControlLabelClass}>Search</span>
-                    <input
-                      className={tableControlFieldClass}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Description, category, or payer"
-                      type="search"
-                      value={searchQuery}
-                    />
-                  </label>
-                  <label className="lg:col-span-2">
-                    <span className={tableControlLabelClass}>Category</span>
-                    <select
-                      className={tableControlFieldClass}
-                      onChange={(event) => setSelectedCategoryId(event.target.value)}
-                      value={selectedCategoryId}
-                    >
-                      <option value="all">All categories</option>
-                      {activeCategories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="lg:col-span-2">
-                    <span className={tableControlLabelClass}>Payer</span>
-                    <select
-                      className={tableControlFieldClass}
-                      onChange={(event) => setSelectedPaidByUserId(event.target.value)}
-                      value={selectedPaidByUserId}
-                    >
-                      <option value="all">All payers</option>
-                      {users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="lg:col-span-3">
-                    <span className={tableControlLabelClass}>Type</span>
-                    <select
-                      className={tableControlFieldClass}
-                      onChange={(event) => setSelectedTypeFilter(event.target.value as ExpenseTypeFilter)}
-                      value={selectedTypeFilter}
-                    >
-                      <option value="all">All types</option>
-                      <option value="oneTime">One-time</option>
-                      <option value="fixed">Fixed</option>
-                      <option value="installment">Installment</option>
-                    </select>
-                  </label>
+                <div className="flex items-center gap-2 md:hidden">
+                  <input
+                    className={tableControlFieldClass}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search expenses..."
+                    type="search"
+                    value={searchQuery}
+                  />
+                  <button
+                    aria-controls="expense-mobile-filters"
+                    aria-expanded={isMobileFiltersOpen}
+                    className="shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    onClick={() => setIsMobileFiltersOpen((isOpen) => !isOpen)}
+                    type="button"
+                  >
+                    Filters{mobileControlsCount > 0 ? ` (${mobileControlsCount})` : ''}
+                  </button>
                 </div>
-                <div className="mt-3 border-t border-slate-200 pt-3">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
-                      <label className="sm:min-w-56">
-                        <span className={tableControlLabelClass}>Sort by</span>
-                        <select
-                          className={tableControlFieldClass}
-                          onChange={(event) => setSortField(event.target.value as ExpenseSortField)}
-                          value={sortField}
-                        >
-                          <option value="date">Date</option>
-                          <option value="description">Description</option>
-                          <option value="category">Category</option>
-                          <option value="amountArs">Amount</option>
-                          <option value="paidBy">Paid by</option>
-                        </select>
-                      </label>
-                      <label className="sm:min-w-56">
-                        <span className={tableControlLabelClass}>Order</span>
-                        <select
-                          className={tableControlFieldClass}
-                          onChange={(event) => setSortDirection(event.target.value as SortDirection)}
-                          value={sortDirection}
-                        >
-                          <option value="desc">Newest first</option>
-                          <option value="asc">Oldest first</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
-                      <p className="text-xs text-slate-500">Use filters to narrow results, then sort to compare spending quickly.</p>
-                      {hasActiveFilters ? (
-                        <button
-                          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                          onClick={() => {
-                            setSearchQuery('');
-                            setSelectedCategoryId('all');
-                            setSelectedPaidByUserId('all');
-                            setSelectedTypeFilter('all');
-                            setSortField('date');
-                            setSortDirection('desc');
-                            setCurrentPage(1);
-                          }}
-                          type="button"
-                        >
-                          Clear filters
-                        </button>
-                      ) : null}
+
+                <div className={`${isMobileFiltersOpen ? 'mt-3 block' : 'hidden'} md:mt-0 md:block`} id="expense-mobile-filters">
+                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
+                    <label className="hidden lg:col-span-5 md:block">
+                      <span className={tableControlLabelClass}>Search</span>
+                      <input
+                        className={tableControlFieldClass}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Description, category, or payer"
+                        type="search"
+                        value={searchQuery}
+                      />
+                    </label>
+                    <label className="lg:col-span-2">
+                      <span className={tableControlLabelClass}>Category</span>
+                      <select
+                        className={tableControlFieldClass}
+                        onChange={(event) => setSelectedCategoryId(event.target.value)}
+                        value={selectedCategoryId}
+                      >
+                        <option value="all">All categories</option>
+                        {sortedActiveCategories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="lg:col-span-2">
+                      <span className={tableControlLabelClass}>Payer</span>
+                      <select
+                        className={tableControlFieldClass}
+                        onChange={(event) => setSelectedPaidByUserId(event.target.value)}
+                        value={selectedPaidByUserId}
+                      >
+                        <option value="all">All payers</option>
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="lg:col-span-3">
+                      <span className={tableControlLabelClass}>Type</span>
+                      <select
+                        className={tableControlFieldClass}
+                        onChange={(event) => setSelectedTypeFilter(event.target.value as ExpenseTypeFilter)}
+                        value={selectedTypeFilter}
+                      >
+                        <option value="all">All types</option>
+                        <option value="oneTime">One-time</option>
+                        <option value="fixed">Recurring</option>
+                        <option value="installment">Installment</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
+                        <label className="sm:min-w-56">
+                          <span className={tableControlLabelClass}>Sort by</span>
+                          <select
+                            className={tableControlFieldClass}
+                            onChange={(event) => setSortField(event.target.value as ExpenseSortField)}
+                            value={sortField}
+                          >
+                            <option value="date">Date</option>
+                            <option value="description">Description</option>
+                            <option value="category">Category</option>
+                            <option value="amountArs">Amount</option>
+                            <option value="paidBy">Paid by</option>
+                          </select>
+                        </label>
+                        <label className="sm:min-w-56">
+                          <span className={tableControlLabelClass}>Order</span>
+                          <select
+                            className={tableControlFieldClass}
+                            onChange={(event) => setSortDirection(event.target.value as SortDirection)}
+                            value={sortDirection}
+                          >
+                            <option value="desc">Newest first</option>
+                            <option value="asc">Oldest first</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
+                        <p className="text-xs text-slate-500">Use filters to narrow results, then sort to compare spending quickly.</p>
+                        {hasActiveControls ? (
+                          <button
+                            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                            onClick={() => {
+                              setSearchQuery('');
+                              setSelectedCategoryId('all');
+                              setSelectedPaidByUserId('all');
+                              setSelectedTypeFilter('all');
+                              setSortField('date');
+                              setSortDirection('desc');
+                              setCurrentPage(1);
+                            }}
+                            type="button"
+                          >
+                            Clear filters
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <caption className="sr-only">Monthly expense entries</caption>
-                <thead className="bg-slate-50 text-left text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 font-medium" scope="col">
-                      Date
-                    </th>
-                    <th className="px-4 py-3 font-medium" scope="col">
-                      Description
-                    </th>
-                    <th className="px-4 py-3 font-medium" scope="col">
-                      Category
-                    </th>
-                    <th className="px-4 py-3 font-medium" scope="col">
-                      Amount
-                    </th>
-                    <th className="px-4 py-3 font-medium" scope="col">
-                      Paid by
-                    </th>
-                    <th className="px-4 py-3 font-medium" scope="col">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {paginatedExpenses.map((expense) => (
-                    <tr key={expense.id} className="hover:bg-slate-50/80">
-                      <td className="px-4 py-3">{expense.date}</td>
-                      <td className="px-4 py-3">
-                        {expense.description}
-                        <div className="text-xs text-slate-500">
-                          {expense.fixed.enabled ? 'Fixed' : 'One-time'}
-                          {expense.installment ? ` • Installment ${expense.installment.number}/${expense.installment.total}` : ''}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">{expense.categoryName}</td>
-                      <td className="px-4 py-3 tabular-nums">
-                        <div>ARS {formatMoney(expense.amountArs)}</div>
-                        {expense.currencyCode !== 'ARS' ? (
-                          <div className="text-xs text-slate-500">
-                            {expense.currencyCode} {formatMoney(expense.amountOriginal)} @{' '}
-                            {formatFxRate(expense.fxRateUsed)}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">{expense.paidByUserName}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <button className={smallButtonClass} onClick={() => startEdit(expense)} type="button">
-                            Edit
-                          </button>
-                          <button className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2" onClick={() => void removeExpense(expense)} type="button">
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {expenses.length === 0 ? (
+              <div className="w-full max-w-full overflow-x-auto">
+                <table className="w-full min-w-[920px] divide-y divide-slate-200 text-sm">
+                  <caption className="sr-only">Monthly expense entries</caption>
+                  <thead className="bg-slate-50 text-left text-slate-600">
                     <tr>
-                      <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
-                        {hasActiveFilters ? 'No expenses match the current filters' : 'No expenses yet for this month'}
-                      </td>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                        Date
+                      </th>
+                      <th className="px-4 py-3 font-medium" scope="col">
+                        Description
+                      </th>
+                      <th className="px-4 py-3 font-medium" scope="col">
+                        Category
+                      </th>
+                      <th className="px-4 py-3 font-medium" scope="col">
+                        Amount
+                      </th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                        Paid by
+                      </th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                        Actions
+                      </th>
                     </tr>
-                  ) : null}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedExpenses.map((expense) => (
+                      <tr key={expense.id} className="hover:bg-slate-50/80">
+                        <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
+                        <td className="px-4 py-3">
+                          {expense.description}
+                          <div className="text-xs text-slate-500">
+                            {expense.fixed.enabled ? 'Recurring' : 'One-time'}
+                            {expense.installment ? ` • Installment ${expense.installment.number}/${expense.installment.total}` : ''}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">{expense.categoryName}</td>
+                        <td className="px-4 py-3 tabular-nums">
+                          <div>ARS {formatMoney(expense.amountArs)}</div>
+                          {expense.currencyCode !== 'ARS' ? (
+                            <div className="text-xs text-slate-500">
+                              {expense.currencyCode} {formatMoney(expense.amountOriginal)} @{' '}
+                              {formatFxRate(expense.fxRateUsed)}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <div className="flex gap-2">
+                            <ActionButton
+                              action="edit"
+                              aria-label="Edit expense"
+                              className="md:hidden"
+                              onClick={() => startEdit(expense)}
+                              size="icon"
+                            >
+                              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                <path d="M12 20h9" />
+                                <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                              </svg>
+                            </ActionButton>
+                            <ActionButton
+                              action="clone"
+                              aria-label="Clone expense"
+                              className="md:hidden"
+                              onClick={() => void cloneExpense(expense)}
+                              size="icon"
+                            >
+                              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                <rect height="13" rx="2" width="13" x="9" y="9" />
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                              </svg>
+                            </ActionButton>
+                            <ActionButton
+                              action="delete"
+                              aria-label="Delete expense"
+                              className="md:hidden"
+                              onClick={() => void removeExpense(expense)}
+                              size="icon"
+                            >
+                              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                <path d="M3 6h18" />
+                                <path d="M8 6V4h8v2" />
+                                <path d="M19 6l-1 14H6L5 6" />
+                                <path d="M10 11v6" />
+                                <path d="M14 11v6" />
+                              </svg>
+                            </ActionButton>
+                            <ActionButton action="edit" className="hidden md:inline-flex" onClick={() => startEdit(expense)}>
+                              Edit
+                            </ActionButton>
+                            <ActionButton action="clone" className="hidden md:inline-flex" onClick={() => void cloneExpense(expense)}>
+                              Clone
+                            </ActionButton>
+                            <ActionButton action="delete" className="hidden md:inline-flex" onClick={() => void removeExpense(expense)}>
+                              Delete
+                            </ActionButton>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {expenses.length === 0 ? (
+                      <tr>
+                        <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
+                          {hasActiveFilters ? 'No expenses match the current filters' : 'No expenses yet for this month'}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
             </section>
           </div>
         </div>
