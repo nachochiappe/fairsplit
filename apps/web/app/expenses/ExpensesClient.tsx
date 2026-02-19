@@ -236,6 +236,7 @@ export function ExpensesClient({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
+  const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
@@ -555,6 +556,8 @@ export function ExpensesClient({
   };
 
   const submit = form.handleSubmit(async (values) => {
+    const wasEditing = Boolean(editingExpenseId);
+
     try {
       setSaving(true);
       setError(null);
@@ -576,6 +579,9 @@ export function ExpensesClient({
       }
 
       setEditingExpenseId(null);
+      if (!wasEditing) {
+        setIsMobileAddExpenseOpen(false);
+      }
       resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
       await loadMonthData();
     } catch (submitError) {
@@ -586,6 +592,7 @@ export function ExpensesClient({
   });
 
   const startEdit = (expense: Expense) => {
+    setIsMobileAddExpenseOpen(true);
     setEditingExpenseId(expense.id);
     form.reset({
       date: expense.date,
@@ -744,8 +751,36 @@ export function ExpensesClient({
         <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
           <div className="min-w-0 space-y-4">
             <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit}>
-              <h2 className="text-base font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</h2>
-              <label className="block text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-base font-semibold text-slate-900">
+                  {editingExpenseId ? 'Edit expense' : 'Add expense'}
+                </h2>
+                <button
+                  aria-controls="add-expense-panel"
+                  aria-expanded={isMobileAddExpenseOpen}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
+                  onClick={() => setIsMobileAddExpenseOpen((isOpen) => !isOpen)}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className={`h-5 w-5 transition-transform ${isMobileAddExpenseOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              </div>
+              <div
+                className={`${isMobileAddExpenseOpen ? 'mt-3 block' : 'hidden'} space-y-3 md:mt-3 md:block`}
+                id="add-expense-panel"
+              >
+                <label className="block text-sm">
                 <span className="mb-1 block text-slate-700">Date</span>
                 <input
                   className={`${fieldClass} leading-tight [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
@@ -882,11 +917,12 @@ export function ExpensesClient({
                   </button>
                 ) : null}
               </div>
+              </div>
             </form>
 
             <section className={cardClass}>
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900">Month-start FX defaults (to ARS)</h3>
+                <h3 className="text-base font-semibold text-slate-900">Month-start FX defaults (to ARS)</h3>
                 <button
                   aria-controls="fx-defaults-panel"
                   aria-expanded={isMobileFxOpen}
