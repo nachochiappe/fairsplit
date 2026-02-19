@@ -708,6 +708,7 @@ export function ExpensesClient({
               <span className="mb-1 block text-slate-700">Date</span>
               <input
                 className={`${fieldClass} leading-tight [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
+                lang="en"
                 type="date"
                 {...form.register('date')}
               />

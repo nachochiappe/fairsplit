@@ -58,6 +58,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
                 aria-label="Select month"
                 autoComplete="off"
                 className="min-h-11 w-full rounded-xl border border-slate-300/90 bg-white px-4 py-2.5 text-base font-medium leading-tight text-slate-700 shadow-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left"
+                lang="en"
                 name="month"
                 type="month"
                 value={month}
