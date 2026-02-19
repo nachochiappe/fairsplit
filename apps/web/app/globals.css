@@ -49,6 +49,23 @@ textarea {
   min-height: 44px;
 }
 
+input[type='date'],
+input[type='month'] {
+  min-width: 0;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value {
+  text-align: left;
+}
+
+input[type='date']::-webkit-datetime-edit,
+input[type='month']::-webkit-datetime-edit {
+  padding: 0;
+}
+
 *:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--brand-strong) 90%, white 10%);
   outline-offset: 2px;
