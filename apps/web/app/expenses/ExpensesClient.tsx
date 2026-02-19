@@ -279,6 +279,36 @@ export function ExpensesClient({
     () => expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [expenses],
   );
+  const fixedSubtotalArs = useMemo(
+    () => expenses.filter((expense) => expense.fixed.enabled).reduce((sum, expense) => sum + Number(expense.amountArs), 0),
+    [expenses],
+  );
+  const installmentSubtotalArs = useMemo(
+    () =>
+      expenses
+        .filter((expense) => !expense.fixed.enabled && Boolean(expense.installment))
+        .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
+    [expenses],
+  );
+  const oneTimeSubtotalArs = useMemo(
+    () =>
+      expenses
+        .filter((expense) => !expense.fixed.enabled && !expense.installment)
+        .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
+    [expenses],
+  );
+  const paginatedFixedExpenses = useMemo(
+    () => paginatedExpenses.filter((expense) => expense.fixed.enabled),
+    [paginatedExpenses],
+  );
+  const paginatedInstallmentExpenses = useMemo(
+    () => paginatedExpenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
+    [paginatedExpenses],
+  );
+  const paginatedOneTimeExpenses = useMemo(
+    () => paginatedExpenses.filter((expense) => !expense.fixed.enabled && !expense.installment),
+    [paginatedExpenses],
+  );
 
   const form = useForm<ExpenseForm>({
     resolver: zodResolver(expenseSchema),
@@ -712,148 +742,148 @@ export function ExpensesClient({
         ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
-          <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit}>
-            <h2 className="text-base font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</h2>
-            <label className="block text-sm">
-              <span className="mb-1 block text-slate-700">Date</span>
-              <input
-                className={`${fieldClass} leading-tight [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
-                lang="en"
-                type="date"
-                {...form.register('date')}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-slate-700">Description</span>
-              <input className={fieldClass} {...form.register('description')} />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block text-slate-700">Category</span>
-              <select className={fieldClass} {...form.register('categoryId')}>
-                {sortedActiveCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="grid grid-cols-2 gap-2">
+          <div className="min-w-0 space-y-4">
+            <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit}>
+              <h2 className="text-base font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</h2>
               <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">Currency</span>
-                <select className={fieldClass} {...form.register('currencyCode')}>
-                  {supportedCurrencyCodes.map((currencyCode) => (
-                    <option key={currencyCode} value={currencyCode}>
-                      {currencyCode}
+                <span className="mb-1 block text-slate-700">Date</span>
+                <input
+                  className={`${fieldClass} leading-tight [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
+                  lang="en"
+                  type="date"
+                  {...form.register('date')}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-slate-700">Description</span>
+                <input className={fieldClass} {...form.register('description')} />
+              </label>
+              <label className="block text-sm">
+                <span className="mb-1 block text-slate-700">Category</span>
+                <select className={fieldClass} {...form.register('categoryId')}>
+                  {sortedActiveCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
                     </option>
                   ))}
                 </select>
               </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">FX to ARS</span>
-                <input
-                  className={`${fieldClass} disabled:bg-slate-100`}
-                  disabled={watchedCurrencyCode === 'ARS'}
-                  min="0"
-                  step="0.000001"
-                  type="number"
-                  {...form.register('fxRate')}
-                />
-              </label>
-            </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" {...form.register('fixedEnabled')} />
-              Recurring expense
-            </label>
-            {editingExpenseId ? (
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input checked={watchedApplyToFuture} type="checkbox" {...form.register('applyToFuture')} />
-                Apply changes to future months
-              </label>
-            ) : null}
-
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" {...form.register('installmentEnabled')} />
-              Installments
-            </label>
-
-            {watchedInstallmentEnabled ? (
-              <>
+              <div className="grid grid-cols-2 gap-2">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-slate-700">Installment count</span>
-                  <input className={fieldClass} min="2" type="number" {...form.register('installmentCount')} />
-                </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-slate-700">Entry mode</span>
-                  <select className={fieldClass} {...form.register('installmentEntryMode')}>
-                    <option value="perInstallment">Per installment amount</option>
-                    <option value="total">Total amount</option>
+                  <span className="mb-1 block text-slate-700">Currency</span>
+                  <select className={fieldClass} {...form.register('currencyCode')}>
+                    {supportedCurrencyCodes.map((currencyCode) => (
+                      <option key={currencyCode} value={currencyCode}>
+                        {currencyCode}
+                      </option>
+                    ))}
                   </select>
                 </label>
-                {watchedInstallmentEntryMode === 'total' ? (
-                  <label className="block text-sm">
-                    <span className="mb-1 block text-slate-700">Total amount</span>
-                    <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('totalAmount')} />
-                  </label>
-                ) : (
-                  <label className="block text-sm">
-                    <span className="mb-1 block text-slate-700">Per-installment amount</span>
-                    <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('amount')} />
-                  </label>
-                )}
-              </>
-            ) : (
-              <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">Amount</span>
-                <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                <label className="block text-sm">
+                  <span className="mb-1 block text-slate-700">FX to ARS</span>
+                  <input
+                    className={`${fieldClass} disabled:bg-slate-100`}
+                    disabled={watchedCurrencyCode === 'ARS'}
+                    min="0"
+                    step="0.000001"
+                    type="number"
+                    {...form.register('fxRate')}
+                  />
+                </label>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" {...form.register('fixedEnabled')} />
+                Recurring expense
               </label>
-            )}
-
-            {installmentPreview ? (
-              <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                {installmentPreview.count} installments: first {formatMoney(installmentPreview.first)} and last{' '}
-                {formatMoney(installmentPreview.last)} (total {formatMoney(installmentPreview.total)})
-              </div>
-            ) : null}
-
-            {projectedArsAmount !== null ? (
-              <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                Estimated ARS amount: {formatMoney(projectedArsAmount.toFixed(2))}
-              </div>
-            ) : null}
-
-            <label className="block text-sm">
-              <span className="mb-1 block text-slate-700">Paid by</span>
-              <select className={fieldClass} {...form.register('paidByUserId')}>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="flex gap-2">
-              <button className={primaryButtonClass} disabled={saving} type="submit">
-                {editingExpenseId ? 'Update' : 'Add'}
-              </button>
               {editingExpenseId ? (
-                <button
-                  className={secondaryButtonClass}
-                  type="button"
-                  onClick={() => {
-                    setEditingExpenseId(null);
-                    resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
-                  }}
-                >
-                  Cancel
-                </button>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input checked={watchedApplyToFuture} type="checkbox" {...form.register('applyToFuture')} />
+                  Apply changes to future months
+                </label>
               ) : null}
-            </div>
-          </form>
 
-          <div className="min-w-0 space-y-4">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" {...form.register('installmentEnabled')} />
+                Installments
+              </label>
+
+              {watchedInstallmentEnabled ? (
+                <>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-slate-700">Installment count</span>
+                    <input className={fieldClass} min="2" type="number" {...form.register('installmentCount')} />
+                  </label>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-slate-700">Entry mode</span>
+                    <select className={fieldClass} {...form.register('installmentEntryMode')}>
+                      <option value="perInstallment">Per installment amount</option>
+                      <option value="total">Total amount</option>
+                    </select>
+                  </label>
+                  {watchedInstallmentEntryMode === 'total' ? (
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-slate-700">Total amount</span>
+                      <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('totalAmount')} />
+                    </label>
+                  ) : (
+                    <label className="block text-sm">
+                      <span className="mb-1 block text-slate-700">Per-installment amount</span>
+                      <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                    </label>
+                  )}
+                </>
+              ) : (
+                <label className="block text-sm">
+                  <span className="mb-1 block text-slate-700">Amount</span>
+                  <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                </label>
+              )}
+
+              {installmentPreview ? (
+                <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  {installmentPreview.count} installments: first {formatMoney(installmentPreview.first)} and last{' '}
+                  {formatMoney(installmentPreview.last)} (total {formatMoney(installmentPreview.total)})
+                </div>
+              ) : null}
+
+              {projectedArsAmount !== null ? (
+                <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                  Estimated ARS amount: {formatMoney(projectedArsAmount.toFixed(2))}
+                </div>
+              ) : null}
+
+              <label className="block text-sm">
+                <span className="mb-1 block text-slate-700">Paid by</span>
+                <select className={fieldClass} {...form.register('paidByUserId')}>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex gap-2">
+                <button className={primaryButtonClass} disabled={saving} type="submit">
+                  {editingExpenseId ? 'Update' : 'Add'}
+                </button>
+                {editingExpenseId ? (
+                  <button
+                    className={secondaryButtonClass}
+                    type="button"
+                    onClick={() => {
+                      setEditingExpenseId(null);
+                      resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+              </div>
+            </form>
+
             <section className={cardClass}>
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-900">Month-start FX defaults (to ARS)</h3>
@@ -898,7 +928,13 @@ export function ExpensesClient({
                 </div>
               </div>
             </section>
+          </div>
 
+          <div className="min-w-0 space-y-4">
+            <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white shadow-lg">
+              <p className="text-base font-semibold text-blue-100">Total Combined Expenses</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">ARS {formatMoney(filteredSubtotalArs)}</p>
+            </section>
             <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1108,116 +1144,175 @@ export function ExpensesClient({
                   </div>
                 </div>
               </div>
-              <div className="w-full max-w-full overflow-x-auto">
-                <table className="w-full min-w-[920px] divide-y divide-slate-200 text-sm">
-                  <caption className="sr-only">Monthly expense entries</caption>
-                  <thead className="bg-slate-50 text-left text-slate-600">
-                    <tr>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                        Date
-                      </th>
-                      <th className="px-4 py-3 font-medium" scope="col">
-                        Description
-                      </th>
-                      <th className="px-4 py-3 font-medium" scope="col">
-                        Category
-                      </th>
-                      <th className="px-4 py-3 font-medium" scope="col">
-                        Amount
-                      </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                        Paid by
-                      </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {paginatedExpenses.map((expense) => (
-                      <tr key={expense.id} className="hover:bg-slate-50/80">
-                        <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
-                        <td className="px-4 py-3">
-                          {expense.description}
-                          <div className="text-xs text-slate-500">
-                            {expense.fixed.enabled ? 'Recurring' : 'One-time'}
-                            {expense.installment ? ` • Installment ${expense.installment.number}/${expense.installment.total}` : ''}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">{expense.categoryName}</td>
-                        <td className="px-4 py-3 tabular-nums">
-                          <div>ARS {formatMoney(expense.amountArs)}</div>
-                          {expense.currencyCode !== 'ARS' ? (
-                            <div className="text-xs text-slate-500">
-                              {expense.currencyCode} {formatMoney(expense.amountOriginal)} @{' '}
-                              {formatFxRate(expense.fxRateUsed)}
-                            </div>
+              <div className="space-y-5 p-4">
+                {[
+                  {
+                    key: 'fixed',
+                    title: 'Recurring expenses',
+                    subtitle: 'Recurring monthly costs',
+                    subtotalArs: fixedSubtotalArs,
+                    rows: paginatedFixedExpenses,
+                    emptyMessage: 'No recurring expenses in the current results',
+                  },
+                  {
+                    key: 'one-time',
+                    title: 'One-time expenses',
+                    subtitle: 'Variable purchases',
+                    subtotalArs: oneTimeSubtotalArs,
+                    rows: paginatedOneTimeExpenses,
+                    emptyMessage: hasActiveFilters ? 'No one-time expenses match the current filters' : 'No one-time expenses yet for this month',
+                  },
+                  {
+                    key: 'installment',
+                    title: 'Installments',
+                    subtitle: 'Purchases paid across multiple months',
+                    subtotalArs: installmentSubtotalArs,
+                    rows: paginatedInstallmentExpenses,
+                    emptyMessage: hasActiveFilters ? 'No installments match the current filters' : 'No installments yet for this month',
+                  },
+                ].map((section) => (
+                  <section key={section.key} className="overflow-hidden rounded-xl border border-slate-200/80">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          aria-hidden="true"
+                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${
+                            section.key === 'fixed'
+                              ? 'bg-blue-100 text-blue-700'
+                              : section.key === 'one-time'
+                                ? 'bg-orange-100 text-orange-700'
+                                : 'bg-violet-100 text-violet-700'
+                          }`}
+                        >
+                          {section.key === 'fixed' ? (
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" viewBox="0 0 24 24">
+                              <path d="M3 12a9 9 0 0 1 15.1-6.36" />
+                              <path d="M3 4v6h6" />
+                              <path d="M21 12a9 9 0 0 1-15.1 6.36" />
+                              <path d="M21 20v-6h-6" />
+                            </svg>
+                          ) : section.key === 'one-time' ? (
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" viewBox="0 0 24 24">
+                              <rect height="14" rx="2.5" width="14" x="5" y="7" />
+                              <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+                              <path d="M12 11v4" />
+                            </svg>
+                          ) : (
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" viewBox="0 0 24 24">
+                              <rect height="16" rx="2.5" width="12" x="6" y="4" />
+                              <path d="M9 8h6" />
+                              <path d="M9 12h6" />
+                              <path d="M10 16h4" />
+                            </svg>
+                          )}
+                        </span>
+                        <div>
+                          <h4 className="text-sm font-semibold text-slate-900">{section.title}</h4>
+                          <p className="text-xs text-slate-500">{section.subtitle}</p>
+                        </div>
+                      </div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        Subtotal: <span className="text-sm normal-case text-slate-900">ARS {formatMoney(section.subtotalArs)}</span>
+                      </p>
+                    </div>
+                    <div className="w-full max-w-full overflow-x-auto">
+                      <table className="w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm">
+                        <caption className="sr-only">{section.title}</caption>
+                        <colgroup>
+                          <col className="w-[15%]" />
+                          <col className="w-[22%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[19%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[18%]" />
+                        </colgroup>
+                        <thead className="bg-white text-left text-slate-600">
+                          <tr>
+                            <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                              Date
+                            </th>
+                            <th className="px-4 py-3 font-medium" scope="col">
+                              Description
+                            </th>
+                            <th className="px-4 py-3 font-medium" scope="col">
+                              Category
+                            </th>
+                            <th className="px-4 py-3 font-medium" scope="col">
+                              Amount
+                            </th>
+                            <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                              Paid by
+                            </th>
+                            <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {section.rows.map((expense) => (
+                            <tr key={expense.id} className="hover:bg-slate-50/80">
+                              <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
+                              <td className="px-4 py-3">
+                                <div className="truncate font-medium text-slate-900" title={expense.description}>
+                                  {expense.description}
+                                </div>
+                                <div className="truncate text-xs text-slate-500">
+                                  {expense.fixed.enabled
+                                    ? 'Recurring'
+                                    : expense.installment
+                                      ? `Installment ${expense.installment.number}/${expense.installment.total}`
+                                      : 'One-time'}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">{expense.categoryName}</td>
+                              <td className="px-4 py-3 tabular-nums">
+                                <div>ARS {formatMoney(expense.amountArs)}</div>
+                                {expense.currencyCode !== 'ARS' ? (
+                                  <div className="text-xs text-slate-500">
+                                    {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
+                              <td className="whitespace-nowrap px-4 py-3">
+                                <div className="flex gap-2">
+                                  <ActionButton action="edit" aria-label="Edit expense" onClick={() => startEdit(expense)} size="icon">
+                                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                      <path d="M12 20h9" />
+                                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                                    </svg>
+                                  </ActionButton>
+                                  <ActionButton action="clone" aria-label="Clone expense" onClick={() => void cloneExpense(expense)} size="icon">
+                                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                      <rect height="13" rx="2" width="13" x="9" y="9" />
+                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                    </svg>
+                                  </ActionButton>
+                                  <ActionButton action="delete" aria-label="Delete expense" onClick={() => void removeExpense(expense)} size="icon">
+                                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                      <path d="M3 6h18" />
+                                      <path d="M8 6V4h8v2" />
+                                      <path d="M19 6l-1 14H6L5 6" />
+                                      <path d="M10 11v6" />
+                                      <path d="M14 11v6" />
+                                    </svg>
+                                  </ActionButton>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                          {section.rows.length === 0 ? (
+                            <tr>
+                              <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
+                                {section.emptyMessage}
+                              </td>
+                            </tr>
                           ) : null}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          <div className="flex gap-2">
-                            <ActionButton
-                              action="edit"
-                              aria-label="Edit expense"
-                              className="md:hidden"
-                              onClick={() => startEdit(expense)}
-                              size="icon"
-                            >
-                              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                <path d="M12 20h9" />
-                                <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-                              </svg>
-                            </ActionButton>
-                            <ActionButton
-                              action="clone"
-                              aria-label="Clone expense"
-                              className="md:hidden"
-                              onClick={() => void cloneExpense(expense)}
-                              size="icon"
-                            >
-                              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                <rect height="13" rx="2" width="13" x="9" y="9" />
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                              </svg>
-                            </ActionButton>
-                            <ActionButton
-                              action="delete"
-                              aria-label="Delete expense"
-                              className="md:hidden"
-                              onClick={() => void removeExpense(expense)}
-                              size="icon"
-                            >
-                              <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                <path d="M3 6h18" />
-                                <path d="M8 6V4h8v2" />
-                                <path d="M19 6l-1 14H6L5 6" />
-                                <path d="M10 11v6" />
-                                <path d="M14 11v6" />
-                              </svg>
-                            </ActionButton>
-                            <ActionButton action="edit" className="hidden md:inline-flex" onClick={() => startEdit(expense)}>
-                              Edit
-                            </ActionButton>
-                            <ActionButton action="clone" className="hidden md:inline-flex" onClick={() => void cloneExpense(expense)}>
-                              Clone
-                            </ActionButton>
-                            <ActionButton action="delete" className="hidden md:inline-flex" onClick={() => void removeExpense(expense)}>
-                              Delete
-                            </ActionButton>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {expenses.length === 0 ? (
-                      <tr>
-                        <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
-                          {hasActiveFilters ? 'No expenses match the current filters' : 'No expenses yet for this month'}
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                ))}
               </div>
             </section>
           </div>

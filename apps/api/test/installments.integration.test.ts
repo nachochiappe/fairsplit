@@ -46,9 +46,10 @@ describe('installment expenses', () => {
   });
 
   it('creates installment rows and lazily generates upcoming months', async () => {
+    const purchaseDate = `${monthA}-10`;
     const createResponse = await request(app).post('/api/expenses').send({
       month: monthA,
-      date: `${monthA}-10`,
+      date: purchaseDate,
       description: 'Laptop',
       categoryId: testCategoryId,
       paidByUserId: testUserId,
@@ -78,6 +79,7 @@ describe('installment expenses', () => {
     expect(maySeriesExpense).toBeTruthy();
     expect(maySeriesExpense.amountOriginal).toBe('33.33');
     expect(maySeriesExpense.installment.number).toBe(2);
+    expect(maySeriesExpense.date).toBe(purchaseDate);
 
     const mayResponseRepeat = await request(app).get('/api/expenses').query({ month: monthB });
     expect(mayResponseRepeat.status).toBe(200);
@@ -94,6 +96,7 @@ describe('installment expenses', () => {
     expect(juneSeriesExpense).toBeTruthy();
     expect(juneSeriesExpense.amountOriginal).toBe('33.34');
     expect(juneSeriesExpense.installment.number).toBe(3);
+    expect(juneSeriesExpense.date).toBe(purchaseDate);
   });
 
   it('applies update and delete scope to future installments', async () => {

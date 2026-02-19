@@ -7,7 +7,6 @@ import {
   currencyCodeSchema,
   CreateExpenseInput,
   monthDiff,
-  monthToDate,
   UpdateExpenseInput,
 } from '@fairsplit/shared';
 import { prisma } from '@fairsplit/db';
@@ -131,8 +130,7 @@ export async function ensureInstallmentsForMonth(month: string): Promise<void> {
     if (!sourceRow.householdId) {
       continue;
     }
-    const day = sourceRow.date.getUTCDate();
-    const date = monthToDate(month, day);
+    const date = anchor.date;
     const schedule = buildScheduleFromSeries(anchor);
     const amountOriginal = schedule[targetInstallmentNumber - 1];
     const fxRateUsed = sourceRow.fxRateUsed.toFixed(6);
@@ -284,7 +282,7 @@ export async function propagateInstallmentUpdate(existing: ExpenseRow, payload: 
     totalAmount: sourceTotalAmount ?? undefined,
   }).amounts;
 
-  const day = payload.date ? new Date(`${payload.date}T12:00:00.000Z`).getUTCDate() : null;
+  const seriesDate = payload.date ? new Date(`${payload.date}T12:00:00.000Z`) : null;
   const nextFxRate = payload.fxRate !== undefined ? new Decimal(payload.fxRate).toFixed(6) : null;
   const nextCurrencyCode = payload.currencyCode ?? null;
 
@@ -311,7 +309,7 @@ export async function propagateInstallmentUpdate(existing: ExpenseRow, payload: 
           ...(payload.paidByUserId ? { paidByUserId: payload.paidByUserId } : {}),
           ...(nextCurrencyCode ? { currencyCode: nextCurrencyCode } : {}),
           ...(nextFxRate ? { fxRateUsed: nextFxRate } : {}),
-          ...(day ? { date: monthToDate(row.month, day) } : {}),
+          ...(seriesDate ? { date: seriesDate } : {}),
           amountOriginal,
           amountArs,
           installmentAmount: amountOriginal,
