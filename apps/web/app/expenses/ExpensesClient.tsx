@@ -51,6 +51,8 @@ const primaryButtonClass =
 const secondaryButtonClass =
   'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const SEARCH_DEBOUNCE_MS = 350;
+const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
+const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
 
 function getTodayDateInputValue() {
   const now = new Date();
@@ -316,6 +318,10 @@ function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   return Array.from(dedupedById.values());
 }
 
+function sumExpensesArs(expenses: Expense[]): number {
+  return expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
+}
+
 export function ExpensesClient({
   month,
   initialUsers,
@@ -572,13 +578,24 @@ export function ExpensesClient({
     const includeRates = options?.includeRates ?? false;
     const includeSettlement = options?.includeSettlement ?? false;
     const sharedQuery = { sortBy: 'date' as const, sortDir: 'desc' as const, limit: fetchBatchSize };
+    let hasNoIncomeSettlement = false;
 
     const [fixedData, oneTimeData, installmentData, rates, settlement] = await Promise.all([
       getExpenses(month, { ...sharedQuery, type: 'fixed', hydrate: true, includeCount: true }),
       getExpenses(month, { ...sharedQuery, type: 'oneTime', hydrate: false, includeCount: false }),
       getExpenses(month, { ...sharedQuery, type: 'installment', hydrate: false, includeCount: false }),
       includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
-      includeSettlement ? getSettlement(month, undefined, { hydrate: false }) : Promise.resolve<null | { totalExpenses: string }>(null),
+      includeSettlement
+        ? getSettlement(month, undefined, { hydrate: false }).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : 'Failed to load settlement';
+            if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
+              hasNoIncomeSettlement = true;
+              return null;
+            }
+
+            throw error;
+          })
+        : Promise.resolve<null | { totalExpenses: string }>(null),
     ]);
 
     const paginationBySection: SectionPaginationMap = {
@@ -600,12 +617,28 @@ export function ExpensesClient({
     };
 
     setExpenses(mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses]));
-    setWarnings(Array.from(new Set([...fixedData.warnings, ...oneTimeData.warnings, ...installmentData.warnings])));
+    const nextWarnings = Array.from(
+      new Set([
+        ...fixedData.warnings,
+        ...oneTimeData.warnings,
+        ...installmentData.warnings,
+        ...(hasNoIncomeSettlement ? [NO_INCOME_WARNING] : []),
+      ]),
+    );
+    setWarnings(nextWarnings);
     setSectionPagination(paginationBySection);
     sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
     invalidateSectionChunkState();
     if (settlement) {
       setTotalCombinedExpensesArs(Number(settlement.totalExpenses));
+    } else if (hasNoIncomeSettlement) {
+      const allExpensesResult = await getExpenses(month, {
+        sortBy: 'date',
+        sortDir: 'desc',
+        hydrate: false,
+        includeCount: false,
+      });
+      setTotalCombinedExpensesArs(sumExpensesArs(allExpensesResult.expenses));
     }
     if (rates) {
       setExchangeRates(rates);

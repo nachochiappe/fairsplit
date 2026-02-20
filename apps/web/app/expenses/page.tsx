@@ -8,6 +8,8 @@ interface ExpensesPageProps {
 
 const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
 const INITIAL_EXPENSES_PAGE_SIZE = getSectionFetchBatchSize(DEFAULT_MAX_ROWS_PER_SECTION);
+const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
+const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
 
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   const dedupedById = new Map<string, Expense>();
@@ -45,14 +47,43 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   );
   const categories = await getCategories(SERVER_READ_CACHE);
   const exchangeRates = await getExchangeRates(month, SERVER_READ_CACHE);
-  const settlement = await getSettlement(month, SERVER_READ_CACHE, { hydrate: false });
+  let totalExpensesArs = '0.00';
+  let noIncomeWarning: string | null = null;
+
+  try {
+    const settlement = await getSettlement(month, SERVER_READ_CACHE, { hydrate: false });
+    totalExpensesArs = settlement.totalExpenses;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to load settlement';
+    if (!message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
+      throw error;
+    }
+
+    noIncomeWarning = NO_INCOME_WARNING;
+    const allExpensesForMonth = await getExpenses(
+      month,
+      { sortBy: 'date', sortDir: 'desc', hydrate: false, includeCount: false },
+      SERVER_READ_CACHE,
+    );
+    const total = allExpensesForMonth.expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
+    totalExpensesArs = total.toFixed(2);
+  }
+
+  const initialWarnings = Array.from(
+    new Set([
+      ...fixedData.warnings,
+      ...oneTimeData.warnings,
+      ...installmentData.warnings,
+      ...(noIncomeWarning ? [noIncomeWarning] : []),
+    ]),
+  );
 
   return (
     <ExpensesClient
       month={month}
       initialUsers={users}
       initialExpenses={mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses])}
-      initialWarnings={Array.from(new Set([...fixedData.warnings, ...oneTimeData.warnings, ...installmentData.warnings]))}
+      initialWarnings={initialWarnings}
       initialSectionPagination={{
         fixed: {
           nextCursor: fixedData.pagination?.nextCursor ?? null,
@@ -72,7 +103,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       }}
       initialCategories={categories}
       initialExchangeRates={exchangeRates}
-      initialTotalExpensesArs={settlement.totalExpenses}
+      initialTotalExpensesArs={totalExpensesArs}
     />
   );
 }
