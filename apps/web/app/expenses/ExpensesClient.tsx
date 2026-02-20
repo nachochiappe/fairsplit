@@ -21,6 +21,7 @@ import {
   deleteExpense,
   ExchangeRate,
   Expense,
+  ExpenseListResponse,
   getExchangeRates,
   getExpenses,
   getSettlement,
@@ -270,6 +271,7 @@ interface ExpensesClientProps {
   initialCategories: Category[];
   initialExchangeRates: ExchangeRate[];
   initialTotalExpensesArs: string;
+  initialTotals: ExpenseListResponse['totals'];
 }
 
 interface SectionPaginationState {
@@ -310,6 +312,14 @@ function makeSectionPrefetchTargetMap(): Record<ExpenseSectionKey, string | null
   };
 }
 
+function makeSectionLoadingMap(value: boolean): Record<ExpenseSectionKey, boolean> {
+  return {
+    fixed: value,
+    oneTime: value,
+    installment: value,
+  };
+}
+
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   const dedupedById = new Map<string, Expense>();
   for (const expense of expenses) {
@@ -331,6 +341,7 @@ export function ExpensesClient({
   initialCategories,
   initialExchangeRates,
   initialTotalExpensesArs,
+  initialTotals,
 }: ExpensesClientProps) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
@@ -338,6 +349,7 @@ export function ExpensesClient({
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
   const [totalCombinedExpensesArs, setTotalCombinedExpensesArs] = useState<number>(Number(initialTotalExpensesArs));
+  const [subtotalTotals, setSubtotalTotals] = useState<ExpenseListResponse['totals']>(initialTotals);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [scopeDialog, setScopeDialog] = useState<ScopeDialogState | null>(null);
   const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState | null>(null);
@@ -361,13 +373,46 @@ export function ExpensesClient({
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
+  const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
   const expensesRef = useRef(expenses);
   const warningsRef = useRef(warnings);
   const sectionPaginationRef = useRef(sectionPagination);
   const sectionFetchInFlightRef = useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
   const sectionCacheFetchedAtRef = useRef<Record<ExpenseSectionKey, number>>(makeSectionTimestampMap(Date.now()));
   const sectionPrefetchTargetRef = useRef<Record<ExpenseSectionKey, string | null>>(makeSectionPrefetchTargetMap());
+  const sectionLoadingCountRef = useRef<Record<ExpenseSectionKey, number>>({
+    fixed: 0,
+    oneTime: 0,
+    installment: 0,
+  });
+  const fetchBatchSizeRef = useRef(fetchBatchSize);
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
+
+  useEffect(() => {
+    fetchBatchSizeRef.current = fetchBatchSize;
+  }, [fetchBatchSize]);
+
+  const beginSectionLoading = useCallback((keys: ExpenseSectionKey[]) => {
+    setSectionLoading((previous) => {
+      const next = { ...previous };
+      for (const key of keys) {
+        sectionLoadingCountRef.current[key] += 1;
+        next[key] = true;
+      }
+      return next;
+    });
+  }, []);
+
+  const endSectionLoading = useCallback((keys: ExpenseSectionKey[]) => {
+    setSectionLoading((previous) => {
+      const next = { ...previous };
+      for (const key of keys) {
+        sectionLoadingCountRef.current[key] = Math.max(0, sectionLoadingCountRef.current[key] - 1);
+        next[key] = sectionLoadingCountRef.current[key] > 0;
+      }
+      return next;
+    });
+  }, []);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -431,29 +476,44 @@ export function ExpensesClient({
     },
     [debouncedSearchQuery, selectedCategoryId, sortDirection, sortField],
   );
+  const filterQuery = useMemo(
+    () => ({
+      ...(debouncedSearchQuery.trim() ? { search: debouncedSearchQuery.trim() } : {}),
+      ...(selectedCategoryId !== 'all' ? { categoryId: selectedCategoryId } : {}),
+    }),
+    [debouncedSearchQuery, selectedCategoryId],
+  );
+  const filterQueryRef = useRef(filterQuery);
+  useEffect(() => {
+    filterQueryRef.current = filterQuery;
+  }, [filterQuery]);
   const visibleExpenses = useMemo(() => applyClientControls(expenses), [applyClientControls, expenses]);
-  const filteredSubtotalArs = useMemo(
+  const loadedFilteredSubtotalArs = useMemo(
     () => visibleExpenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
-  const fixedSubtotalArs = useMemo(
+  const loadedFixedSubtotalArs = useMemo(
     () => visibleExpenses.filter((expense) => expense.fixed.enabled).reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
-  const installmentSubtotalArs = useMemo(
+  const loadedInstallmentSubtotalArs = useMemo(
     () =>
       visibleExpenses
         .filter((expense) => !expense.fixed.enabled && Boolean(expense.installment))
         .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
-  const oneTimeSubtotalArs = useMemo(
+  const loadedOneTimeSubtotalArs = useMemo(
     () =>
       visibleExpenses
         .filter((expense) => !expense.fixed.enabled && !expense.installment)
         .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
+  const filteredSubtotalArs = subtotalTotals ? Number(subtotalTotals.filteredSubtotalArs) : loadedFilteredSubtotalArs;
+  const fixedSubtotalArs = subtotalTotals ? Number(subtotalTotals.bySection.fixedArs) : loadedFixedSubtotalArs;
+  const installmentSubtotalArs = subtotalTotals ? Number(subtotalTotals.bySection.installmentArs) : loadedInstallmentSubtotalArs;
+  const oneTimeSubtotalArs = subtotalTotals ? Number(subtotalTotals.bySection.oneTimeArs) : loadedOneTimeSubtotalArs;
   const fixedExpenses = useMemo(() => visibleExpenses.filter((expense) => expense.fixed.enabled), [visibleExpenses]);
   const installmentExpenses = useMemo(
     () => visibleExpenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
@@ -575,15 +635,28 @@ export function ExpensesClient({
   );
 
   const fetchMonthData = useCallback(async (options?: { includeRates?: boolean; includeSettlement?: boolean }) => {
+    const allSectionKeys: ExpenseSectionKey[] = ['fixed', 'oneTime', 'installment'];
+    beginSectionLoading(allSectionKeys);
+
+    try {
     const includeRates = options?.includeRates ?? false;
     const includeSettlement = options?.includeSettlement ?? false;
-    const sharedQuery = { sortBy: 'date' as const, sortDir: 'desc' as const, limit: fetchBatchSize };
+    const sharedQuery = { sortBy: 'date' as const, sortDir: 'desc' as const, limit: fetchBatchSizeRef.current };
     let hasNoIncomeSettlement = false;
 
-    const [fixedData, oneTimeData, installmentData, rates, settlement] = await Promise.all([
+    const [fixedData, oneTimeData, installmentData, totalsData, rates, settlement] = await Promise.all([
       getExpenses(month, { ...sharedQuery, type: 'fixed', hydrate: true, includeCount: true }),
       getExpenses(month, { ...sharedQuery, type: 'oneTime', hydrate: false, includeCount: false }),
       getExpenses(month, { ...sharedQuery, type: 'installment', hydrate: false, includeCount: false }),
+      getExpenses(month, {
+        ...filterQueryRef.current,
+        sortBy: 'date',
+        sortDir: 'desc',
+        limit: 1,
+        hydrate: false,
+        includeCount: false,
+        includeTotals: true,
+      }),
       includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
       includeSettlement
         ? getSettlement(month, undefined, { hydrate: false }).catch((error: unknown) => {
@@ -627,6 +700,7 @@ export function ExpensesClient({
     );
     setWarnings(nextWarnings);
     setSectionPagination(paginationBySection);
+    setSubtotalTotals(totalsData.totals);
     sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
     invalidateSectionChunkState();
     if (settlement) {
@@ -643,7 +717,10 @@ export function ExpensesClient({
     if (rates) {
       setExchangeRates(rates);
     }
-  }, [month, fetchBatchSize, invalidateSectionChunkState]);
+    } finally {
+      endSectionLoading(allSectionKeys);
+    }
+  }, [month, invalidateSectionChunkState, beginSectionLoading, endSectionLoading]);
 
   useEffect(() => {
     setUsers(initialUsers);
@@ -652,6 +729,7 @@ export function ExpensesClient({
     setCategories(initialCategories);
     setExchangeRates(initialExchangeRates);
     setTotalCombinedExpensesArs(Number(initialTotalExpensesArs));
+    setSubtotalTotals(initialTotals);
     setError(null);
     resetSectionPages();
     setSectionPagination(initialSectionPagination);
@@ -664,6 +742,7 @@ export function ExpensesClient({
     initialExpenses,
     initialSectionPagination,
     initialTotalExpensesArs,
+    initialTotals,
     initialUsers,
     initialWarnings,
     invalidateSectionChunkState,
@@ -672,12 +751,62 @@ export function ExpensesClient({
   ]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const refreshLatestMonthData = async () => {
+      try {
+        await fetchMonthData({ includeRates: true, includeSettlement: true });
+      } catch (refreshError) {
+        if (cancelled) {
+          return;
+        }
+        setError(refreshError instanceof Error ? refreshError.message : 'Failed to refresh month data');
+      }
+    };
+
+    void refreshLatestMonthData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [month, fetchMonthData]);
+
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
   }, [searchQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshTotalsForFilters = async () => {
+      try {
+        const totalsResult = await getExpenses(month, {
+          ...filterQuery,
+          sortBy: 'date',
+          sortDir: 'desc',
+          limit: 1,
+          hydrate: false,
+          includeCount: false,
+          includeTotals: true,
+        });
+        if (!cancelled) {
+          setSubtotalTotals(totalsResult.totals);
+        }
+      } catch {
+        // Keep last known totals and fallback rendering if this request fails.
+      }
+    };
+
+    void refreshTotalsForFilters();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [month, filterQuery]);
 
   useEffect(() => {
     resetSectionPages();
@@ -747,6 +876,8 @@ export function ExpensesClient({
       }
 
       const run = async () => {
+        beginSectionLoading([sectionKey]);
+        try {
         let loadedExpenses = expensesRef.current;
         let paginationForSection = sectionPaginationRef.current[sectionKey];
         const requiredRows = targetPage * maxRowsPerSection;
@@ -788,6 +919,9 @@ export function ExpensesClient({
           ...sectionPaginationRef.current,
           [sectionKey]: paginationForSection,
         };
+        } finally {
+          endSectionLoading([sectionKey]);
+        }
       };
 
       const request = run().finally(() => {
@@ -804,6 +938,8 @@ export function ExpensesClient({
       rowsForSection,
       month,
       fetchBatchSize,
+      beginSectionLoading,
+      endSectionLoading,
     ],
   );
 
@@ -1541,7 +1677,11 @@ export function ExpensesClient({
               </div>
               <div className="space-y-5 p-4">
                 {sectionSummaries.map((section) => (
-                  <section key={section.key} className="overflow-hidden rounded-xl border border-slate-200/80">
+                  <section
+                    key={section.key}
+                    aria-busy={sectionLoading[section.key]}
+                    className="overflow-hidden rounded-xl border border-slate-200/80"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span
@@ -1585,8 +1725,28 @@ export function ExpensesClient({
                         Subtotal: <span className="text-sm normal-case text-slate-900">ARS {formatMoney(section.subtotalArs)}</span>
                       </p>
                     </div>
-                    <div className="w-full max-w-full overflow-x-auto">
-                      <table className="w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm">
+                    <div className="relative w-full max-w-full overflow-x-auto">
+                      {sectionLoading[section.key] ? (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+                          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
+                            <svg
+                              aria-hidden="true"
+                              className="h-4 w-4 animate-spin text-brand-600"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-90" d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeLinecap="round" strokeWidth="4" />
+                            </svg>
+                            Loading...
+                          </div>
+                        </div>
+                      ) : null}
+                      <table
+                        className={`w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm transition-opacity ${
+                          sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'
+                        }`}
+                      >
                         <caption className="sr-only">{section.title}</caption>
                         <colgroup>
                           <col className="w-[15%]" />
@@ -1691,7 +1851,7 @@ export function ExpensesClient({
                           <button
                             aria-label={`Previous ${section.title} page`}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={section.currentPage === 1}
+                            disabled={section.currentPage === 1 || sectionLoading[section.key]}
                             onClick={() =>
                               setSectionPages((previous) => ({
                                 ...previous,
@@ -1707,7 +1867,7 @@ export function ExpensesClient({
                           <button
                             aria-label={`Next ${section.title} page`}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={!section.canMoveNext}
+                            disabled={!section.canMoveNext || sectionLoading[section.key]}
                             onClick={async () => {
                               const targetPage = section.currentPage + 1;
                               await ensureRowsForSection(section.key, targetPage);

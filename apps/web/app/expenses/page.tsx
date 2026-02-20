@@ -45,6 +45,18 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
     },
     SERVER_READ_CACHE,
   );
+  const totalsData = await getExpenses(
+    month,
+    {
+      sortBy: 'date',
+      sortDir: 'desc',
+      limit: 1,
+      hydrate: false,
+      includeCount: false,
+      includeTotals: true,
+    },
+    SERVER_READ_CACHE,
+  );
   const categories = await getCategories(SERVER_READ_CACHE);
   const exchangeRates = await getExchangeRates(month, SERVER_READ_CACHE);
   let totalExpensesArs = '0.00';
@@ -104,6 +116,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       initialCategories={categories}
       initialExchangeRates={exchangeRates}
       initialTotalExpensesArs={totalExpensesArs}
+      initialTotals={totalsData.totals}
     />
   );
 }

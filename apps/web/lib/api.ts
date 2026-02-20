@@ -50,6 +50,14 @@ export interface ExpenseListResponse {
   month: string;
   warnings: string[];
   expenses: Expense[];
+  totals: {
+    filteredSubtotalArs: string;
+    bySection: {
+      fixedArs: string;
+      oneTimeArs: string;
+      installmentArs: string;
+    };
+  } | null;
   pagination: {
     limit: number;
     nextCursor: string | null;
@@ -68,6 +76,7 @@ export interface ExpenseListQuery {
   cursor?: string;
   hydrate?: boolean;
   includeCount?: boolean;
+  includeTotals?: boolean;
 }
 
 export interface Category {
@@ -207,6 +216,9 @@ export async function getExpenses(
   }
   if (query?.includeCount !== undefined) {
     params.set('includeCount', String(query.includeCount));
+  }
+  if (query?.includeTotals !== undefined) {
+    params.set('includeTotals', String(query.includeTotals));
   }
   const response = await fetchFromApi(`${API_BASE_URL}/expenses?${params.toString()}`, init ?? { cache: 'no-store' });
   return parseResponse<ExpenseListResponse>(response);
