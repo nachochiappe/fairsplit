@@ -24,11 +24,18 @@ import {
 import {
   applyTemplateValuesToFutureMonths,
   computeArsAmount,
+  deleteFixedExpense,
   ensureFixedExpensesForMonth,
   resolveFxRateForMonth,
 } from './lib/fixed-expenses';
 
-const monthQuerySchema = z.object({ month: monthSchema });
+const monthQuerySchema = z.object({
+  month: monthSchema,
+  hydrate: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
+    .optional(),
+});
 const expenseListQuerySchema = z.object({
   month: monthSchema,
   search: z.string().trim().min(1).optional(),
@@ -39,6 +46,14 @@ const expenseListQuerySchema = z.object({
   sortDir: z.enum(['asc', 'desc']).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: z.string().min(1).optional(),
+  hydrate: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
+    .optional(),
+  includeCount: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
+    .optional(),
 }).superRefine((value, ctx) => {
   if (value.cursor && !value.limit) {
     ctx.addIssue({
@@ -901,9 +916,13 @@ export const createApp = (): Express => {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
+    const shouldHydrate = parsed.data.hydrate ?? !parsed.data.cursor;
+    const shouldIncludeCount = parsed.data.includeCount ?? true;
     const generationWarnings: string[] = [];
-    generationWarnings.push(...(await ensureFixedExpensesForMonth(parsed.data.month)));
-    await ensureInstallmentsForMonth(parsed.data.month);
+    if (shouldHydrate) {
+      generationWarnings.push(...(await ensureFixedExpensesForMonth(parsed.data.month)));
+      await ensureInstallmentsForMonth(parsed.data.month);
+    }
 
     const where: Record<string, unknown> = { month: parsed.data.month };
     if (parsed.data.search) {
@@ -964,14 +983,12 @@ export const createApp = (): Express => {
         }
       }
 
-      const [pagedExpenses, totalCount] = await Promise.all([
-        prisma.expense.findMany({
-          ...baseFindManyArgs,
-          take: parsed.data.limit + 1,
-          ...(parsed.data.cursor ? { cursor: { id: parsed.data.cursor }, skip: 1 } : {}),
-        }),
-        prisma.expense.count({ where }),
-      ]);
+      const pagedExpenses = await prisma.expense.findMany({
+        ...baseFindManyArgs,
+        take: parsed.data.limit + 1,
+        ...(parsed.data.cursor ? { cursor: { id: parsed.data.cursor }, skip: 1 } : {}),
+      });
+      const totalCount = shouldIncludeCount ? await prisma.expense.count({ where }) : null;
 
       const hasMore = pagedExpenses.length > parsed.data.limit;
       const expenses = hasMore ? pagedExpenses.slice(0, parsed.data.limit) : pagedExpenses;
@@ -1173,7 +1190,17 @@ export const createApp = (): Express => {
       return res.status(404).json({ error: 'Expense not found' });
     }
 
-    await propagateInstallmentDelete(existing, parsedBody.data.applyScope);
+    if (existing.isInstallment) {
+      await propagateInstallmentDelete(existing, parsedBody.data.applyScope);
+      return res.status(204).send();
+    }
+
+    if (existing.templateId) {
+      await deleteFixedExpense(existing, parsedBody.data.applyScope);
+      return res.status(204).send();
+    }
+
+    await prisma.expense.delete({ where: { id: existing.id } });
     return res.status(204).send();
   });
 
@@ -1184,9 +1211,12 @@ export const createApp = (): Express => {
     }
 
     const month = parsed.data.month;
+    const shouldHydrate = parsed.data.hydrate ?? true;
 
-    await ensureFixedExpensesForMonth(month);
-    await ensureInstallmentsForMonth(month);
+    if (shouldHydrate) {
+      await ensureFixedExpensesForMonth(month);
+      await ensureInstallmentsForMonth(month);
+    }
 
     const [users, incomes, expenses] = await Promise.all([
       prisma.user.findMany({ orderBy: { createdAt: 'asc' } }),

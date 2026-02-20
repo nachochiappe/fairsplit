@@ -1,8 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 
 const links = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -13,16 +12,6 @@ const links = [
 
 export function Nav({ month }: { month: string }) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  useEffect(() => {
-    for (const link of links) {
-      const href = month ? `${link.href}?month=${month}` : link.href;
-      if (pathname !== link.href) {
-        router.prefetch(href);
-      }
-    }
-  }, [month, pathname, router]);
 
   return (
     <nav
@@ -42,6 +31,7 @@ export function Nav({ month }: { month: string }) {
             } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2`}
             key={link.href}
             href={href}
+            prefetch={false}
             aria-current={isCurrent ? 'page' : undefined}
           >
             {link.label}

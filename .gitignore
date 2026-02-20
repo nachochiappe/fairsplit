@@ -11,3 +11,4 @@ apps/api/test-results
 .DS_Store
 .agents
 packages/db/data
+.playwright-cli

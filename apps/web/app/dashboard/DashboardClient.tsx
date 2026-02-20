@@ -257,6 +257,7 @@ function NavItem({ href, label, month }: { href: string; label: string; month: s
         isCurrent ? 'bg-brand-600 text-white shadow-md shadow-brand-700/25' : 'text-slate-500 hover:text-slate-800'
       }`}
       href={fullHref}
+      prefetch={false}
       aria-current={isCurrent ? 'page' : undefined}
     >
       {label}
