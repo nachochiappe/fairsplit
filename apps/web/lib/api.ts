@@ -50,6 +50,12 @@ export interface ExpenseListResponse {
   month: string;
   warnings: string[];
   expenses: Expense[];
+  pagination: {
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+    totalCount: number;
+  } | null;
 }
 export interface ExpenseListQuery {
   search?: string;
@@ -58,6 +64,8 @@ export interface ExpenseListQuery {
   type?: 'oneTime' | 'fixed' | 'installment';
   sortBy?: 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
   sortDir?: 'asc' | 'desc';
+  limit?: number;
+  cursor?: string;
 }
 
 export interface Category {
@@ -185,6 +193,12 @@ export async function getExpenses(
   }
   if (query?.sortDir) {
     params.set('sortDir', query.sortDir);
+  }
+  if (query?.limit) {
+    params.set('limit', String(query.limit));
+  }
+  if (query?.cursor) {
+    params.set('cursor', query.cursor);
   }
   const response = await fetchFromApi(`${API_BASE_URL}/expenses?${params.toString()}`, init ?? { cache: 'no-store' });
   return parseResponse<ExpenseListResponse>(response);

@@ -6,13 +6,14 @@ interface ExpensesPageProps {
 }
 
 const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
+const INITIAL_EXPENSES_PAGE_SIZE = 30;
 
 export default async function ExpensesPage({ searchParams }: ExpensesPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
   const [users, expenseData, categories, exchangeRates] = await Promise.all([
     getUsers(SERVER_READ_CACHE),
-    getExpenses(month, undefined, SERVER_READ_CACHE),
+    getExpenses(month, { limit: INITIAL_EXPENSES_PAGE_SIZE }, SERVER_READ_CACHE),
     getCategories(SERVER_READ_CACHE),
     getExchangeRates(month, SERVER_READ_CACHE),
   ]);
@@ -23,6 +24,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       initialUsers={users}
       initialExpenses={expenseData.expenses}
       initialWarnings={expenseData.warnings}
+      initialPagination={expenseData.pagination}
       initialCategories={categories}
       initialExchangeRates={exchangeRates}
     />

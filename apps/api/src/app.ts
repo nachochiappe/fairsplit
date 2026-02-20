@@ -37,6 +37,16 @@ const expenseListQuerySchema = z.object({
   type: z.enum(['oneTime', 'fixed', 'installment']).optional(),
   sortBy: z.enum(['date', 'description', 'category', 'amountArs', 'paidBy']).optional(),
   sortDir: z.enum(['asc', 'desc']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  cursor: z.string().min(1).optional(),
+}).superRefine((value, ctx) => {
+  if (value.cursor && !value.limit) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['cursor'],
+      message: 'cursor requires limit',
+    });
+  }
 });
 const createUserSchema = z.object({ name: z.string().min(1) });
 const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
@@ -937,16 +947,56 @@ export const createApp = (): Express => {
     }
     orderBy.push({ id: 'desc' });
 
-    const expenses = await prisma.expense.findMany({
+    const baseFindManyArgs = {
       where,
       orderBy,
       include: { paidByUser: true, category: { include: { superCategory: true } } },
-    });
+    } as const;
+
+    if (parsed.data.limit) {
+      if (parsed.data.cursor) {
+        const cursorExpense = await prisma.expense.findFirst({
+          where: { AND: [where, { id: parsed.data.cursor }] },
+          select: { id: true },
+        });
+        if (!cursorExpense) {
+          return res.status(400).json({ error: 'Invalid cursor' });
+        }
+      }
+
+      const [pagedExpenses, totalCount] = await Promise.all([
+        prisma.expense.findMany({
+          ...baseFindManyArgs,
+          take: parsed.data.limit + 1,
+          ...(parsed.data.cursor ? { cursor: { id: parsed.data.cursor }, skip: 1 } : {}),
+        }),
+        prisma.expense.count({ where }),
+      ]);
+
+      const hasMore = pagedExpenses.length > parsed.data.limit;
+      const expenses = hasMore ? pagedExpenses.slice(0, parsed.data.limit) : pagedExpenses;
+      const nextCursor = hasMore ? expenses[expenses.length - 1]?.id ?? null : null;
+
+      return res.json({
+        month: parsed.data.month,
+        warnings: generationWarnings,
+        expenses: expenses.map((expense) => serializeExpense(expense)),
+        pagination: {
+          limit: parsed.data.limit,
+          nextCursor,
+          hasMore,
+          totalCount,
+        },
+      });
+    }
+
+    const expenses = await prisma.expense.findMany(baseFindManyArgs);
 
     return res.json({
       month: parsed.data.month,
       warnings: generationWarnings,
       expenses: expenses.map((expense) => serializeExpense(expense)),
+      pagination: null,
     });
   });
 
