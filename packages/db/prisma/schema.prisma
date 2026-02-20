@@ -141,12 +141,24 @@ model ExpenseTemplate {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   expenses       Expense[]
+  skippedMonths  RecurringExpenseSkipMonth[]
 
   @@index([isActive])
   @@index([isActive, createdAt])
   @@index([categoryId])
   @@index([paidByUserId])
   @@index([householdId])
+}
+
+model RecurringExpenseSkipMonth {
+  id         String          @id @default(cuid())
+  templateId String
+  template   ExpenseTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  month      String          @db.VarChar(7)
+  createdAt  DateTime        @default(now())
+
+  @@unique([templateId, month])
+  @@index([month])
 }
 
 model MonthlyExchangeRate {

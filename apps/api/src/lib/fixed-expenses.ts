@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import { monthToDate } from '@fairsplit/shared';
+import { ApplyScope, monthToDate } from '@fairsplit/shared';
 import { prisma } from '@fairsplit/db';
 
 function toArsAmount(amountOriginal: string, fxRate: string): string {
@@ -49,6 +49,17 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
           select: { templateId: true, month: true },
         })
       : [];
+  const skippedTemplateIds =
+    templateIds.length > 0
+      ? new Set(
+          (
+            await prisma.recurringExpenseSkipMonth.findMany({
+              where: { templateId: { in: templateIds }, month },
+              select: { templateId: true },
+            })
+          ).map((row) => row.templateId),
+        )
+      : new Set<string>();
 
   const existingTemplateIds = new Set<string>();
   const firstMonthByTemplateId = new Map<string, string>();
@@ -103,6 +114,9 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
     if (existingTemplateIds.has(template.id)) {
       continue;
     }
+    if (skippedTemplateIds.has(template.id)) {
+      continue;
+    }
 
     const monthRate = template.currencyCode === 'ARS' ? '1.000000' : monthlyRatesByCurrency.get(template.currencyCode);
 
@@ -141,6 +155,46 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
   }
 
   return warnings;
+}
+
+type ExpenseRow = Awaited<ReturnType<typeof prisma.expense.findFirstOrThrow>>;
+
+export async function deleteFixedExpense(existing: ExpenseRow, applyScope?: ApplyScope): Promise<void> {
+  const scope = applyScope ?? 'single';
+  if (!existing.templateId) {
+    await prisma.expense.delete({ where: { id: existing.id } });
+    return;
+  }
+
+  if (scope === 'single') {
+    await prisma.$transaction(async (tx) => {
+      await tx.recurringExpenseSkipMonth.upsert({
+        where: { templateId_month: { templateId: existing.templateId!, month: existing.month } },
+        create: { templateId: existing.templateId!, month: existing.month },
+        update: {},
+      });
+      await tx.expense.delete({ where: { id: existing.id } });
+    });
+    return;
+  }
+
+  if (scope === 'future') {
+    await prisma.$transaction(async (tx) => {
+      await tx.expenseTemplate.update({ where: { id: existing.templateId! }, data: { isActive: false } });
+      await tx.expense.deleteMany({
+        where: {
+          templateId: existing.templateId!,
+          month: { gte: existing.month },
+        },
+      });
+    });
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.expenseTemplate.update({ where: { id: existing.templateId! }, data: { isActive: false } });
+    await tx.expense.deleteMany({ where: { templateId: existing.templateId! } });
+  });
 }
 
 export async function applyTemplateValuesToFutureMonths(options: {

@@ -54,7 +54,7 @@ export interface ExpenseListResponse {
     limit: number;
     nextCursor: string | null;
     hasMore: boolean;
-    totalCount: number;
+    totalCount: number | null;
   } | null;
 }
 export interface ExpenseListQuery {
@@ -66,6 +66,8 @@ export interface ExpenseListQuery {
   sortDir?: 'asc' | 'desc';
   limit?: number;
   cursor?: string;
+  hydrate?: boolean;
+  includeCount?: boolean;
 }
 
 export interface Category {
@@ -199,6 +201,12 @@ export async function getExpenses(
   }
   if (query?.cursor) {
     params.set('cursor', query.cursor);
+  }
+  if (query?.hydrate !== undefined) {
+    params.set('hydrate', String(query.hydrate));
+  }
+  if (query?.includeCount !== undefined) {
+    params.set('includeCount', String(query.includeCount));
   }
   const response = await fetchFromApi(`${API_BASE_URL}/expenses?${params.toString()}`, init ?? { cache: 'no-store' });
   return parseResponse<ExpenseListResponse>(response);
@@ -401,9 +409,17 @@ export async function upsertExchangeRate(payload: {
   return parseResponse<ExchangeRate>(response);
 }
 
-export async function getSettlement(month: string, init?: NextRequestInit): Promise<SettlementResponse> {
+export async function getSettlement(
+  month: string,
+  init?: NextRequestInit,
+  options?: { hydrate?: boolean },
+): Promise<SettlementResponse> {
+  const params = new URLSearchParams({ month });
+  if (options?.hydrate !== undefined) {
+    params.set('hydrate', String(options.hydrate));
+  }
   const response = await fetchFromApi(
-    `${API_BASE_URL}/settlement?month=${encodeURIComponent(month)}`,
+    `${API_BASE_URL}/settlement?${params.toString()}`,
     init ?? { cache: 'no-store' },
   );
   return parseResponse<SettlementResponse>(response);

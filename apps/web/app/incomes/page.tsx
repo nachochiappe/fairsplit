@@ -5,7 +5,7 @@ interface IncomesPageProps {
   searchParams?: Promise<{ month?: string }>;
 }
 
-const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
+const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
 
 export default async function IncomesPage({ searchParams }: IncomesPageProps) {
   const resolvedSearchParams = await searchParams;

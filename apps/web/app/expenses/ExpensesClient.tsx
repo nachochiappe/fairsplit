@@ -10,6 +10,12 @@ import { ActionButton } from '../../components/ActionButton';
 import { MonthSelector } from '../../components/MonthSelector';
 import { formatMoney } from '../../lib/currency';
 import {
+  DEFAULT_MAX_ROWS_PER_SECTION,
+  getSectionFetchBatchSize,
+  PREFETCH_AHEAD_PAGES,
+  SECTION_CACHE_TTL_MS,
+} from './pagination';
+import {
   Category,
   createExpense,
   deleteExpense,
@@ -258,15 +264,56 @@ interface ExpensesClientProps {
   initialUsers: User[];
   initialExpenses: Expense[];
   initialWarnings: string[];
-  initialPagination: {
-    limit: number;
-    nextCursor: string | null;
-    hasMore: boolean;
-    totalCount: number;
-  } | null;
+  initialSectionPagination: SectionPaginationMap;
   initialCategories: Category[];
   initialExchangeRates: ExchangeRate[];
   initialTotalExpensesArs: string;
+}
+
+interface SectionPaginationState {
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number | null;
+}
+
+type SectionPaginationMap = Record<ExpenseSectionKey, SectionPaginationState>;
+
+const sectionTypeMap: Record<ExpenseSectionKey, 'fixed' | 'oneTime' | 'installment'> = {
+  fixed: 'fixed',
+  oneTime: 'oneTime',
+  installment: 'installment',
+};
+
+function makeSectionTimestampMap(value: number): Record<ExpenseSectionKey, number> {
+  return {
+    fixed: value,
+    oneTime: value,
+    installment: value,
+  };
+}
+
+function makeSectionPromiseMap(): Record<ExpenseSectionKey, Promise<void> | null> {
+  return {
+    fixed: null,
+    oneTime: null,
+    installment: null,
+  };
+}
+
+function makeSectionPrefetchTargetMap(): Record<ExpenseSectionKey, string | null> {
+  return {
+    fixed: null,
+    oneTime: null,
+    installment: null,
+  };
+}
+
+function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
+  const dedupedById = new Map<string, Expense>();
+  for (const expense of expenses) {
+    dedupedById.set(expense.id, expense);
+  }
+  return Array.from(dedupedById.values());
 }
 
 export function ExpensesClient({
@@ -274,7 +321,7 @@ export function ExpensesClient({
   initialUsers,
   initialExpenses,
   initialWarnings,
-  initialPagination,
+  initialSectionPagination,
   initialCategories,
   initialExchangeRates,
   initialTotalExpensesArs,
@@ -292,16 +339,14 @@ export function ExpensesClient({
   const [error, setError] = useState<string | null>(null);
   const [newFxCurrency, setNewFxCurrency] = useState<SupportedCurrencyCode>('USD');
   const [newFxRate, setNewFxRate] = useState('');
-  const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(10);
-  const fetchBatchSize = maxRowsPerSection * 3;
+  const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(DEFAULT_MAX_ROWS_PER_SECTION);
+  const fetchBatchSize = useMemo(() => getSectionFetchBatchSize(maxRowsPerSection), [maxRowsPerSection]);
   const [sectionPages, setSectionPages] = useState<Record<ExpenseSectionKey, number>>({
     fixed: 1,
     oneTime: 1,
     installment: 1,
   });
-  const [nextCursor, setNextCursor] = useState<string | null>(initialPagination?.nextCursor ?? null);
-  const [hasMorePages, setHasMorePages] = useState<boolean>(initialPagination?.hasMore ?? false);
-  const [totalFilteredCount, setTotalFilteredCount] = useState<number | null>(initialPagination?.totalCount ?? null);
+  const [sectionPagination, setSectionPagination] = useState<SectionPaginationMap>(initialSectionPagination);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
@@ -310,6 +355,12 @@ export function ExpensesClient({
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
+  const expensesRef = useRef(expenses);
+  const warningsRef = useRef(warnings);
+  const sectionPaginationRef = useRef(sectionPagination);
+  const sectionFetchInFlightRef = useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
+  const sectionCacheFetchedAtRef = useRef<Record<ExpenseSectionKey, number>>(makeSectionTimestampMap(Date.now()));
+  const sectionPrefetchTargetRef = useRef<Record<ExpenseSectionKey, string | null>>(makeSectionPrefetchTargetMap());
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
   const activeCategories = useMemo(
@@ -335,36 +386,76 @@ export function ExpensesClient({
     if (sortDirection !== 'desc') count += 1;
     return count;
   }, [selectedCategoryId, sortDirection, sortField]);
+  const applyClientControls = useCallback(
+    (list: Expense[]) => {
+      const searchTerm = debouncedSearchQuery.trim().toLowerCase();
+      const withFilters = list.filter((expense) => {
+        if (selectedCategoryId !== 'all' && expense.categoryId !== selectedCategoryId) {
+          return false;
+        }
+        if (!searchTerm) {
+          return true;
+        }
+        const searchableText = `${expense.description} ${expense.categoryName} ${expense.paidByUserName}`.toLowerCase();
+        return searchableText.includes(searchTerm);
+      });
+
+      const sorted = [...withFilters];
+      sorted.sort((left, right) => {
+        let comparison = 0;
+        if (sortField === 'description') {
+          comparison = left.description.localeCompare(right.description, undefined, { sensitivity: 'base' });
+        } else if (sortField === 'category') {
+          comparison = left.categoryName.localeCompare(right.categoryName, undefined, { sensitivity: 'base' });
+        } else if (sortField === 'amountArs') {
+          comparison = Number(left.amountArs) - Number(right.amountArs);
+        } else if (sortField === 'paidBy') {
+          comparison = left.paidByUserName.localeCompare(right.paidByUserName, undefined, { sensitivity: 'base' });
+        } else {
+          comparison = left.date.localeCompare(right.date);
+        }
+
+        if (comparison === 0) {
+          comparison = left.id.localeCompare(right.id);
+        }
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+
+      return sorted;
+    },
+    [debouncedSearchQuery, selectedCategoryId, sortDirection, sortField],
+  );
+  const visibleExpenses = useMemo(() => applyClientControls(expenses), [applyClientControls, expenses]);
   const filteredSubtotalArs = useMemo(
-    () => expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
-    [expenses],
+    () => visibleExpenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
+    [visibleExpenses],
   );
   const fixedSubtotalArs = useMemo(
-    () => expenses.filter((expense) => expense.fixed.enabled).reduce((sum, expense) => sum + Number(expense.amountArs), 0),
-    [expenses],
+    () => visibleExpenses.filter((expense) => expense.fixed.enabled).reduce((sum, expense) => sum + Number(expense.amountArs), 0),
+    [visibleExpenses],
   );
   const installmentSubtotalArs = useMemo(
     () =>
-      expenses
+      visibleExpenses
         .filter((expense) => !expense.fixed.enabled && Boolean(expense.installment))
         .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
-    [expenses],
+    [visibleExpenses],
   );
   const oneTimeSubtotalArs = useMemo(
     () =>
-      expenses
+      visibleExpenses
         .filter((expense) => !expense.fixed.enabled && !expense.installment)
         .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
-    [expenses],
+    [visibleExpenses],
   );
-  const fixedExpenses = useMemo(() => expenses.filter((expense) => expense.fixed.enabled), [expenses]);
+  const fixedExpenses = useMemo(() => visibleExpenses.filter((expense) => expense.fixed.enabled), [visibleExpenses]);
   const installmentExpenses = useMemo(
-    () => expenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
-    [expenses],
+    () => visibleExpenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
+    [visibleExpenses],
   );
   const oneTimeExpenses = useMemo(
-    () => expenses.filter((expense) => !expense.fixed.enabled && !expense.installment),
-    [expenses],
+    () => visibleExpenses.filter((expense) => !expense.fixed.enabled && !expense.installment),
+    [visibleExpenses],
   );
 
   const form = useForm<ExpenseForm>({
@@ -420,6 +511,11 @@ export function ExpensesClient({
     });
   }, []);
 
+  const invalidateSectionChunkState = useCallback(() => {
+    sectionFetchInFlightRef.current = makeSectionPromiseMap();
+    sectionPrefetchTargetRef.current = makeSectionPrefetchTargetMap();
+  }, []);
+
   const projectedArsAmount = useMemo(() => {
     const baseAmount = watchedInstallmentEntryMode === 'total' ? watchedTotalAmount : watchedAmount;
     if (baseAmount === undefined || Number.isNaN(baseAmount)) {
@@ -472,65 +568,49 @@ export function ExpensesClient({
     [form],
   );
 
-  const fetchMonthData = useCallback(async (includeRates = false) => {
-    const [expenseData, rates, settlement] = await Promise.all([
-      getExpenses(month, {
-        search: debouncedSearchQuery || undefined,
-        categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-        sortBy: sortField,
-        sortDir: sortDirection,
-        limit: fetchBatchSize,
-      }),
+  const fetchMonthData = useCallback(async (options?: { includeRates?: boolean; includeSettlement?: boolean }) => {
+    const includeRates = options?.includeRates ?? false;
+    const includeSettlement = options?.includeSettlement ?? false;
+    const sharedQuery = { sortBy: 'date' as const, sortDir: 'desc' as const, limit: fetchBatchSize };
+
+    const [fixedData, oneTimeData, installmentData, rates, settlement] = await Promise.all([
+      getExpenses(month, { ...sharedQuery, type: 'fixed', hydrate: true, includeCount: true }),
+      getExpenses(month, { ...sharedQuery, type: 'oneTime', hydrate: false, includeCount: false }),
+      getExpenses(month, { ...sharedQuery, type: 'installment', hydrate: false, includeCount: false }),
       includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
-      getSettlement(month),
+      includeSettlement ? getSettlement(month, undefined, { hydrate: false }) : Promise.resolve<null | { totalExpenses: string }>(null),
     ]);
 
-    const rowsFor = (items: Expense[], sectionKey: ExpenseSectionKey) => {
-      if (sectionKey === 'fixed') {
-        return items.filter((expense) => expense.fixed.enabled).length;
-      }
-      if (sectionKey === 'installment') {
-        return items.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)).length;
-      }
-      return items.filter((expense) => !expense.fixed.enabled && !expense.installment).length;
+    const paginationBySection: SectionPaginationMap = {
+      fixed: {
+        nextCursor: fixedData.pagination?.nextCursor ?? null,
+        hasMore: fixedData.pagination?.hasMore ?? false,
+        totalCount: fixedData.pagination?.totalCount ?? null,
+      },
+      oneTime: {
+        nextCursor: oneTimeData.pagination?.nextCursor ?? null,
+        hasMore: oneTimeData.pagination?.hasMore ?? false,
+        totalCount: oneTimeData.pagination?.totalCount ?? null,
+      },
+      installment: {
+        nextCursor: installmentData.pagination?.nextCursor ?? null,
+        hasMore: installmentData.pagination?.hasMore ?? false,
+        totalCount: installmentData.pagination?.totalCount ?? null,
+      },
     };
-    const hasRowsForFirstPage = (items: Expense[]) =>
-      rowsFor(items, 'fixed') >= maxRowsPerSection &&
-      rowsFor(items, 'oneTime') >= maxRowsPerSection &&
-      rowsFor(items, 'installment') >= maxRowsPerSection;
 
-    let loadedExpenses = expenseData.expenses;
-    let warnings = expenseData.warnings;
-    let next = expenseData.pagination?.nextCursor ?? null;
-    let hasMore = expenseData.pagination?.hasMore ?? false;
-    let totalCount = expenseData.pagination?.totalCount ?? null;
-
-    while (!hasRowsForFirstPage(loadedExpenses) && hasMore && next) {
-      const page = await getExpenses(month, {
-        search: debouncedSearchQuery || undefined,
-        categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-        sortBy: sortField,
-        sortDir: sortDirection,
-        limit: fetchBatchSize,
-        cursor: next,
-      });
-      loadedExpenses = [...loadedExpenses, ...page.expenses];
-      warnings = page.warnings;
-      next = page.pagination?.nextCursor ?? null;
-      hasMore = page.pagination?.hasMore ?? false;
-      totalCount = page.pagination?.totalCount ?? totalCount;
+    setExpenses(mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses]));
+    setWarnings(Array.from(new Set([...fixedData.warnings, ...oneTimeData.warnings, ...installmentData.warnings])));
+    setSectionPagination(paginationBySection);
+    sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
+    invalidateSectionChunkState();
+    if (settlement) {
+      setTotalCombinedExpensesArs(Number(settlement.totalExpenses));
     }
-
-    setExpenses(loadedExpenses);
-    setWarnings(warnings);
-    setNextCursor(next);
-    setHasMorePages(hasMore);
-    setTotalFilteredCount(totalCount);
-    setTotalCombinedExpensesArs(Number(settlement.totalExpenses));
     if (rates) {
       setExchangeRates(rates);
     }
-  }, [month, debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, fetchBatchSize, maxRowsPerSection]);
+  }, [month, fetchBatchSize, invalidateSectionChunkState]);
 
   useEffect(() => {
     setUsers(initialUsers);
@@ -541,11 +621,22 @@ export function ExpensesClient({
     setTotalCombinedExpensesArs(Number(initialTotalExpensesArs));
     setError(null);
     resetSectionPages();
-    setNextCursor(initialPagination?.nextCursor ?? null);
-    setHasMorePages(initialPagination?.hasMore ?? false);
-    setTotalFilteredCount(initialPagination?.totalCount ?? null);
+    setSectionPagination(initialSectionPagination);
+    sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
+    invalidateSectionChunkState();
     resetForm(initialUsers[0]?.id ?? '', initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
-  }, [initialCategories, initialExchangeRates, initialExpenses, initialPagination, initialTotalExpensesArs, initialUsers, initialWarnings, resetForm, resetSectionPages]);
+  }, [
+    initialCategories,
+    initialExchangeRates,
+    initialExpenses,
+    initialSectionPagination,
+    initialTotalExpensesArs,
+    initialUsers,
+    initialWarnings,
+    invalidateSectionChunkState,
+    resetForm,
+    resetSectionPages,
+  ]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -557,7 +648,8 @@ export function ExpensesClient({
 
   useEffect(() => {
     resetSectionPages();
-  }, [debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, resetSectionPages]);
+    invalidateSectionChunkState();
+  }, [debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, invalidateSectionChunkState, resetSectionPages]);
 
   useEffect(() => {
     setSectionPages((previousPages) => ({
@@ -571,10 +663,10 @@ export function ExpensesClient({
   }, [fixedExpenses.length, oneTimeExpenses.length, installmentExpenses.length, maxRowsPerSection]);
 
   useEffect(() => {
-    void fetchMonthData(true).catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load expenses');
-    });
-  }, [fetchMonthData]);
+    expensesRef.current = expenses;
+    warningsRef.current = warnings;
+    sectionPaginationRef.current = sectionPagination;
+  }, [expenses, sectionPagination, warnings]);
 
   useEffect(() => {
     const previousCurrencyCode = previousCurrencyRef.current;
@@ -597,7 +689,7 @@ export function ExpensesClient({
   }, [form, monthlyRateForCurrency, watchedCurrencyCode]);
 
   const reloadFirstPage = useCallback(async () => {
-    await fetchMonthData(true);
+    await fetchMonthData({ includeRates: true, includeSettlement: true });
   }, [fetchMonthData]);
 
   const rowsForSection = useCallback((sectionKey: ExpenseSectionKey, list: Expense[]) => {
@@ -616,42 +708,68 @@ export function ExpensesClient({
         return;
       }
 
-      let loadedExpenses = expenses;
-      let cursor = nextCursor;
-      let canLoadMore = hasMorePages;
-      const requiredRows = targetPage * maxRowsPerSection;
-
-      while (rowsForSection(sectionKey, loadedExpenses).length < requiredRows && canLoadMore && cursor) {
-        const page = await getExpenses(month, {
-          search: debouncedSearchQuery || undefined,
-          categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-          sortBy: sortField,
-          sortDir: sortDirection,
-          limit: fetchBatchSize,
-          cursor,
-        });
-        loadedExpenses = [...loadedExpenses, ...page.expenses];
-        cursor = page.pagination?.nextCursor ?? null;
-        canLoadMore = page.pagination?.hasMore ?? false;
-
-        setExpenses(loadedExpenses);
-        setWarnings(page.warnings);
-        setNextCursor(cursor);
-        setHasMorePages(canLoadMore);
-        setTotalFilteredCount(page.pagination?.totalCount ?? null);
+      const existingFetch = sectionFetchInFlightRef.current[sectionKey];
+      if (existingFetch) {
+        await existingFetch;
       }
+
+      const run = async () => {
+        let loadedExpenses = expensesRef.current;
+        let paginationForSection = sectionPaginationRef.current[sectionKey];
+        const requiredRows = targetPage * maxRowsPerSection;
+        const type = sectionTypeMap[sectionKey];
+        let latestWarnings = warningsRef.current;
+
+        while (
+          rowsForSection(sectionKey, applyClientControls(loadedExpenses)).length < requiredRows &&
+          paginationForSection.hasMore &&
+          paginationForSection.nextCursor
+        ) {
+          const page = await getExpenses(month, {
+            type,
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: fetchBatchSize,
+            cursor: paginationForSection.nextCursor,
+            hydrate: false,
+            includeCount: false,
+          });
+          loadedExpenses = mergeUniqueExpenses([...loadedExpenses, ...page.expenses]);
+          latestWarnings = Array.from(new Set([...latestWarnings, ...page.warnings]));
+          paginationForSection = {
+            nextCursor: page.pagination?.nextCursor ?? null,
+            hasMore: page.pagination?.hasMore ?? false,
+            totalCount: page.pagination?.totalCount ?? paginationForSection.totalCount,
+          };
+          sectionCacheFetchedAtRef.current[sectionKey] = Date.now();
+        }
+
+        if (loadedExpenses !== expensesRef.current) {
+          setExpenses(loadedExpenses);
+          expensesRef.current = loadedExpenses;
+        }
+        setWarnings(latestWarnings);
+        warningsRef.current = latestWarnings;
+        setSectionPagination((previous) => ({ ...previous, [sectionKey]: paginationForSection }));
+        sectionPaginationRef.current = {
+          ...sectionPaginationRef.current,
+          [sectionKey]: paginationForSection,
+        };
+      };
+
+      const request = run().finally(() => {
+        if (sectionFetchInFlightRef.current[sectionKey] === request) {
+          sectionFetchInFlightRef.current[sectionKey] = null;
+        }
+      });
+      sectionFetchInFlightRef.current[sectionKey] = request;
+      await request;
     },
     [
-      expenses,
-      nextCursor,
-      hasMorePages,
       maxRowsPerSection,
+      applyClientControls,
       rowsForSection,
       month,
-      debouncedSearchQuery,
-      selectedCategoryId,
-      sortField,
-      sortDirection,
       fetchBatchSize,
     ],
   );
@@ -935,22 +1053,51 @@ export function ExpensesClient({
         totalRows,
         currentPage: page,
         totalPages,
-        showSectionPager: totalRows > maxRowsPerSection || hasMorePages,
-        canMoveNext: page < totalPages || hasMorePages,
+        showSectionPager: totalRows > maxRowsPerSection || sectionPagination[section.key].hasMore,
+        canMoveNext: page < totalPages || sectionPagination[section.key].hasMore,
+        hasMore: sectionPagination[section.key].hasMore,
       };
     });
   }, [
     fixedSubtotalArs,
     fixedExpenses,
     hasActiveFilters,
-    hasMorePages,
     installmentExpenses,
     installmentSubtotalArs,
     maxRowsPerSection,
     oneTimeExpenses,
     oneTimeSubtotalArs,
+    sectionPagination,
     sectionPages,
   ]);
+
+  useEffect(() => {
+    for (const section of sectionSummaries) {
+      if (!section.hasMore) {
+        continue;
+      }
+
+      const rowsRemainingAfterPage = section.totalRows - section.currentPage * maxRowsPerSection;
+      const cacheAgeMs = Date.now() - sectionCacheFetchedAtRef.current[section.key];
+      const shouldPrefetchByProximity = rowsRemainingAfterPage <= maxRowsPerSection * PREFETCH_AHEAD_PAGES;
+      const shouldPrefetchByTtl = cacheAgeMs > SECTION_CACHE_TTL_MS && section.currentPage === 1;
+
+      if (!shouldPrefetchByProximity && !shouldPrefetchByTtl) {
+        continue;
+      }
+
+      const targetPage = section.currentPage + PREFETCH_AHEAD_PAGES + 1;
+      const prefetchTargetKey = `${targetPage}:${sectionPagination[section.key].nextCursor ?? 'end'}`;
+      if (sectionPrefetchTargetRef.current[section.key] === prefetchTargetKey) {
+        continue;
+      }
+
+      sectionPrefetchTargetRef.current[section.key] = prefetchTargetKey;
+      void ensureRowsForSection(section.key, targetPage).catch(() => {
+        sectionPrefetchTargetRef.current[section.key] = null;
+      });
+    }
+  }, [ensureRowsForSection, maxRowsPerSection, sectionPagination, sectionSummaries]);
 
   return (
     <AppShell
@@ -1228,8 +1375,7 @@ export function ExpensesClient({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">
-                      Showing {expenses.length}
-                      {totalFilteredCount !== null ? ` of ${totalFilteredCount}` : ''} filtered results
+                      Showing {visibleExpenses.length} loaded results
                     </p>
                     <p className="text-xs text-slate-500">Filtered results for this month</p>
                     <p className="text-xs font-medium text-slate-600">Subtotal (filtered): ARS {formatMoney(filteredSubtotalArs)}</p>
@@ -1243,6 +1389,7 @@ export function ExpensesClient({
                         onChange={(event) => {
                           setMaxRowsPerSection(Number(event.target.value) as 10 | 25 | 50);
                           resetSectionPages();
+                          invalidateSectionChunkState();
                         }}
                         value={maxRowsPerSection}
                       >
@@ -1499,7 +1646,7 @@ export function ExpensesClient({
                       <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3">
                         <p className="text-sm font-medium text-slate-600">
                           Showing {section.rows.length} of {section.totalRows}
-                          {hasMorePages ? '+' : ''} results
+                          {section.hasMore ? '+' : ''} results
                         </p>
                         <div className="flex items-center gap-3">
                           <button
