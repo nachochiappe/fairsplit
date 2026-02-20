@@ -134,6 +134,13 @@ interface ScopeDialogState {
   values?: ExpenseForm;
 }
 
+type ConfirmationAction = 'clone' | 'delete';
+
+interface ConfirmationDialogState {
+  action: ConfirmationAction;
+  expense: Expense;
+}
+
 function ScopeDialog({
   title,
   busy,
@@ -196,6 +203,56 @@ function ScopeDialog({
   );
 }
 
+function ConfirmationDialog({
+  title,
+  message,
+  busy,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  busy: boolean;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+      <div
+        aria-labelledby="confirmation-dialog-title"
+        aria-modal="true"
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        role="dialog"
+      >
+        <h3 className="text-base font-semibold text-slate-900" id="confirmation-dialog-title">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm text-slate-700">{message}</p>
+        <div className="mt-4 flex gap-2">
+          <button
+            className={primaryButtonClass}
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+          >
+            {confirmLabel}
+          </button>
+          <button
+            className={secondaryButtonClass}
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ExpensesClientProps {
   month: string;
   initialUsers: User[];
@@ -230,6 +287,7 @@ export function ExpensesClient({
   const [totalCombinedExpensesArs, setTotalCombinedExpensesArs] = useState<number>(Number(initialTotalExpensesArs));
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [scopeDialog, setScopeDialog] = useState<ScopeDialogState | null>(null);
+  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newFxCurrency, setNewFxCurrency] = useState<SupportedCurrencyCode>('USD');
@@ -709,34 +767,18 @@ export function ExpensesClient({
   };
 
   const removeExpense = async (expense: Expense) => {
-    try {
-      if (!expense.installment && !window.confirm(`Delete \"${expense.description}\"?`)) {
-        return;
-      }
-
-      setSaving(true);
-      setError(null);
-
-      if (expense.installment) {
-        setScopeDialog({ action: 'delete', expense });
-        return;
-      }
-
-      await deleteExpense(expense.id, 'single');
-      await reloadFirstPage();
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : 'Failed to delete expense');
-    } finally {
-      setSaving(false);
-    }
+    setConfirmationDialog({ action: 'delete', expense });
   };
 
   const cloneExpense = async (expense: Expense) => {
-    const today = getTodayDateInputValue();
+    setConfirmationDialog({ action: 'clone', expense });
+  };
 
+  const confirmCloneExpense = async (expense: Expense) => {
     try {
       setSaving(true);
       setError(null);
+      const today = getTodayDateInputValue();
 
       await createExpense({
         month: dateInputValueToMonth(today),
@@ -764,6 +806,40 @@ export function ExpensesClient({
     } finally {
       setSaving(false);
     }
+  };
+
+  const confirmDeleteExpense = async (expense: Expense) => {
+    if (expense.installment) {
+      setScopeDialog({ action: 'delete', expense });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      await deleteExpense(expense.id, 'single');
+      await reloadFirstPage();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : 'Failed to delete expense');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmAction = async () => {
+    if (!confirmationDialog) {
+      return;
+    }
+
+    const dialog = confirmationDialog;
+    setConfirmationDialog(null);
+
+    if (dialog.action === 'clone') {
+      await confirmCloneExpense(dialog.expense);
+      return;
+    }
+
+    await confirmDeleteExpense(dialog.expense);
   };
 
   const confirmScopedAction = async (scope: ApplyScope) => {
@@ -889,6 +965,20 @@ export function ExpensesClient({
           onCancel={() => setScopeDialog(null)}
           onConfirm={(scope) => void confirmScopedAction(scope)}
           title={scopeDialog.action === 'delete' ? 'Delete installment expense' : 'Update installment expense'}
+        />
+      ) : null}
+      {confirmationDialog ? (
+        <ConfirmationDialog
+          busy={saving}
+          confirmLabel={confirmationDialog.action === 'clone' ? 'Clone expense' : 'Delete expense'}
+          message={
+            confirmationDialog.action === 'clone'
+              ? `Create a new copy of "${confirmationDialog.expense.description}" using today's date?`
+              : `Delete "${confirmationDialog.expense.description}"?`
+          }
+          onCancel={() => setConfirmationDialog(null)}
+          onConfirm={() => void confirmAction()}
+          title={confirmationDialog.action === 'clone' ? 'Confirm clone' : 'Confirm delete'}
         />
       ) : null}
 

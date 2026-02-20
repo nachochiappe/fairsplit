@@ -117,6 +117,48 @@ interface IncomesClientProps {
   initialExchangeRates: ExchangeRate[];
 }
 
+interface PendingIncomeRemoval {
+  userId: string;
+  index: number;
+  description: string;
+}
+
+function ConfirmationDialog({
+  title,
+  message,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+      <div
+        aria-labelledby="income-confirmation-dialog-title"
+        aria-modal="true"
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        role="dialog"
+      >
+        <h3 className="text-base font-semibold text-slate-900" id="income-confirmation-dialog-title">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm text-slate-700">{message}</p>
+        <div className="mt-4 flex gap-2">
+          <button className={primaryButtonClass} onClick={onConfirm} type="button">
+            Remove income
+          </button>
+          <button className={subtleButtonClass} onClick={onCancel} type="button">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function IncomesClient({ month, initialUsers, initialIncomes, initialExchangeRates }: IncomesClientProps) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
@@ -131,6 +173,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
   const [copyingPrevious, setCopyingPrevious] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingIncomeRemoval, setPendingIncomeRemoval] = useState<PendingIncomeRemoval | null>(null);
   const previousMonth = useMemo(() => getPreviousMonth(month), [month]);
 
   const load = useCallback(async () => {
@@ -219,6 +262,24 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
       nextRows.splice(index, 1);
       return { ...previous, [userId]: nextRows };
     });
+  };
+
+  const requestRemoveIncomeDraft = (userId: string, index: number) => {
+    const description = (incomeDraftsByUser[userId]?.[index]?.description ?? '').trim();
+    setPendingIncomeRemoval({
+      userId,
+      index,
+      description: description || 'this income',
+    });
+  };
+
+  const confirmRemoveIncomeDraft = () => {
+    if (!pendingIncomeRemoval) {
+      return;
+    }
+
+    removeIncomeDraft(pendingIncomeRemoval.userId, pendingIncomeRemoval.index);
+    setPendingIncomeRemoval(null);
   };
 
   const monthRateByCurrency = useMemo(
@@ -370,6 +431,14 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
       subtitle="Add one or more income entries per partner (foreign currency supported, converted to ARS)"
       rightSlot={<MonthSelector month={month} />}
     >
+      {pendingIncomeRemoval ? (
+        <ConfirmationDialog
+          message={`Remove "${pendingIncomeRemoval.description}" from this month?`}
+          onCancel={() => setPendingIncomeRemoval(null)}
+          onConfirm={confirmRemoveIncomeDraft}
+          title="Confirm income removal"
+        />
+      ) : null}
       <form className="space-y-6" onSubmit={onSubmit}>
         {loading ? (
           <p aria-live="polite" className="text-sm text-slate-600">
@@ -557,7 +626,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                       <ActionButton
                         action="remove"
                         aria-label="Remove income row"
-                        onClick={() => removeIncomeDraft(user.id, index)}
+                        onClick={() => requestRemoveIncomeDraft(user.id, index)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 md:hidden"
                         size="icon"
                       >
@@ -582,7 +651,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                       <div className="flex items-center justify-end md:justify-center">
                         <ActionButton
                           action="remove"
-                          onClick={() => removeIncomeDraft(user.id, index)}
+                          onClick={() => requestRemoveIncomeDraft(user.id, index)}
                           className="hidden md:inline-flex"
                         >
                           Remove
