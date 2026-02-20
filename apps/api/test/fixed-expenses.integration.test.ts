@@ -7,6 +7,7 @@ const app = createApp();
 const monthA = '2099-03';
 const monthB = '2099-04';
 const monthC = '2099-05';
+const monthD = '2099-06';
 let testUserId = '';
 let testCategoryId = '';
 
@@ -116,5 +117,106 @@ describe('fixed recurring expenses', () => {
     );
     expect(monthCRecurringRow).toBeTruthy();
     expect(monthCRecurringRow.date).toBe(`${monthC}-10`);
+  });
+
+  it('deletes recurring expense for the selected and future months when applyScope=future', async () => {
+    const createResponse = await request(app).post('/api/expenses').send({
+      month: monthB,
+      date: `${monthB}-08`,
+      description: 'Streaming subscription',
+      categoryId: testCategoryId,
+      amount: 30,
+      paidByUserId: testUserId,
+      fixed: { enabled: true },
+    });
+
+    expect(createResponse.status).toBe(201);
+    const templateId = createResponse.body.fixed.templateId as string;
+    expect(templateId).toBeTruthy();
+
+    await request(app).get('/api/expenses').query({ month: monthC });
+    await request(app).get('/api/expenses').query({ month: monthD });
+
+    const monthCBeforeDelete = await request(app).get('/api/expenses').query({ month: monthC });
+    expect(monthCBeforeDelete.status).toBe(200);
+    const monthCFixedExpense = monthCBeforeDelete.body.expenses.find(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthCFixedExpense).toBeTruthy();
+
+    const deleteResponse = await request(app)
+      .delete(`/api/expenses/${monthCFixedExpense.id}`)
+      .send({ applyScope: 'future' });
+    expect(deleteResponse.status).toBe(204);
+
+    const monthBAfterDelete = await request(app).get('/api/expenses').query({ month: monthB });
+    expect(monthBAfterDelete.status).toBe(200);
+    const monthBRecurringRow = monthBAfterDelete.body.expenses.find(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthBRecurringRow).toBeTruthy();
+
+    const monthCAfterDelete = await request(app).get('/api/expenses').query({ month: monthC });
+    expect(monthCAfterDelete.status).toBe(200);
+    const monthCRecurringRows = monthCAfterDelete.body.expenses.filter(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthCRecurringRows).toHaveLength(0);
+
+    const monthDAfterDelete = await request(app).get('/api/expenses').query({ month: monthD });
+    expect(monthDAfterDelete.status).toBe(200);
+    const monthDRecurringRows = monthDAfterDelete.body.expenses.filter(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthDRecurringRows).toHaveLength(0);
+  });
+
+  it('deletes the whole recurring series when applyScope=all', async () => {
+    const createResponse = await request(app).post('/api/expenses').send({
+      month: monthB,
+      date: `${monthB}-12`,
+      description: 'Insurance plan',
+      categoryId: testCategoryId,
+      amount: 70,
+      paidByUserId: testUserId,
+      fixed: { enabled: true },
+    });
+
+    expect(createResponse.status).toBe(201);
+    const templateId = createResponse.body.fixed.templateId as string;
+    expect(templateId).toBeTruthy();
+
+    await request(app).get('/api/expenses').query({ month: monthC });
+
+    const monthCBeforeDelete = await request(app).get('/api/expenses').query({ month: monthC });
+    expect(monthCBeforeDelete.status).toBe(200);
+    const monthCFixedExpense = monthCBeforeDelete.body.expenses.find(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthCFixedExpense).toBeTruthy();
+
+    const deleteResponse = await request(app).delete(`/api/expenses/${monthCFixedExpense.id}`).send({ applyScope: 'all' });
+    expect(deleteResponse.status).toBe(204);
+
+    const monthBAfterDelete = await request(app).get('/api/expenses').query({ month: monthB });
+    expect(monthBAfterDelete.status).toBe(200);
+    const monthBRecurringRows = monthBAfterDelete.body.expenses.filter(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthBRecurringRows).toHaveLength(0);
+
+    const monthCAfterDelete = await request(app).get('/api/expenses').query({ month: monthC });
+    expect(monthCAfterDelete.status).toBe(200);
+    const monthCRecurringRows = monthCAfterDelete.body.expenses.filter(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthCRecurringRows).toHaveLength(0);
+
+    const monthDAfterDelete = await request(app).get('/api/expenses').query({ month: monthD });
+    expect(monthDAfterDelete.status).toBe(200);
+    const monthDRecurringRows = monthDAfterDelete.body.expenses.filter(
+      (expense: { fixed: { templateId: string | null } }) => expense.fixed.templateId === templateId,
+    );
+    expect(monthDRecurringRows).toHaveLength(0);
   });
 });
