@@ -1,5 +1,5 @@
 import { ExpensesClient } from './ExpensesClient';
-import { getCategories, getExchangeRates, getExpenses, getUsers } from '../../lib/api';
+import { getCategories, getExchangeRates, getExpenses, getSettlement, getUsers } from '../../lib/api';
 
 interface ExpensesPageProps {
   searchParams?: Promise<{ month?: string }>;
@@ -11,11 +11,12 @@ const INITIAL_EXPENSES_PAGE_SIZE = 30;
 export default async function ExpensesPage({ searchParams }: ExpensesPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
-  const [users, expenseData, categories, exchangeRates] = await Promise.all([
+  const [users, expenseData, categories, exchangeRates, settlement] = await Promise.all([
     getUsers(SERVER_READ_CACHE),
     getExpenses(month, { limit: INITIAL_EXPENSES_PAGE_SIZE }, SERVER_READ_CACHE),
     getCategories(SERVER_READ_CACHE),
     getExchangeRates(month, SERVER_READ_CACHE),
+    getSettlement(month, SERVER_READ_CACHE),
   ]);
 
   return (
@@ -27,6 +28,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       initialPagination={expenseData.pagination}
       initialCategories={categories}
       initialExchangeRates={exchangeRates}
+      initialTotalExpensesArs={settlement.totalExpenses}
     />
   );
 }

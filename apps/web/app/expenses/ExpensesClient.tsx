@@ -17,6 +17,7 @@ import {
   Expense,
   getExchangeRates,
   getExpenses,
+  getSettlement,
   updateExpense,
   upsertExchangeRate,
   User,
@@ -24,7 +25,6 @@ import {
 
 type ApplyScope = 'single' | 'future' | 'all';
 type ScopeAction = 'update' | 'delete';
-type ExpenseTypeFilter = 'all' | 'oneTime' | 'fixed' | 'installment';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
 type ExpenseSectionKey = 'fixed' | 'oneTime' | 'installment';
@@ -209,6 +209,7 @@ interface ExpensesClientProps {
   } | null;
   initialCategories: Category[];
   initialExchangeRates: ExchangeRate[];
+  initialTotalExpensesArs: string;
 }
 
 export function ExpensesClient({
@@ -219,12 +220,14 @@ export function ExpensesClient({
   initialPagination,
   initialCategories,
   initialExchangeRates,
+  initialTotalExpensesArs,
 }: ExpensesClientProps) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [warnings, setWarnings] = useState<string[]>(initialWarnings);
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
+  const [totalCombinedExpensesArs, setTotalCombinedExpensesArs] = useState<number>(Number(initialTotalExpensesArs));
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [scopeDialog, setScopeDialog] = useState<ScopeDialogState | null>(null);
   const [saving, setSaving] = useState(false);
@@ -244,8 +247,6 @@ export function ExpensesClient({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
-  const [selectedPaidByUserId, setSelectedPaidByUserId] = useState<string>('all');
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<ExpenseTypeFilter>('all');
   const [sortField, setSortField] = useState<ExpenseSortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
@@ -262,12 +263,8 @@ export function ExpensesClient({
     [activeCategories],
   );
   const hasActiveFilters = useMemo(
-    () =>
-      Boolean(searchQuery.trim()) ||
-      selectedCategoryId !== 'all' ||
-      selectedPaidByUserId !== 'all' ||
-      selectedTypeFilter !== 'all',
-    [searchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter],
+    () => Boolean(searchQuery.trim()) || selectedCategoryId !== 'all',
+    [searchQuery, selectedCategoryId],
   );
   const hasActiveControls = useMemo(
     () => hasActiveFilters || sortField !== 'date' || sortDirection !== 'desc',
@@ -276,12 +273,10 @@ export function ExpensesClient({
   const mobileControlsCount = useMemo(() => {
     let count = 0;
     if (selectedCategoryId !== 'all') count += 1;
-    if (selectedPaidByUserId !== 'all') count += 1;
-    if (selectedTypeFilter !== 'all') count += 1;
     if (sortField !== 'date') count += 1;
     if (sortDirection !== 'desc') count += 1;
     return count;
-  }, [selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortDirection, sortField]);
+  }, [selectedCategoryId, sortDirection, sortField]);
   const filteredSubtotalArs = useMemo(
     () => expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [expenses],
@@ -420,17 +415,16 @@ export function ExpensesClient({
   );
 
   const fetchMonthData = useCallback(async (includeRates = false) => {
-    const [expenseData, rates] = await Promise.all([
+    const [expenseData, rates, settlement] = await Promise.all([
       getExpenses(month, {
         search: debouncedSearchQuery || undefined,
         categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-        paidByUserId: selectedPaidByUserId === 'all' ? undefined : selectedPaidByUserId,
-        type: selectedTypeFilter === 'all' ? undefined : selectedTypeFilter,
         sortBy: sortField,
         sortDir: sortDirection,
         limit: fetchBatchSize,
       }),
       includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
+      getSettlement(month),
     ]);
 
     const rowsFor = (items: Expense[], sectionKey: ExpenseSectionKey) => {
@@ -457,8 +451,6 @@ export function ExpensesClient({
       const page = await getExpenses(month, {
         search: debouncedSearchQuery || undefined,
         categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-        paidByUserId: selectedPaidByUserId === 'all' ? undefined : selectedPaidByUserId,
-        type: selectedTypeFilter === 'all' ? undefined : selectedTypeFilter,
         sortBy: sortField,
         sortDir: sortDirection,
         limit: fetchBatchSize,
@@ -476,10 +468,11 @@ export function ExpensesClient({
     setNextCursor(next);
     setHasMorePages(hasMore);
     setTotalFilteredCount(totalCount);
+    setTotalCombinedExpensesArs(Number(settlement.totalExpenses));
     if (rates) {
       setExchangeRates(rates);
     }
-  }, [month, debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection, fetchBatchSize, maxRowsPerSection]);
+  }, [month, debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, fetchBatchSize, maxRowsPerSection]);
 
   useEffect(() => {
     setUsers(initialUsers);
@@ -487,13 +480,14 @@ export function ExpensesClient({
     setWarnings(initialWarnings);
     setCategories(initialCategories);
     setExchangeRates(initialExchangeRates);
+    setTotalCombinedExpensesArs(Number(initialTotalExpensesArs));
     setError(null);
     resetSectionPages();
     setNextCursor(initialPagination?.nextCursor ?? null);
     setHasMorePages(initialPagination?.hasMore ?? false);
     setTotalFilteredCount(initialPagination?.totalCount ?? null);
     resetForm(initialUsers[0]?.id ?? '', initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
-  }, [initialCategories, initialExchangeRates, initialExpenses, initialPagination, initialUsers, initialWarnings, resetForm, resetSectionPages]);
+  }, [initialCategories, initialExchangeRates, initialExpenses, initialPagination, initialTotalExpensesArs, initialUsers, initialWarnings, resetForm, resetSectionPages]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -505,7 +499,7 @@ export function ExpensesClient({
 
   useEffect(() => {
     resetSectionPages();
-  }, [debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection, resetSectionPages]);
+  }, [debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, resetSectionPages]);
 
   useEffect(() => {
     setSectionPages((previousPages) => ({
@@ -573,8 +567,6 @@ export function ExpensesClient({
         const page = await getExpenses(month, {
           search: debouncedSearchQuery || undefined,
           categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-          paidByUserId: selectedPaidByUserId === 'all' ? undefined : selectedPaidByUserId,
-          type: selectedTypeFilter === 'all' ? undefined : selectedTypeFilter,
           sortBy: sortField,
           sortDir: sortDirection,
           limit: fetchBatchSize,
@@ -600,8 +592,6 @@ export function ExpensesClient({
       month,
       debouncedSearchQuery,
       selectedCategoryId,
-      selectedPaidByUserId,
-      selectedTypeFilter,
       sortField,
       sortDirection,
       fetchBatchSize,
@@ -1141,7 +1131,7 @@ export function ExpensesClient({
           <div className="min-w-0 space-y-4">
             <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white shadow-lg">
               <p className="text-base font-semibold text-blue-100">Total Combined Expenses</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">ARS {formatMoney(filteredSubtotalArs)}</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">ARS {formatMoney(totalCombinedExpensesArs)}</p>
             </section>
             <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-white px-4 py-3">
@@ -1196,7 +1186,7 @@ export function ExpensesClient({
 
                 <div className={`${isMobileFiltersOpen ? 'mt-3 block' : 'hidden'} md:mt-0 md:block`} id="expense-mobile-filters">
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
-                    <label className="hidden lg:col-span-5 md:block">
+                    <label className="hidden lg:col-span-8 md:block">
                       <span className={tableControlLabelClass}>Search</span>
                       <input
                         className={tableControlFieldClass}
@@ -1206,7 +1196,7 @@ export function ExpensesClient({
                         value={searchQuery}
                       />
                     </label>
-                    <label className="lg:col-span-2">
+                    <label className="lg:col-span-4">
                       <span className={tableControlLabelClass}>Category</span>
                       <select
                         className={tableControlFieldClass}
@@ -1219,34 +1209,6 @@ export function ExpensesClient({
                             {category.name}
                           </option>
                         ))}
-                      </select>
-                    </label>
-                    <label className="lg:col-span-2">
-                      <span className={tableControlLabelClass}>Payer</span>
-                      <select
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSelectedPaidByUserId(event.target.value)}
-                        value={selectedPaidByUserId}
-                      >
-                        <option value="all">All payers</option>
-                        {users.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="lg:col-span-3">
-                      <span className={tableControlLabelClass}>Type</span>
-                      <select
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSelectedTypeFilter(event.target.value as ExpenseTypeFilter)}
-                        value={selectedTypeFilter}
-                      >
-                        <option value="all">All types</option>
-                        <option value="oneTime">One-time</option>
-                        <option value="fixed">Recurring</option>
-                        <option value="installment">Installment</option>
                       </select>
                     </label>
                   </div>
@@ -1287,8 +1249,6 @@ export function ExpensesClient({
                             onClick={() => {
                               setSearchQuery('');
                               setSelectedCategoryId('all');
-                              setSelectedPaidByUserId('all');
-                              setSelectedTypeFilter('all');
                               setSortField('date');
                               setSortDirection('desc');
                               resetSectionPages();
