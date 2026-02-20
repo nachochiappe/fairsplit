@@ -54,6 +54,10 @@ const expenseListQuerySchema = z.object({
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
     .optional(),
+  includeTotals: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
+    .optional(),
 }).superRefine((value, ctx) => {
   if (value.cursor && !value.limit) {
     ctx.addIssue({
@@ -63,6 +67,22 @@ const expenseListQuerySchema = z.object({
     });
   }
 });
+
+function withExpenseTypeConstraint(
+  baseWhere: Record<string, unknown>,
+  type?: 'oneTime' | 'fixed' | 'installment',
+): Record<string, unknown> {
+  const where = { ...baseWhere };
+  if (type === 'oneTime') {
+    where.templateId = null;
+    where.isInstallment = false;
+  } else if (type === 'fixed') {
+    where.templateId = { not: null };
+  } else if (type === 'installment') {
+    where.isInstallment = true;
+  }
+  return where;
+}
 const createUserSchema = z.object({ name: z.string().min(1) });
 const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
 const createCategorySchema = z.object({
@@ -924,28 +944,21 @@ export const createApp = (): Express => {
       await ensureInstallmentsForMonth(parsed.data.month);
     }
 
-    const where: Record<string, unknown> = { month: parsed.data.month };
+    const baseWhere: Record<string, unknown> = { month: parsed.data.month };
     if (parsed.data.search) {
-      where.OR = [
+      baseWhere.OR = [
         { description: { contains: parsed.data.search, mode: 'insensitive' } },
         { category: { name: { contains: parsed.data.search, mode: 'insensitive' } } },
         { paidByUser: { name: { contains: parsed.data.search, mode: 'insensitive' } } },
       ];
     }
     if (parsed.data.categoryId) {
-      where.categoryId = parsed.data.categoryId;
+      baseWhere.categoryId = parsed.data.categoryId;
     }
     if (parsed.data.paidByUserId) {
-      where.paidByUserId = parsed.data.paidByUserId;
+      baseWhere.paidByUserId = parsed.data.paidByUserId;
     }
-    if (parsed.data.type === 'oneTime') {
-      where.templateId = null;
-      where.isInstallment = false;
-    } else if (parsed.data.type === 'fixed') {
-      where.templateId = { not: null };
-    } else if (parsed.data.type === 'installment') {
-      where.isInstallment = true;
-    }
+    const where = withExpenseTypeConstraint(baseWhere, parsed.data.type);
 
     const sortBy = parsed.data.sortBy ?? 'date';
     const sortDir = parsed.data.sortDir ?? 'desc';
@@ -971,6 +984,31 @@ export const createApp = (): Express => {
       orderBy,
       include: { paidByUser: true, category: { include: { superCategory: true } } },
     } as const;
+    const shouldIncludeTotals = parsed.data.includeTotals ?? false;
+    const totalsPromise = shouldIncludeTotals
+      ? Promise.all([
+          prisma.expense.aggregate({ where: baseWhere, _sum: { amountArs: true } }),
+          prisma.expense.aggregate({
+            where: withExpenseTypeConstraint(baseWhere, 'fixed'),
+            _sum: { amountArs: true },
+          }),
+          prisma.expense.aggregate({
+            where: withExpenseTypeConstraint(baseWhere, 'oneTime'),
+            _sum: { amountArs: true },
+          }),
+          prisma.expense.aggregate({
+            where: withExpenseTypeConstraint(baseWhere, 'installment'),
+            _sum: { amountArs: true },
+          }),
+        ]).then(([filteredTotal, fixedTotal, oneTimeTotal, installmentTotal]) => ({
+          filteredSubtotalArs: toMoneyString(filteredTotal._sum.amountArs ?? 0),
+          bySection: {
+            fixedArs: toMoneyString(fixedTotal._sum.amountArs ?? 0),
+            oneTimeArs: toMoneyString(oneTimeTotal._sum.amountArs ?? 0),
+            installmentArs: toMoneyString(installmentTotal._sum.amountArs ?? 0),
+          },
+        }))
+      : Promise.resolve(null);
 
     if (parsed.data.limit) {
       if (parsed.data.cursor) {
@@ -988,8 +1026,10 @@ export const createApp = (): Express => {
         take: parsed.data.limit + 1,
         ...(parsed.data.cursor ? { cursor: { id: parsed.data.cursor }, skip: 1 } : {}),
       });
-      const totalCount = shouldIncludeCount ? await prisma.expense.count({ where }) : null;
-
+      const [totals, totalCount] = await Promise.all([
+        totalsPromise,
+        shouldIncludeCount ? prisma.expense.count({ where }) : Promise.resolve(null),
+      ]);
       const hasMore = pagedExpenses.length > parsed.data.limit;
       const expenses = hasMore ? pagedExpenses.slice(0, parsed.data.limit) : pagedExpenses;
       const nextCursor = hasMore ? expenses[expenses.length - 1]?.id ?? null : null;
@@ -998,6 +1038,7 @@ export const createApp = (): Express => {
         month: parsed.data.month,
         warnings: generationWarnings,
         expenses: expenses.map((expense) => serializeExpense(expense)),
+        totals,
         pagination: {
           limit: parsed.data.limit,
           nextCursor,
@@ -1007,12 +1048,13 @@ export const createApp = (): Express => {
       });
     }
 
-    const expenses = await prisma.expense.findMany(baseFindManyArgs);
+    const [expenses, totals] = await Promise.all([prisma.expense.findMany(baseFindManyArgs), totalsPromise]);
 
     return res.json({
       month: parsed.data.month,
       warnings: generationWarnings,
       expenses: expenses.map((expense) => serializeExpense(expense)),
+      totals,
       pagination: null,
     });
   });
