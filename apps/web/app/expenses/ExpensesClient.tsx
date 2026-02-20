@@ -960,7 +960,7 @@ export function ExpensesClient({
   };
 
   const confirmDeleteExpense = async (expense: Expense) => {
-    if (expense.installment) {
+    if (expense.installment || expense.fixed.enabled) {
       setScopeDialog({ action: 'delete', expense });
       return;
     }
@@ -1144,7 +1144,13 @@ export function ExpensesClient({
           busy={saving}
           onCancel={() => setScopeDialog(null)}
           onConfirm={(scope) => void confirmScopedAction(scope)}
-          title={scopeDialog.action === 'delete' ? 'Delete installment expense' : 'Update installment expense'}
+          title={
+            scopeDialog.action === 'delete'
+              ? scopeDialog.expense.installment
+                ? 'Delete installment expense'
+                : 'Delete recurring expense'
+              : 'Update installment expense'
+          }
         />
       ) : null}
       {confirmationDialog ? (
