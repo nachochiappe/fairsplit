@@ -17,6 +17,7 @@ import {
   Expense,
   getExchangeRates,
   getExpenses,
+  getSettlement,
   updateExpense,
   upsertExchangeRate,
   User,
@@ -24,7 +25,6 @@ import {
 
 type ApplyScope = 'single' | 'future' | 'all';
 type ScopeAction = 'update' | 'delete';
-type ExpenseTypeFilter = 'all' | 'oneTime' | 'fixed' | 'installment';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
 type ExpenseSectionKey = 'fixed' | 'oneTime' | 'installment';
@@ -134,6 +134,13 @@ interface ScopeDialogState {
   values?: ExpenseForm;
 }
 
+type ConfirmationAction = 'clone' | 'delete';
+
+interface ConfirmationDialogState {
+  action: ConfirmationAction;
+  expense: Expense;
+}
+
 function ScopeDialog({
   title,
   busy,
@@ -196,13 +203,70 @@ function ScopeDialog({
   );
 }
 
+function ConfirmationDialog({
+  title,
+  message,
+  busy,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  busy: boolean;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+      <div
+        aria-labelledby="confirmation-dialog-title"
+        aria-modal="true"
+        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        role="dialog"
+      >
+        <h3 className="text-base font-semibold text-slate-900" id="confirmation-dialog-title">
+          {title}
+        </h3>
+        <p className="mt-2 text-sm text-slate-700">{message}</p>
+        <div className="mt-4 flex gap-2">
+          <button
+            className={primaryButtonClass}
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+          >
+            {confirmLabel}
+          </button>
+          <button
+            className={secondaryButtonClass}
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface ExpensesClientProps {
   month: string;
   initialUsers: User[];
   initialExpenses: Expense[];
   initialWarnings: string[];
+  initialPagination: {
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+    totalCount: number;
+  } | null;
   initialCategories: Category[];
   initialExchangeRates: ExchangeRate[];
+  initialTotalExpensesArs: string;
 }
 
 export function ExpensesClient({
@@ -210,37 +274,42 @@ export function ExpensesClient({
   initialUsers,
   initialExpenses,
   initialWarnings,
+  initialPagination,
   initialCategories,
   initialExchangeRates,
+  initialTotalExpensesArs,
 }: ExpensesClientProps) {
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [warnings, setWarnings] = useState<string[]>(initialWarnings);
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
+  const [totalCombinedExpensesArs, setTotalCombinedExpensesArs] = useState<number>(Number(initialTotalExpensesArs));
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [scopeDialog, setScopeDialog] = useState<ScopeDialogState | null>(null);
+  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newFxCurrency, setNewFxCurrency] = useState<SupportedCurrencyCode>('USD');
   const [newFxRate, setNewFxRate] = useState('');
   const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(10);
+  const fetchBatchSize = maxRowsPerSection * 3;
   const [sectionPages, setSectionPages] = useState<Record<ExpenseSectionKey, number>>({
     fixed: 1,
     oneTime: 1,
     installment: 1,
   });
+  const [nextCursor, setNextCursor] = useState<string | null>(initialPagination?.nextCursor ?? null);
+  const [hasMorePages, setHasMorePages] = useState<boolean>(initialPagination?.hasMore ?? false);
+  const [totalFilteredCount, setTotalFilteredCount] = useState<number | null>(initialPagination?.totalCount ?? null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
-  const [selectedPaidByUserId, setSelectedPaidByUserId] = useState<string>('all');
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<ExpenseTypeFilter>('all');
   const [sortField, setSortField] = useState<ExpenseSortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
   const activeCategories = useMemo(
@@ -252,12 +321,8 @@ export function ExpensesClient({
     [activeCategories],
   );
   const hasActiveFilters = useMemo(
-    () =>
-      Boolean(searchQuery.trim()) ||
-      selectedCategoryId !== 'all' ||
-      selectedPaidByUserId !== 'all' ||
-      selectedTypeFilter !== 'all',
-    [searchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter],
+    () => Boolean(searchQuery.trim()) || selectedCategoryId !== 'all',
+    [searchQuery, selectedCategoryId],
   );
   const hasActiveControls = useMemo(
     () => hasActiveFilters || sortField !== 'date' || sortDirection !== 'desc',
@@ -266,12 +331,10 @@ export function ExpensesClient({
   const mobileControlsCount = useMemo(() => {
     let count = 0;
     if (selectedCategoryId !== 'all') count += 1;
-    if (selectedPaidByUserId !== 'all') count += 1;
-    if (selectedTypeFilter !== 'all') count += 1;
     if (sortField !== 'date') count += 1;
     if (sortDirection !== 'desc') count += 1;
     return count;
-  }, [selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortDirection, sortField]);
+  }, [selectedCategoryId, sortDirection, sortField]);
   const filteredSubtotalArs = useMemo(
     () => expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [expenses],
@@ -349,6 +412,14 @@ export function ExpensesClient({
     [],
   );
 
+  const resetSectionPages = useCallback(() => {
+    setSectionPages({
+      fixed: 1,
+      oneTime: 1,
+      installment: 1,
+    });
+  }, []);
+
   const projectedArsAmount = useMemo(() => {
     const baseAmount = watchedInstallmentEntryMode === 'total' ? watchedTotalAmount : watchedAmount;
     if (baseAmount === undefined || Number.isNaN(baseAmount)) {
@@ -401,30 +472,65 @@ export function ExpensesClient({
     [form],
   );
 
-  const loadMonthData = useCallback(async () => {
-    const [expenseData, rates] = await Promise.all([
+  const fetchMonthData = useCallback(async (includeRates = false) => {
+    const [expenseData, rates, settlement] = await Promise.all([
       getExpenses(month, {
         search: debouncedSearchQuery || undefined,
         categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
-        paidByUserId: selectedPaidByUserId === 'all' ? undefined : selectedPaidByUserId,
-        type: selectedTypeFilter === 'all' ? undefined : selectedTypeFilter,
         sortBy: sortField,
         sortDir: sortDirection,
+        limit: fetchBatchSize,
       }),
-      getExchangeRates(month),
+      includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
+      getSettlement(month),
     ]);
-    setExpenses(expenseData.expenses);
-    setWarnings(expenseData.warnings);
-    setExchangeRates(rates);
-  }, [month, debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection]);
 
-  const resetSectionPages = useCallback(() => {
-    setSectionPages({
-      fixed: 1,
-      oneTime: 1,
-      installment: 1,
-    });
-  }, []);
+    const rowsFor = (items: Expense[], sectionKey: ExpenseSectionKey) => {
+      if (sectionKey === 'fixed') {
+        return items.filter((expense) => expense.fixed.enabled).length;
+      }
+      if (sectionKey === 'installment') {
+        return items.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)).length;
+      }
+      return items.filter((expense) => !expense.fixed.enabled && !expense.installment).length;
+    };
+    const hasRowsForFirstPage = (items: Expense[]) =>
+      rowsFor(items, 'fixed') >= maxRowsPerSection &&
+      rowsFor(items, 'oneTime') >= maxRowsPerSection &&
+      rowsFor(items, 'installment') >= maxRowsPerSection;
+
+    let loadedExpenses = expenseData.expenses;
+    let warnings = expenseData.warnings;
+    let next = expenseData.pagination?.nextCursor ?? null;
+    let hasMore = expenseData.pagination?.hasMore ?? false;
+    let totalCount = expenseData.pagination?.totalCount ?? null;
+
+    while (!hasRowsForFirstPage(loadedExpenses) && hasMore && next) {
+      const page = await getExpenses(month, {
+        search: debouncedSearchQuery || undefined,
+        categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
+        sortBy: sortField,
+        sortDir: sortDirection,
+        limit: fetchBatchSize,
+        cursor: next,
+      });
+      loadedExpenses = [...loadedExpenses, ...page.expenses];
+      warnings = page.warnings;
+      next = page.pagination?.nextCursor ?? null;
+      hasMore = page.pagination?.hasMore ?? false;
+      totalCount = page.pagination?.totalCount ?? totalCount;
+    }
+
+    setExpenses(loadedExpenses);
+    setWarnings(warnings);
+    setNextCursor(next);
+    setHasMorePages(hasMore);
+    setTotalFilteredCount(totalCount);
+    setTotalCombinedExpensesArs(Number(settlement.totalExpenses));
+    if (rates) {
+      setExchangeRates(rates);
+    }
+  }, [month, debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, fetchBatchSize, maxRowsPerSection]);
 
   useEffect(() => {
     setUsers(initialUsers);
@@ -432,33 +538,14 @@ export function ExpensesClient({
     setWarnings(initialWarnings);
     setCategories(initialCategories);
     setExchangeRates(initialExchangeRates);
+    setTotalCombinedExpensesArs(Number(initialTotalExpensesArs));
     setError(null);
     resetSectionPages();
+    setNextCursor(initialPagination?.nextCursor ?? null);
+    setHasMorePages(initialPagination?.hasMore ?? false);
+    setTotalFilteredCount(initialPagination?.totalCount ?? null);
     resetForm(initialUsers[0]?.id ?? '', initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
-  }, [initialCategories, initialExchangeRates, initialExpenses, initialUsers, initialWarnings, resetForm, resetSectionPages]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(max-width: 767px)');
-    const syncMobileViewport = () => {
-      setIsMobileViewport(mediaQuery.matches);
-    };
-
-    syncMobileViewport();
-    mediaQuery.addEventListener('change', syncMobileViewport);
-    return () => mediaQuery.removeEventListener('change', syncMobileViewport);
-  }, []);
-
-  useEffect(() => {
-    if (!isMobileViewport || maxRowsPerSection === 10) {
-      return;
-    }
-    setMaxRowsPerSection(10);
-    resetSectionPages();
-  }, [isMobileViewport, maxRowsPerSection, resetSectionPages]);
+  }, [initialCategories, initialExchangeRates, initialExpenses, initialPagination, initialTotalExpensesArs, initialUsers, initialWarnings, resetForm, resetSectionPages]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -470,7 +557,7 @@ export function ExpensesClient({
 
   useEffect(() => {
     resetSectionPages();
-  }, [debouncedSearchQuery, selectedCategoryId, selectedPaidByUserId, selectedTypeFilter, sortField, sortDirection, resetSectionPages]);
+  }, [debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, resetSectionPages]);
 
   useEffect(() => {
     setSectionPages((previousPages) => ({
@@ -484,10 +571,10 @@ export function ExpensesClient({
   }, [fixedExpenses.length, oneTimeExpenses.length, installmentExpenses.length, maxRowsPerSection]);
 
   useEffect(() => {
-    void loadMonthData().catch((loadError) => {
+    void fetchMonthData(true).catch((loadError) => {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load expenses');
     });
-  }, [loadMonthData]);
+  }, [fetchMonthData]);
 
   useEffect(() => {
     const previousCurrencyCode = previousCurrencyRef.current;
@@ -508,6 +595,66 @@ export function ExpensesClient({
       form.setValue('fxRate', undefined, { shouldDirty: true });
     }
   }, [form, monthlyRateForCurrency, watchedCurrencyCode]);
+
+  const reloadFirstPage = useCallback(async () => {
+    await fetchMonthData(true);
+  }, [fetchMonthData]);
+
+  const rowsForSection = useCallback((sectionKey: ExpenseSectionKey, list: Expense[]) => {
+    if (sectionKey === 'fixed') {
+      return list.filter((expense) => expense.fixed.enabled);
+    }
+    if (sectionKey === 'installment') {
+      return list.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment));
+    }
+    return list.filter((expense) => !expense.fixed.enabled && !expense.installment);
+  }, []);
+
+  const ensureRowsForSection = useCallback(
+    async (sectionKey: ExpenseSectionKey, targetPage: number) => {
+      if (targetPage <= 1) {
+        return;
+      }
+
+      let loadedExpenses = expenses;
+      let cursor = nextCursor;
+      let canLoadMore = hasMorePages;
+      const requiredRows = targetPage * maxRowsPerSection;
+
+      while (rowsForSection(sectionKey, loadedExpenses).length < requiredRows && canLoadMore && cursor) {
+        const page = await getExpenses(month, {
+          search: debouncedSearchQuery || undefined,
+          categoryId: selectedCategoryId === 'all' ? undefined : selectedCategoryId,
+          sortBy: sortField,
+          sortDir: sortDirection,
+          limit: fetchBatchSize,
+          cursor,
+        });
+        loadedExpenses = [...loadedExpenses, ...page.expenses];
+        cursor = page.pagination?.nextCursor ?? null;
+        canLoadMore = page.pagination?.hasMore ?? false;
+
+        setExpenses(loadedExpenses);
+        setWarnings(page.warnings);
+        setNextCursor(cursor);
+        setHasMorePages(canLoadMore);
+        setTotalFilteredCount(page.pagination?.totalCount ?? null);
+      }
+    },
+    [
+      expenses,
+      nextCursor,
+      hasMorePages,
+      maxRowsPerSection,
+      rowsForSection,
+      month,
+      debouncedSearchQuery,
+      selectedCategoryId,
+      sortField,
+      sortDirection,
+      fetchBatchSize,
+    ],
+  );
 
   const executeUpdate = async (values: ExpenseForm, scope?: ApplyScope) => {
     if (!editingExpenseId) {
@@ -591,7 +738,7 @@ export function ExpensesClient({
         setIsMobileAddExpenseOpen(false);
       }
       resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
-      await loadMonthData();
+      await reloadFirstPage();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Failed to save expense');
     } finally {
@@ -620,34 +767,18 @@ export function ExpensesClient({
   };
 
   const removeExpense = async (expense: Expense) => {
-    try {
-      if (!expense.installment && !window.confirm(`Delete \"${expense.description}\"?`)) {
-        return;
-      }
-
-      setSaving(true);
-      setError(null);
-
-      if (expense.installment) {
-        setScopeDialog({ action: 'delete', expense });
-        return;
-      }
-
-      await deleteExpense(expense.id, 'single');
-      await loadMonthData();
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : 'Failed to delete expense');
-    } finally {
-      setSaving(false);
-    }
+    setConfirmationDialog({ action: 'delete', expense });
   };
 
   const cloneExpense = async (expense: Expense) => {
-    const today = getTodayDateInputValue();
+    setConfirmationDialog({ action: 'clone', expense });
+  };
 
+  const confirmCloneExpense = async (expense: Expense) => {
     try {
       setSaving(true);
       setError(null);
+      const today = getTodayDateInputValue();
 
       await createExpense({
         month: dateInputValueToMonth(today),
@@ -669,12 +800,46 @@ export function ExpensesClient({
           : undefined,
       });
 
-      await loadMonthData();
+      await reloadFirstPage();
     } catch (cloneError) {
       setError(cloneError instanceof Error ? cloneError.message : 'Failed to clone expense');
     } finally {
       setSaving(false);
     }
+  };
+
+  const confirmDeleteExpense = async (expense: Expense) => {
+    if (expense.installment) {
+      setScopeDialog({ action: 'delete', expense });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      await deleteExpense(expense.id, 'single');
+      await reloadFirstPage();
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : 'Failed to delete expense');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirmAction = async () => {
+    if (!confirmationDialog) {
+      return;
+    }
+
+    const dialog = confirmationDialog;
+    setConfirmationDialog(null);
+
+    if (dialog.action === 'clone') {
+      await confirmCloneExpense(dialog.expense);
+      return;
+    }
+
+    await confirmDeleteExpense(dialog.expense);
   };
 
   const confirmScopedAction = async (scope: ApplyScope) => {
@@ -695,7 +860,7 @@ export function ExpensesClient({
       setScopeDialog(null);
       setEditingExpenseId(null);
       resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
-      await loadMonthData();
+      await reloadFirstPage();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Failed to apply action');
     } finally {
@@ -714,7 +879,7 @@ export function ExpensesClient({
       setError(null);
       await upsertExchangeRate({ month, currencyCode: newFxCurrency, rateToArs: parsedRate });
       setNewFxRate('');
-      await loadMonthData();
+      await reloadFirstPage();
     } catch (fxError) {
       setError(fxError instanceof Error ? fxError.message : 'Failed to save FX rate');
     } finally {
@@ -770,13 +935,15 @@ export function ExpensesClient({
         totalRows,
         currentPage: page,
         totalPages,
-        showSectionPager: totalRows > maxRowsPerSection,
+        showSectionPager: totalRows > maxRowsPerSection || hasMorePages,
+        canMoveNext: page < totalPages || hasMorePages,
       };
     });
   }, [
     fixedSubtotalArs,
     fixedExpenses,
     hasActiveFilters,
+    hasMorePages,
     installmentExpenses,
     installmentSubtotalArs,
     maxRowsPerSection,
@@ -798,6 +965,20 @@ export function ExpensesClient({
           onCancel={() => setScopeDialog(null)}
           onConfirm={(scope) => void confirmScopedAction(scope)}
           title={scopeDialog.action === 'delete' ? 'Delete installment expense' : 'Update installment expense'}
+        />
+      ) : null}
+      {confirmationDialog ? (
+        <ConfirmationDialog
+          busy={saving}
+          confirmLabel={confirmationDialog.action === 'clone' ? 'Clone expense' : 'Delete expense'}
+          message={
+            confirmationDialog.action === 'clone'
+              ? `Create a new copy of "${confirmationDialog.expense.description}" using today's date?`
+              : `Delete "${confirmationDialog.expense.description}"?`
+          }
+          onCancel={() => setConfirmationDialog(null)}
+          onConfirm={() => void confirmAction()}
+          title={confirmationDialog.action === 'clone' ? 'Confirm clone' : 'Confirm delete'}
         />
       ) : null}
 
@@ -1040,22 +1221,25 @@ export function ExpensesClient({
           <div className="min-w-0 space-y-4">
             <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white shadow-lg">
               <p className="text-base font-semibold text-blue-100">Total Combined Expenses</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">ARS {formatMoney(filteredSubtotalArs)}</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">ARS {formatMoney(totalCombinedExpensesArs)}</p>
             </section>
             <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">Showing {expenses.length} filtered results</p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      Showing {expenses.length}
+                      {totalFilteredCount !== null ? ` of ${totalFilteredCount}` : ''} filtered results
+                    </p>
                     <p className="text-xs text-slate-500">Filtered results for this month</p>
                     <p className="text-xs font-medium text-slate-600">Subtotal (filtered): ARS {formatMoney(filteredSubtotalArs)}</p>
                   </div>
-                  <div className="flex w-full flex-col gap-2 sm:w-auto">
-                    <label className="flex items-center gap-2 text-sm text-slate-700" htmlFor="expense-page-size">
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                    <label className="flex items-center gap-2 text-sm text-slate-700" htmlFor="expense-max-rows-per-section">
                       <span className="font-medium">Max rows per section</span>
                       <select
                         className={`${compactFieldClass} min-w-20 rounded-lg px-3 py-2`}
-                        id="expense-page-size"
+                        id="expense-max-rows-per-section"
                         onChange={(event) => {
                           setMaxRowsPerSection(Number(event.target.value) as 10 | 25 | 50);
                           resetSectionPages();
@@ -1092,7 +1276,7 @@ export function ExpensesClient({
 
                 <div className={`${isMobileFiltersOpen ? 'mt-3 block' : 'hidden'} md:mt-0 md:block`} id="expense-mobile-filters">
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
-                    <label className="hidden lg:col-span-5 md:block">
+                    <label className="hidden lg:col-span-8 md:block">
                       <span className={tableControlLabelClass}>Search</span>
                       <input
                         className={tableControlFieldClass}
@@ -1102,7 +1286,7 @@ export function ExpensesClient({
                         value={searchQuery}
                       />
                     </label>
-                    <label className="lg:col-span-2">
+                    <label className="lg:col-span-4">
                       <span className={tableControlLabelClass}>Category</span>
                       <select
                         className={tableControlFieldClass}
@@ -1115,34 +1299,6 @@ export function ExpensesClient({
                             {category.name}
                           </option>
                         ))}
-                      </select>
-                    </label>
-                    <label className="lg:col-span-2">
-                      <span className={tableControlLabelClass}>Payer</span>
-                      <select
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSelectedPaidByUserId(event.target.value)}
-                        value={selectedPaidByUserId}
-                      >
-                        <option value="all">All payers</option>
-                        {users.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="lg:col-span-3">
-                      <span className={tableControlLabelClass}>Type</span>
-                      <select
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSelectedTypeFilter(event.target.value as ExpenseTypeFilter)}
-                        value={selectedTypeFilter}
-                      >
-                        <option value="all">All types</option>
-                        <option value="oneTime">One-time</option>
-                        <option value="fixed">Recurring</option>
-                        <option value="installment">Installment</option>
                       </select>
                     </label>
                   </div>
@@ -1183,8 +1339,6 @@ export function ExpensesClient({
                             onClick={() => {
                               setSearchQuery('');
                               setSelectedCategoryId('all');
-                              setSelectedPaidByUserId('all');
-                              setSelectedTypeFilter('all');
                               setSortField('date');
                               setSortDirection('desc');
                               resetSectionPages();
@@ -1344,7 +1498,8 @@ export function ExpensesClient({
                     {section.showSectionPager ? (
                       <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3">
                         <p className="text-sm font-medium text-slate-600">
-                          Showing {section.rows.length} of {section.totalRows} results
+                          Showing {section.rows.length} of {section.totalRows}
+                          {hasMorePages ? '+' : ''} results
                         </p>
                         <div className="flex items-center gap-3">
                           <button
@@ -1366,13 +1521,15 @@ export function ExpensesClient({
                           <button
                             aria-label={`Next ${section.title} page`}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={section.currentPage === section.totalPages}
-                            onClick={() =>
+                            disabled={!section.canMoveNext}
+                            onClick={async () => {
+                              const targetPage = section.currentPage + 1;
+                              await ensureRowsForSection(section.key, targetPage);
                               setSectionPages((previous) => ({
                                 ...previous,
-                                [section.key]: Math.min(section.totalPages, section.currentPage + 1),
-                              }))
-                            }
+                                [section.key]: targetPage,
+                              }));
+                            }}
                             type="button"
                           >
                             <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">

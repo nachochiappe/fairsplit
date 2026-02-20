@@ -21,8 +21,6 @@ interface ExpenseCategorySlice {
   superCategoryColor: string | null;
 }
 
-const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
-
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
@@ -33,9 +31,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   try {
     [users, incomes, settlementResult, expensesResult] = await Promise.all([
-      getUsers(SERVER_READ_CACHE),
-      getIncomes(month, SERVER_READ_CACHE),
-      getSettlement(month, SERVER_READ_CACHE).catch((error: unknown) => {
+      getUsers(),
+      getIncomes(month),
+      getSettlement(month).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Failed to load settlement';
         if (message.includes('Cannot calculate settlement when total income is non-positive')) {
           return null;
@@ -43,7 +41,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         throw error;
       }),
-      getExpenses(month, undefined, SERVER_READ_CACHE).then((result) => result.expenses),
+      getExpenses(month).then((result) => result.expenses),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to connect to API';

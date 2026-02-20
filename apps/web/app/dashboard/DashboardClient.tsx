@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/currency';
 import { type Income, type SettlementResponse, type User } from '../../lib/api';
+import { addMonths } from '../../lib/month';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -52,7 +53,17 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
             <label className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500" htmlFor="month">
               Month
             </label>
-            <div className="relative mt-2">
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                aria-label="Go to previous month"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300/90 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                type="button"
+                onClick={() => onMonthChange(addMonths(month, -1))}
+              >
+                <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12.5 4.5L7 10l5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
               <input
                 id="month"
                 aria-label="Select month"
@@ -64,6 +75,16 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
                 value={month}
                 onChange={(event) => onMonthChange(event.target.value)}
               />
+              <button
+                aria-label="Go to next month"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300/90 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                type="button"
+                onClick={() => onMonthChange(addMonths(month, 1))}
+              >
+                <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M7.5 4.5L13 10l-5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
             </div>
             <p className="sr-only">Selected month: {monthLabel}</p>
           </div>
