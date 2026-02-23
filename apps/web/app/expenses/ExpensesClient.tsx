@@ -1273,12 +1273,16 @@ export function ExpensesClient({
       const page = Math.min(currentPage, totalPages);
       const startIndex = (page - 1) * maxRowsPerSection;
       const rows = section.allRows.slice(startIndex, startIndex + maxRowsPerSection);
+      const pageStart = rows.length === 0 ? 0 : startIndex + 1;
+      const pageEnd = rows.length === 0 ? 0 : startIndex + rows.length;
       return {
         ...section,
         rows,
         totalRows,
         currentPage: page,
         totalPages,
+        pageStart,
+        pageEnd,
         showSectionPager: totalRows > maxRowsPerSection || sectionPagination[section.key].hasMore,
         canMoveNext: page < totalPages || sectionPagination[section.key].hasMore,
         hasMore: sectionPagination[section.key].hasMore,
@@ -1920,7 +1924,7 @@ export function ExpensesClient({
                     {section.showSectionPager ? (
                       <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3">
                         <p className="text-sm font-medium text-slate-600">
-                          Showing {section.rows.length} of {section.totalRows}
+                          Showing {section.pageStart}-{section.pageEnd} of {section.totalRows}
                           {section.hasMore ? '+' : ''} results
                         </p>
                         <div className="flex items-center gap-3">
