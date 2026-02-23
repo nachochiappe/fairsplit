@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/currency';
 import { type Income, type SettlementResponse, type User } from '../../lib/api';
-import { addMonths } from '../../lib/month';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { MonthSelector } from '../../components/MonthSelector';
 
 interface DashboardClientProps {
   month: string;
@@ -22,21 +22,12 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ month, users, incomes, settlement, expenseCategorySlices = [], warning }: DashboardClientProps) {
-  const router = useRouter();
-  const pathname = usePathname();
   const [isCategoryChartExpanded, setIsCategoryChartExpanded] = useState(false);
   const usersById = Object.fromEntries(users.map((user) => [user.id, user]));
   const incomeByUser: Record<string, number> = {};
   for (const income of incomes) {
     incomeByUser[income.userId] = (incomeByUser[income.userId] ?? 0) + Number(income.amountArs);
   }
-
-  const monthLabel = formatMonthLabel(month);
-  const onMonthChange = (nextMonth: string) => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('month', nextMonth);
-    router.push(`${pathname}?${params.toString()}`);
-  };
 
   return (
     <main id="main-content" className="mx-auto min-h-screen w-full max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
@@ -49,45 +40,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
               See fair monthly contributions and transfer recommendation
             </p>
           </div>
-          <div className="min-w-[240px]">
-            <label className="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500" htmlFor="month">
-              Month
-            </label>
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                aria-label="Go to previous month"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300/90 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                type="button"
-                onClick={() => onMonthChange(addMonths(month, -1))}
-              >
-                <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M12.5 4.5L7 10l5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              <input
-                id="month"
-                aria-label="Select month"
-                autoComplete="off"
-                className="min-h-11 w-full rounded-xl border border-slate-300/90 bg-white px-4 py-2.5 text-base font-medium leading-tight text-slate-700 shadow-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left"
-                lang="en"
-                name="month"
-                type="month"
-                value={month}
-                onChange={(event) => onMonthChange(event.target.value)}
-              />
-              <button
-                aria-label="Go to next month"
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300/90 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                type="button"
-                onClick={() => onMonthChange(addMonths(month, 1))}
-              >
-                <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M7.5 4.5L13 10l-5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-            <p className="sr-only">Selected month: {monthLabel}</p>
-          </div>
+          <MonthSelector month={month} />
         </div>
       </header>
 
@@ -263,21 +216,6 @@ function NavItem({ href, label, month }: { href: string; label: string; month: s
       {label}
     </Link>
   );
-}
-
-function formatMonthLabel(month: string): string {
-  const [yearRaw, monthRaw] = month.split('-');
-  const year = Number(yearRaw);
-  const monthNumber = Number(monthRaw);
-
-  if (!Number.isFinite(year) || !Number.isFinite(monthNumber)) {
-    return month;
-  }
-
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(year, monthNumber - 1, 1));
 }
 
 function formatCountLabel(count: number, singular: string, plural: string): string {
