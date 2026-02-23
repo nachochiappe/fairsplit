@@ -9,6 +9,7 @@ import { AppShell } from '../../components/AppShell';
 import { ActionButton } from '../../components/ActionButton';
 import { MonthSelector } from '../../components/MonthSelector';
 import { formatMoney } from '../../lib/currency';
+import { addMonths } from '../../lib/month';
 import {
   DEFAULT_MAX_ROWS_PER_SECTION,
   getSectionFetchBatchSize,
@@ -82,6 +83,7 @@ const expenseSchema = z
     fxRate: z.coerce.number().gt(0).optional(),
     paidByUserId: z.string().min(1),
     fixedEnabled: z.boolean().default(false),
+    nextMonthExpense: z.boolean().default(false),
     applyToFuture: z.boolean().default(true),
     installmentEnabled: z.boolean().default(false),
     installmentCount: z.coerce.number().int().min(2).optional(),
@@ -574,6 +576,7 @@ export function ExpensesClient({
       fxRate: undefined,
       paidByUserId: initialUsers[0]?.id ?? '',
       fixedEnabled: false,
+      nextMonthExpense: false,
       applyToFuture: true,
       installmentEnabled: false,
       installmentCount: 2,
@@ -663,6 +666,7 @@ export function ExpensesClient({
         fxRate: undefined,
         paidByUserId: defaultUserId,
         fixedEnabled: false,
+        nextMonthExpense: false,
         applyToFuture: true,
         installmentEnabled: false,
         installmentCount: 2,
@@ -1014,8 +1018,9 @@ export function ExpensesClient({
   };
 
   const executeCreate = async (values: ExpenseForm) => {
+    const issuedMonth = values.nextMonthExpense ? addMonths(month, 1) : month;
     await createExpense({
-      month,
+      month: issuedMonth,
       date: values.date,
       description: values.description,
       categoryId: values.categoryId,
@@ -1102,6 +1107,7 @@ export function ExpensesClient({
       fxRate: Number(expense.fxRateUsed),
       paidByUserId: expense.paidByUserId,
       fixedEnabled: expense.fixed.enabled,
+      nextMonthExpense: false,
       applyToFuture: expense.fixed.enabled,
       installmentEnabled: Boolean(expense.installment),
       installmentCount: expense.installment?.total ?? 2,
@@ -1480,6 +1486,12 @@ export function ExpensesClient({
                 <input type="checkbox" {...form.register('fixedEnabled')} />
                 Recurring expense
               </label>
+              {!editingExpenseId ? (
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" {...form.register('nextMonthExpense')} />
+                  Next-month expense
+                </label>
+              ) : null}
               {editingExpenseId ? (
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input checked={watchedApplyToFuture} type="checkbox" {...form.register('applyToFuture')} />
