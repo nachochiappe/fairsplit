@@ -150,6 +150,11 @@ interface ConfirmationDialogState {
   expense: Expense;
 }
 
+interface SubmissionToastState {
+  kind: 'success' | 'error';
+  message: string;
+}
+
 function ScopeDialog({
   title,
   busy,
@@ -355,6 +360,7 @@ export function ExpensesClient({
   const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submissionToast, setSubmissionToast] = useState<SubmissionToastState | null>(null);
   const [newFxCurrency, setNewFxCurrency] = useState<SupportedCurrencyCode>('USD');
   const [newFxRate, setNewFxRate] = useState('');
   const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(DEFAULT_MAX_ROWS_PER_SECTION);
@@ -375,6 +381,8 @@ export function ExpensesClient({
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
   const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
   const expensesRef = useRef(expenses);
+  const submissionToastTimeoutRef = useRef<number | null>(null);
+  const createErrorTimeoutRef = useRef<number | null>(null);
   const warningsRef = useRef(warnings);
   const sectionPaginationRef = useRef(sectionPagination);
   const sectionFetchInFlightRef = useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
@@ -391,6 +399,37 @@ export function ExpensesClient({
   useEffect(() => {
     fetchBatchSizeRef.current = fetchBatchSize;
   }, [fetchBatchSize]);
+
+  useEffect(() => {
+    if (!submissionToast) {
+      return;
+    }
+
+    if (submissionToastTimeoutRef.current) {
+      window.clearTimeout(submissionToastTimeoutRef.current);
+    }
+
+    submissionToastTimeoutRef.current = window.setTimeout(() => {
+      setSubmissionToast(null);
+      submissionToastTimeoutRef.current = null;
+    }, 2000);
+
+    return () => {
+      if (submissionToastTimeoutRef.current) {
+        window.clearTimeout(submissionToastTimeoutRef.current);
+        submissionToastTimeoutRef.current = null;
+      }
+    };
+  }, [submissionToast]);
+
+  useEffect(() => {
+    return () => {
+      if (createErrorTimeoutRef.current) {
+        window.clearTimeout(createErrorTimeoutRef.current);
+        createErrorTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const beginSectionLoading = useCallback((keys: ExpenseSectionKey[]) => {
     setSectionLoading((previous) => {
@@ -999,6 +1038,7 @@ export function ExpensesClient({
 
   const submit = form.handleSubmit(async (values) => {
     const wasEditing = Boolean(editingExpenseId);
+    const isCreateAction = !wasEditing;
 
     try {
       setSaving(true);
@@ -1026,8 +1066,25 @@ export function ExpensesClient({
       }
       resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
       await reloadFirstPage();
+      if (isCreateAction) {
+        setSubmissionToast({ kind: 'success', message: 'Expense added successfully.' });
+      }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Failed to save expense');
+      const message = submitError instanceof Error ? submitError.message : 'Failed to save expense';
+      setError(message);
+      if (isCreateAction) {
+        setSubmissionToast({
+          kind: 'error',
+          message,
+        });
+        if (createErrorTimeoutRef.current) {
+          window.clearTimeout(createErrorTimeoutRef.current);
+        }
+        createErrorTimeoutRef.current = window.setTimeout(() => {
+          setError((currentError) => (currentError === message ? null : currentError));
+          createErrorTimeoutRef.current = null;
+        }, 2000);
+      }
     } finally {
       setSaving(false);
     }
@@ -1305,6 +1362,19 @@ export function ExpensesClient({
       ) : null}
 
       <div className="space-y-4">
+        {submissionToast ? (
+          <div
+            aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
+            className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
+              submissionToast.kind === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-rose-200 bg-rose-50 text-rose-700'
+            }`}
+            role="status"
+          >
+            {submissionToast.message}
+          </div>
+        ) : null}
         {warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Recurring expense generation warnings</p>
@@ -1475,8 +1545,14 @@ export function ExpensesClient({
               </label>
 
               <div className="flex gap-2">
-                <button className={primaryButtonClass} disabled={saving} type="submit">
-                  {editingExpenseId ? 'Update' : 'Add'}
+                <button className={`${primaryButtonClass} inline-flex items-center gap-2`} disabled={saving} type="submit">
+                  {!editingExpenseId && saving ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white"
+                    />
+                  ) : null}
+                  {editingExpenseId ? 'Update' : saving ? 'Adding...' : 'Add'}
                 </button>
                 {editingExpenseId ? (
                   <button

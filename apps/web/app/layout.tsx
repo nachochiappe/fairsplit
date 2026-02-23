@@ -13,11 +13,11 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: 'FairSplit',
-    template: '%s | FairSplit',
+    default: 'Fairsplit',
+    template: '%s | Fairsplit',
   },
-  description: 'FairSplit helps couples track monthly incomes, expenses, and settlement transfers.',
-  applicationName: 'FairSplit',
+  description: 'Fairsplit helps couples track monthly incomes, expenses, and settlement transfers.',
+  applicationName: 'Fairsplit',
 };
 
 export const viewport: Viewport = {

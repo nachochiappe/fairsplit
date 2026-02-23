@@ -82,7 +82,7 @@ export default function AuthCallbackPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg items-center px-4 py-10">
       <section className="w-full rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm md:p-9">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">FairSplit</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Auth callback</h1>
         <p className="mt-4 text-sm text-slate-600">{status}</p>
       </section>

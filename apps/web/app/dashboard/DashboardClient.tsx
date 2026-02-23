@@ -43,7 +43,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
       <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">FairSplit</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
             <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">Settlement Dashboard</h1>
             <p className="mt-2 max-w-2xl text-base text-slate-600">
               See fair monthly contributions and transfer recommendation
