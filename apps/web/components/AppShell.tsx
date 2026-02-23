@@ -18,7 +18,7 @@ export function AppShell({ month, title, subtitle, rightSlot, containerClassName
     >
       <header className="mb-7 flex flex-col gap-5 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:flex-row md:items-center md:justify-between md:p-9">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">FairSplit</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
           <h1 className="mt-2 text-pretty text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">{title}</h1>
           <p className="mt-2 max-w-2xl text-base text-slate-600">{subtitle}</p>
         </div>
