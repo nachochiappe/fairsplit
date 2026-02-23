@@ -1,14 +1,26 @@
+# Dependencies and package managers
 node_modules
 .pnpm-store
+
+# Build and test outputs
 .next
 dist
 coverage
+apps/api/test-results
+
+# Environment and local config
 .env
 .env.*
 !.env.example
+
+# Database and local data
 prisma/migrations
-apps/api/test-results
+packages/db/data
+
+# Generated docs and automation artifacts
+docs/
+.playwright-cli
+
+# System and local tooling
 .DS_Store
 .agents
-packages/db/data
-.playwright-cli
