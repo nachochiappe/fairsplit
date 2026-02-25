@@ -48,6 +48,8 @@ const compactFieldClass =
 const tableControlLabelClass = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
 const tableControlFieldClass =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+const tableControlSearchFieldClass =
+  `${tableControlFieldClass} pr-10 [&::-webkit-search-cancel-button]:appearance-none`;
 const primaryButtonClass =
   'rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const secondaryButtonClass =
@@ -153,8 +155,101 @@ interface ConfirmationDialogState {
 }
 
 interface SubmissionToastState {
-  kind: 'success' | 'error';
-  message: string;
+  id: number;
+  kind: 'loading' | 'success' | 'error';
+  title: string;
+  message?: string;
+}
+
+const SUBMISSION_TOAST_VISIBLE_MS = 6000;
+
+function AnimatedSubmissionToast({
+  toast,
+  onClose,
+}: {
+  toast: SubmissionToastState;
+  onClose: () => void;
+}) {
+  const isLoading = toast.kind === 'loading';
+  const isSuccess = toast.kind === 'success';
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-6">
+      <section
+        aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
+        className={`submission-toast-enter pointer-events-auto relative w-full max-w-2xl overflow-hidden rounded-[26px] border bg-white px-5 py-4 shadow-[0_24px_44px_-30px_rgba(15,23,42,0.45)] sm:px-6 sm:py-5 ${
+          toast.kind === 'success'
+            ? 'border-emerald-100'
+            : toast.kind === 'error'
+              ? 'border-rose-200'
+              : 'border-slate-200'
+        }`}
+        role={toast.kind === 'error' ? 'alert' : 'status'}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden="true"
+            className={`mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+              isLoading ? 'bg-slate-100 text-slate-600' : isSuccess ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
+            }`}
+          >
+            {isLoading ? (
+              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" fill="none" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-95" d="M4 12a8 8 0 0 1 8-8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+              </svg>
+            ) : isSuccess ? (
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6" viewBox="0 0 24 24">
+                <path d="m5 13 4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6" viewBox="0 0 24 24">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p
+              className={`text-2xl font-semibold tracking-tight ${
+                isSuccess ? 'text-emerald-950' : toast.kind === 'error' ? 'text-rose-950' : 'text-slate-800'
+              }`}
+            >
+              {toast.title}
+            </p>
+            {toast.message ? <p className="mt-2 text-base leading-relaxed text-slate-700">{toast.message}</p> : null}
+          </div>
+          {!isLoading ? (
+            <button
+              aria-label="Dismiss notification"
+              className={`rounded-full p-2 transition ${
+                isSuccess
+                  ? 'text-emerald-700 hover:bg-emerald-50'
+                  : 'text-rose-700 hover:bg-rose-50'
+              }`}
+              onClick={onClose}
+              type="button"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          ) : null}
+        </div>
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200/75">
+          <div
+            className={`h-full rounded-full ${
+              isLoading
+                ? 'animate-pulse bg-slate-500/80'
+                : isSuccess
+                  ? 'submission-toast-progress bg-emerald-600'
+                  : 'submission-toast-progress bg-rose-600'
+            }`}
+            style={!isLoading ? ({ '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<string, string>) : undefined}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function ScopeDialog({
@@ -379,12 +474,12 @@ export function ExpensesClient({
   const [sortField, setSortField] = useState<ExpenseSortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const hasSearchQuery = searchQuery.trim().length > 0;
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
   const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
   const expensesRef = useRef(expenses);
   const submissionToastTimeoutRef = useRef<number | null>(null);
-  const createErrorTimeoutRef = useRef<number | null>(null);
   const warningsRef = useRef(warnings);
   const sectionPaginationRef = useRef(sectionPagination);
   const sectionFetchInFlightRef = useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
@@ -403,7 +498,7 @@ export function ExpensesClient({
   }, [fetchBatchSize]);
 
   useEffect(() => {
-    if (!submissionToast) {
+    if (!submissionToast || submissionToast.kind === 'loading') {
       return;
     }
 
@@ -414,7 +509,7 @@ export function ExpensesClient({
     submissionToastTimeoutRef.current = window.setTimeout(() => {
       setSubmissionToast(null);
       submissionToastTimeoutRef.current = null;
-    }, 2000);
+    }, SUBMISSION_TOAST_VISIBLE_MS);
 
     return () => {
       if (submissionToastTimeoutRef.current) {
@@ -423,15 +518,6 @@ export function ExpensesClient({
       }
     };
   }, [submissionToast]);
-
-  useEffect(() => {
-    return () => {
-      if (createErrorTimeoutRef.current) {
-        window.clearTimeout(createErrorTimeoutRef.current);
-        createErrorTimeoutRef.current = null;
-      }
-    };
-  }, []);
 
   const beginSectionLoading = useCallback((keys: ExpenseSectionKey[]) => {
     setSectionLoading((previous) => {
@@ -1043,7 +1129,7 @@ export function ExpensesClient({
 
   const submit = form.handleSubmit(async (values) => {
     const wasEditing = Boolean(editingExpenseId);
-    const isCreateAction = !wasEditing;
+    const loadingToastId = Date.now();
 
     try {
       setSaving(true);
@@ -1060,8 +1146,18 @@ export function ExpensesClient({
           return;
         }
 
+        setSubmissionToast({
+          id: loadingToastId,
+          kind: 'loading',
+          title: 'Updating expense...',
+        });
         await executeUpdate(values, 'single');
       } else {
+        setSubmissionToast({
+          id: loadingToastId,
+          kind: 'loading',
+          title: 'Adding expense...',
+        });
         await executeCreate(values);
       }
 
@@ -1071,25 +1167,21 @@ export function ExpensesClient({
       }
       resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
       await reloadFirstPage();
-      if (isCreateAction) {
-        setSubmissionToast({ kind: 'success', message: 'Expense added successfully.' });
-      }
+      setSubmissionToast({
+        id: loadingToastId,
+        kind: 'success',
+        title: wasEditing ? 'Expense updated' : 'Expense added',
+        message: wasEditing ? 'Your changes were saved successfully.' : 'Expense added successfully.',
+      });
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : 'Failed to save expense';
       setError(message);
-      if (isCreateAction) {
-        setSubmissionToast({
-          kind: 'error',
-          message,
-        });
-        if (createErrorTimeoutRef.current) {
-          window.clearTimeout(createErrorTimeoutRef.current);
-        }
-        createErrorTimeoutRef.current = window.setTimeout(() => {
-          setError((currentError) => (currentError === message ? null : currentError));
-          createErrorTimeoutRef.current = null;
-        }, 2000);
-      }
+      setSubmissionToast({
+        id: Date.now(),
+        kind: 'error',
+        title: wasEditing ? 'Could not update expense' : 'Could not add expense',
+        message,
+      });
     } finally {
       setSaving(false);
     }
@@ -1370,21 +1462,15 @@ export function ExpensesClient({
           title={confirmationDialog.action === 'clone' ? 'Confirm clone' : 'Confirm delete'}
         />
       ) : null}
+      {submissionToast ? (
+        <AnimatedSubmissionToast
+          key={`${submissionToast.id}-${submissionToast.kind}`}
+          toast={submissionToast}
+          onClose={() => setSubmissionToast(null)}
+        />
+      ) : null}
 
       <div className="space-y-4">
-        {submissionToast ? (
-          <div
-            aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
-            className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
-              submissionToast.kind === 'success'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-rose-200 bg-rose-50 text-rose-700'
-            }`}
-            role="status"
-          >
-            {submissionToast.message}
-          </div>
-        ) : null}
         {warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Recurring expense generation warnings</p>
@@ -1670,13 +1756,26 @@ export function ExpensesClient({
               </div>
               <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-4">
                 <div className="flex items-center gap-2 md:hidden">
-                  <input
-                    className={tableControlFieldClass}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search expenses..."
-                    type="search"
-                    value={searchQuery}
-                  />
+                  <div className="relative min-w-0 flex-1">
+                    <input
+                      aria-label="Search expenses"
+                      className={tableControlSearchFieldClass}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search expenses..."
+                      type="search"
+                      value={searchQuery}
+                    />
+                    {hasSearchQuery ? (
+                      <button
+                        aria-label="Clear expense search"
+                        className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        onClick={() => setSearchQuery('')}
+                        type="button"
+                      >
+                        X
+                      </button>
+                    ) : null}
+                  </div>
                   <button
                     aria-controls="expense-mobile-filters"
                     aria-expanded={isMobileFiltersOpen}
@@ -1692,13 +1791,25 @@ export function ExpensesClient({
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
                     <label className="hidden lg:col-span-8 md:block">
                       <span className={tableControlLabelClass}>Search</span>
-                      <input
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder="Description, category, or payer"
-                        type="search"
-                        value={searchQuery}
-                      />
+                      <div className="relative">
+                        <input
+                          className={tableControlSearchFieldClass}
+                          onChange={(event) => setSearchQuery(event.target.value)}
+                          placeholder="Description, category, or payer"
+                          type="search"
+                          value={searchQuery}
+                        />
+                        {hasSearchQuery ? (
+                          <button
+                            aria-label="Clear expense search"
+                            className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                            onClick={() => setSearchQuery('')}
+                            type="button"
+                          >
+                            X
+                          </button>
+                        ) : null}
+                      </div>
                     </label>
                     <label className="lg:col-span-4">
                       <span className={tableControlLabelClass}>Category</span>
