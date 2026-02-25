@@ -415,18 +415,18 @@ export function SettingsClient({
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
-            <div>
+            <div className="min-w-0">
               <p className="text-xl font-semibold text-slate-700">Display Name</p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
                   aria-label="Display name"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-medium text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-medium text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onChange={(event) => setDisplayNameDraft(event.target.value)}
                   placeholder="Your name"
                   value={displayNameDraft}
                 />
                 <button
-                  className="inline-flex h-12 items-center justify-center rounded-xl bg-brand-600 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand-600 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   disabled={profileSaving || !currentUserId}
                   onClick={() => void onUpdateDisplayName()}
                   type="button"
@@ -437,10 +437,10 @@ export function SettingsClient({
               <p className="mt-3 text-sm text-slate-500">This is how your partner will see you in shared expenses.</p>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <p className="text-xl font-semibold text-slate-700">Email Address</p>
-              <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-300 bg-slate-100 px-4 py-3">
-                <span className="truncate text-lg font-medium text-slate-500">
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3">
+                <span className="min-w-0 truncate text-lg font-medium text-slate-500">
                   {currentUserEmail ?? 'No email available in this session'}
                 </span>
                 <svg aria-hidden="true" className="ml-3 h-6 w-6 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
