@@ -84,6 +84,7 @@ function withExpenseTypeConstraint(
   return where;
 }
 const createUserSchema = z.object({ name: z.string().min(1) });
+const updateUserSchema = z.object({ name: z.string().trim().min(1) });
 const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
 const createCategorySchema = z.object({
   name: z.string().trim().min(1),
@@ -433,6 +434,35 @@ export const createApp = (): Express => {
       id: user.id,
       name: user.name,
       createdAt: user.createdAt.toISOString(),
+    });
+  });
+
+  app.patch('/api/users/:id', async (req: Request, res: Response) => {
+    const parsed = updateUserSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const rawUserId = req.params.id;
+    const userId = Array.isArray(rawUserId) ? rawUserId[0]?.trim() : rawUserId?.trim();
+    if (!userId) {
+      return res.status(400).json({ error: 'User id is required' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { name: parsed.data.name },
+    });
+
+    return res.json({
+      id: updated.id,
+      name: updated.name,
+      createdAt: updated.createdAt.toISOString(),
     });
   });
 
