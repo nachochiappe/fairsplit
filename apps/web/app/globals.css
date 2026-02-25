@@ -76,6 +76,39 @@ input[type='month']::-webkit-datetime-edit {
   color: #0b1f5f;
 }
 
+@keyframes submission-toast-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.95);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes submission-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.submission-toast-enter {
+  animation: submission-toast-enter 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.submission-toast-progress {
+  transform-origin: left center;
+  animation: submission-toast-progress var(--toast-duration, 6000ms) linear forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
