@@ -54,6 +54,8 @@ const primaryButtonClass =
   'rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const secondaryButtonClass =
   'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
+const moneyInputClass =
+  `${fieldClass} pl-8 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`;
 const SEARCH_DEBOUNCE_MS = 350;
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
 const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
@@ -276,6 +278,7 @@ function ConfirmationDialog({
 }
 
 interface ExpensesClientProps {
+  currentUserId: string | null;
   month: string;
   initialUsers: User[];
   initialExpenses: Expense[];
@@ -345,7 +348,18 @@ function sumExpensesArs(expenses: Expense[]): number {
   return expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
 }
 
+function resolveDefaultPaidByUserId(users: User[], currentUserId: string | null): string {
+  if (currentUserId) {
+    const currentUser = users.find((user) => user.id === currentUserId);
+    if (currentUser) {
+      return currentUser.id;
+    }
+  }
+  return users[0]?.id ?? '';
+}
+
 export function ExpensesClient({
+  currentUserId,
   month,
   initialUsers,
   initialExpenses,
@@ -402,6 +416,7 @@ export function ExpensesClient({
     installment: 0,
   });
   const fetchBatchSizeRef = useRef(fetchBatchSize);
+  const expenseFormRef = useRef<HTMLFormElement | null>(null);
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
   useEffect(() => {
@@ -561,6 +576,10 @@ export function ExpensesClient({
     () => visibleExpenses.filter((expense) => !expense.fixed.enabled && !expense.installment),
     [visibleExpenses],
   );
+  const defaultPaidByUserId = useMemo(
+    () => resolveDefaultPaidByUserId(users, currentUserId),
+    [users, currentUserId],
+  );
 
   const form = useForm<ExpenseForm>({
     resolver: zodResolver(expenseSchema),
@@ -568,10 +587,10 @@ export function ExpensesClient({
       date: getTodayDateInputValue(),
       description: '',
       categoryId: initialCategories.find((category) => category.archivedAt === null)?.id ?? '',
-      amount: 0,
+      amount: undefined,
       currencyCode: 'ARS',
       fxRate: undefined,
-      paidByUserId: initialUsers[0]?.id ?? '',
+      paidByUserId: resolveDefaultPaidByUserId(initialUsers, currentUserId),
       fixedEnabled: false,
       nextMonthExpense: false,
       applyToFuture: true,
@@ -653,15 +672,15 @@ export function ExpensesClient({
   }, [watchedAmount, watchedInstallmentCount, watchedInstallmentEnabled, watchedInstallmentEntryMode, watchedTotalAmount]);
 
   const resetForm = useCallback(
-    (defaultUserId: string, defaultCategoryId: string) => {
+    (defaultCategoryId: string) => {
       form.reset({
         date: getTodayDateInputValue(),
         description: '',
         categoryId: defaultCategoryId,
-        amount: 0,
+        amount: undefined,
         currencyCode: 'ARS',
         fxRate: undefined,
-        paidByUserId: defaultUserId,
+        paidByUserId: defaultPaidByUserId,
         fixedEnabled: false,
         nextMonthExpense: false,
         applyToFuture: true,
@@ -671,7 +690,7 @@ export function ExpensesClient({
         totalAmount: undefined,
       });
     },
-    [form],
+    [defaultPaidByUserId, form],
   );
 
   const fetchMonthData = useCallback(async (options?: { includeRates?: boolean; includeSettlement?: boolean }) => {
@@ -775,7 +794,7 @@ export function ExpensesClient({
     setSectionPagination(initialSectionPagination);
     sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
     invalidateSectionChunkState();
-    resetForm(initialUsers[0]?.id ?? '', initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
+    resetForm(initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
   }, [
     initialCategories,
     initialExchangeRates,
@@ -989,6 +1008,7 @@ export function ExpensesClient({
     }
 
     const payload: Parameters<typeof updateExpense>[1] = {
+      month: values.nextMonthExpense ? addMonths(month, 1) : month,
       date: values.date,
       description: values.description,
       categoryId: values.categoryId,
@@ -1076,7 +1096,7 @@ export function ExpensesClient({
       if (!wasEditing) {
         setIsMobileAddExpenseOpen(false);
       }
-      resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
+      resetForm(sortedActiveCategories[0]?.id ?? '');
       await reloadFirstPage();
       setSubmissionToast({
         id: loadingToastId,
@@ -1098,6 +1118,15 @@ export function ExpensesClient({
     }
   });
 
+  const jumpToExpenseEditor = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        expenseFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        form.setFocus('description');
+      });
+    });
+  }, [form]);
+
   const startEdit = (expense: Expense) => {
     setIsMobileAddExpenseOpen(true);
     setEditingExpenseId(expense.id);
@@ -1117,6 +1146,7 @@ export function ExpensesClient({
       installmentEntryMode: 'perInstallment',
       totalAmount: undefined,
     });
+    jumpToExpenseEditor();
   };
 
   const removeExpense = async (expense: Expense) => {
@@ -1212,7 +1242,7 @@ export function ExpensesClient({
 
       setScopeDialog(null);
       setEditingExpenseId(null);
-      resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
+      resetForm(sortedActiveCategories[0]?.id ?? '');
       await reloadFirstPage();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Failed to apply action');
@@ -1394,7 +1424,7 @@ export function ExpensesClient({
 
         <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
           <div className="min-w-0 space-y-4">
-            <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit}>
+            <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit} ref={expenseFormRef}>
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-base font-semibold text-slate-900">
                   {editingExpenseId ? 'Edit expense' : 'Add expense'}
@@ -1461,14 +1491,19 @@ export function ExpensesClient({
                 </label>
                 <label className="block text-sm">
                   <span className="mb-1 block text-slate-700">FX to ARS</span>
-                  <input
-                    className={`${fieldClass} disabled:bg-slate-100`}
-                    disabled={watchedCurrencyCode === 'ARS'}
-                    min="0"
-                    step="0.000001"
-                    type="number"
-                    {...form.register('fxRate')}
-                  />
+                  <div className="relative">
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
+                      $
+                    </span>
+                    <input
+                      className={`${moneyInputClass} disabled:bg-slate-100`}
+                      disabled={watchedCurrencyCode === 'ARS'}
+                      min="0"
+                      step="0.000001"
+                      type="number"
+                      {...form.register('fxRate')}
+                    />
+                  </div>
                 </label>
               </div>
 
@@ -1476,12 +1511,10 @@ export function ExpensesClient({
                 <input type="checkbox" {...form.register('fixedEnabled')} />
                 Recurring expense
               </label>
-              {!editingExpenseId ? (
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" {...form.register('nextMonthExpense')} />
-                  Next-month expense
-                </label>
-              ) : null}
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" {...form.register('nextMonthExpense')} />
+                Next-month expense
+              </label>
               {editingExpenseId ? (
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input checked={watchedApplyToFuture} type="checkbox" {...form.register('applyToFuture')} />
@@ -1510,19 +1543,34 @@ export function ExpensesClient({
                   {watchedInstallmentEntryMode === 'total' ? (
                     <label className="block text-sm">
                       <span className="mb-1 block text-slate-700">Total amount</span>
-                      <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('totalAmount')} />
+                      <div className="relative">
+                        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
+                          $
+                        </span>
+                        <input className={moneyInputClass} min="0" step="0.01" type="number" {...form.register('totalAmount')} />
+                      </div>
                     </label>
                   ) : (
                     <label className="block text-sm">
                       <span className="mb-1 block text-slate-700">Per-installment amount</span>
-                      <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                      <div className="relative">
+                        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
+                          $
+                        </span>
+                        <input className={moneyInputClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                      </div>
                     </label>
                   )}
                 </>
               ) : (
                 <label className="block text-sm">
                   <span className="mb-1 block text-slate-700">Amount</span>
-                  <input className={fieldClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                  <div className="relative">
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
+                      $
+                    </span>
+                    <input className={moneyInputClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                  </div>
                 </label>
               )}
 
@@ -1533,7 +1581,7 @@ export function ExpensesClient({
                 </div>
               ) : null}
 
-              {projectedArsAmount !== null ? (
+              {watchedCurrencyCode !== 'ARS' && projectedArsAmount !== null ? (
                 <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
                   Estimated ARS amount: {formatMoney(projectedArsAmount.toFixed(2))}
                 </div>
@@ -1632,7 +1680,7 @@ export function ExpensesClient({
                     type="button"
                     onClick={() => {
                       setEditingExpenseId(null);
-                      resetForm(users[0]?.id ?? '', sortedActiveCategories[0]?.id ?? '');
+                      resetForm(sortedActiveCategories[0]?.id ?? '');
                     }}
                   >
                     Cancel
@@ -1671,7 +1719,20 @@ export function ExpensesClient({
                       </option>
                     ))}
                   </select>
-                  <input className={fieldClass} min="0" onChange={(e) => setNewFxRate(e.target.value)} placeholder="Rate" step="0.000001" type="number" value={newFxRate} />
+                  <div className="relative">
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
+                      $
+                    </span>
+                    <input
+                      className={moneyInputClass}
+                      min="0"
+                      onChange={(e) => setNewFxRate(e.target.value)}
+                      placeholder="Rate"
+                      step="0.000001"
+                      type="number"
+                      value={newFxRate}
+                    />
+                  </div>
                   <button className={primaryButtonClass} onClick={() => void onSaveExchangeRate()} type="button">
                     Save
                   </button>

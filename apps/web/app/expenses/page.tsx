@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import { ExpensesClient } from './ExpensesClient';
 import { Expense, getCategories, getExchangeRates, getExpenses, getSettlement, getUsers } from '../../lib/api';
 import { DEFAULT_MAX_ROWS_PER_SECTION, getSectionFetchBatchSize } from './pagination';
@@ -10,6 +11,23 @@ const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
 const INITIAL_EXPENSES_PAGE_SIZE = getSectionFetchBatchSize(DEFAULT_MAX_ROWS_PER_SECTION);
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
 const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
+const SESSION_COOKIE = 'fairsplit_session';
+
+function parseSessionCookie(rawValue: string | undefined): { userId: string | null } {
+  if (!rawValue) {
+    return { userId: null };
+  }
+
+  try {
+    const decoded = decodeURIComponent(rawValue);
+    const parsed = JSON.parse(decoded) as { userId?: unknown };
+    return {
+      userId: typeof parsed.userId === 'string' && parsed.userId.trim().length > 0 ? parsed.userId : null,
+    };
+  } catch {
+    return { userId: null };
+  }
+}
 
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   const dedupedById = new Map<string, Expense>();
@@ -22,7 +40,10 @@ function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
 export default async function ExpensesPage({ searchParams }: ExpensesPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = parseSessionCookie(sessionCookie);
   const users = await getUsers(SERVER_READ_CACHE);
+  const currentUserId = session.userId && users.some((user) => user.id === session.userId) ? session.userId : null;
   const fixedData = await getExpenses(
     month,
     { type: 'fixed', sortBy: 'date', sortDir: 'desc', limit: INITIAL_EXPENSES_PAGE_SIZE, hydrate: true, includeCount: true },
@@ -92,6 +113,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
 
   return (
     <ExpensesClient
+      currentUserId={currentUserId}
       month={month}
       initialUsers={users}
       initialExpenses={mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses])}

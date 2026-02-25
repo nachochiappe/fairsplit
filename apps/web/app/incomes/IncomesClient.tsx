@@ -28,6 +28,7 @@ const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
 const surfaceClass = 'rounded-3xl border border-slate-200 bg-white/90 shadow-sm';
 const fieldClass =
   'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base placeholder:text-slate-400 shadow-sm transition-colors focus-visible:border-brand-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20 focus-visible:ring-offset-1';
+const moneyFieldClass = `${fieldClass} pl-8 text-right`;
 const subtleButtonClass =
   'inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const primaryButtonClass =
@@ -586,7 +587,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                       </div>
 
                       <div className="relative w-full">
-                        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
                         <input
                           type="text"
                           name={`income-amount-${user.id}-${index}`}
@@ -595,7 +596,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                           inputMode="decimal"
                           value={row.amount}
                           onChange={(event) => updateDraftAmount(user.id, index, event.target.value)}
-                          className={`${fieldClass} ${amountToneClass} pl-6`}
+                          className={`${moneyFieldClass} ${amountToneClass}`}
                           placeholder="0.00"
                         />
                       </div>
@@ -622,10 +623,11 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                           </select>
                         </div>
 
-                        <div>
+                        <div className="relative">
                           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:hidden">
                             FX to ARS
                           </span>
+                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
                           <input
                             type="text"
                             name={`income-fx-${user.id}-${index}`}
@@ -635,7 +637,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                             value={row.currencyCode === 'ARS' ? '1' : row.fxRate}
                             onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
                             disabled={row.currencyCode === 'ARS'}
-                            className={`${fieldClass} ${
+                            className={`${moneyFieldClass} ${
                               row.currencyCode === 'ARS'
                                 ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none disabled:opacity-100'
                                 : ''
