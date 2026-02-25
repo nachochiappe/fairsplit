@@ -163,95 +163,6 @@ interface SubmissionToastState {
 
 const SUBMISSION_TOAST_VISIBLE_MS = 6000;
 
-function AnimatedSubmissionToast({
-  toast,
-  onClose,
-}: {
-  toast: SubmissionToastState;
-  onClose: () => void;
-}) {
-  const isLoading = toast.kind === 'loading';
-  const isSuccess = toast.kind === 'success';
-
-  return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4 sm:top-6">
-      <section
-        aria-live={toast.kind === 'error' ? 'assertive' : 'polite'}
-        className={`submission-toast-enter pointer-events-auto relative w-full max-w-2xl overflow-hidden rounded-[26px] border bg-white px-5 py-4 shadow-[0_24px_44px_-30px_rgba(15,23,42,0.45)] sm:px-6 sm:py-5 ${
-          toast.kind === 'success'
-            ? 'border-emerald-100'
-            : toast.kind === 'error'
-              ? 'border-rose-200'
-              : 'border-slate-200'
-        }`}
-        role={toast.kind === 'error' ? 'alert' : 'status'}
-      >
-        <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className={`mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
-              isLoading ? 'bg-slate-100 text-slate-600' : isSuccess ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
-            }`}
-          >
-            {isLoading ? (
-              <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" fill="none" r="10" stroke="currentColor" strokeWidth="3" />
-                <path className="opacity-95" d="M4 12a8 8 0 0 1 8-8" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
-              </svg>
-            ) : isSuccess ? (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6" viewBox="0 0 24 24">
-                <path d="m5 13 4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6" viewBox="0 0 24 24">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            )}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p
-              className={`text-2xl font-semibold tracking-tight ${
-                isSuccess ? 'text-emerald-950' : toast.kind === 'error' ? 'text-rose-950' : 'text-slate-800'
-              }`}
-            >
-              {toast.title}
-            </p>
-            {toast.message ? <p className="mt-2 text-base leading-relaxed text-slate-700">{toast.message}</p> : null}
-          </div>
-          {!isLoading ? (
-            <button
-              aria-label="Dismiss notification"
-              className={`rounded-full p-2 transition ${
-                isSuccess
-                  ? 'text-emerald-700 hover:bg-emerald-50'
-                  : 'text-rose-700 hover:bg-rose-50'
-              }`}
-              onClick={onClose}
-              type="button"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          ) : null}
-        </div>
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200/75">
-          <div
-            className={`h-full rounded-full ${
-              isLoading
-                ? 'animate-pulse bg-slate-500/80'
-                : isSuccess
-                  ? 'submission-toast-progress bg-emerald-600'
-                  : 'submission-toast-progress bg-rose-600'
-            }`}
-            style={!isLoading ? ({ '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<string, string>) : undefined}
-          />
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function ScopeDialog({
   title,
   busy,
@@ -1462,13 +1373,6 @@ export function ExpensesClient({
           title={confirmationDialog.action === 'clone' ? 'Confirm clone' : 'Confirm delete'}
         />
       ) : null}
-      {submissionToast ? (
-        <AnimatedSubmissionToast
-          key={`${submissionToast.id}-${submissionToast.kind}`}
-          toast={submissionToast}
-          onClose={() => setSubmissionToast(null)}
-        />
-      ) : null}
 
       <div className="space-y-4">
         {warnings.length > 0 ? (
@@ -1647,15 +1551,81 @@ export function ExpensesClient({
               </label>
 
               <div className="flex gap-2">
-                <button className={`${primaryButtonClass} inline-flex items-center gap-2`} disabled={saving} type="submit">
-                  {!editingExpenseId && saving ? (
-                    <span
-                      aria-hidden="true"
-                      className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white"
-                    />
-                  ) : null}
-                  {editingExpenseId ? 'Update' : saving ? 'Adding...' : 'Add'}
-                </button>
+                {!editingExpenseId && submissionToast ? (
+                  <div
+                    aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
+                    className={`relative inline-flex min-h-[44px] min-w-[128px] flex-1 items-center gap-2 overflow-hidden rounded-lg border px-4 py-2.5 text-sm font-semibold shadow-sm ${
+                      submissionToast.kind === 'loading'
+                        ? 'border-slate-300 bg-white text-slate-800'
+                        : submissionToast.kind === 'success'
+                          ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                          : 'border-rose-200 bg-rose-50 text-rose-800'
+                    }`}
+                    role={submissionToast.kind === 'error' ? 'alert' : 'status'}
+                  >
+                    {submissionToast.kind === 'loading' ? (
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-400/70 border-t-slate-700"
+                      />
+                    ) : submissionToast.kind === 'success' ? (
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2.6"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="m5 13 4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2.6"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M18 6 6 18M6 6l12 12" />
+                      </svg>
+                    )}
+                    <span className="truncate">
+                      {submissionToast.message ?? submissionToast.title}
+                    </span>
+                    <span className="absolute inset-x-0 bottom-0 h-1 bg-black/5">
+                      <span
+                        className={`block h-full ${
+                          submissionToast.kind === 'loading'
+                            ? 'animate-pulse bg-slate-500/80'
+                            : submissionToast.kind === 'success'
+                              ? 'submission-toast-progress bg-emerald-600'
+                              : 'submission-toast-progress bg-rose-600'
+                        }`}
+                        style={
+                          submissionToast.kind === 'loading'
+                            ? undefined
+                            : ({ '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<string, string>)
+                        }
+                      />
+                    </span>
+                  </div>
+                ) : (
+                  <button className={`${primaryButtonClass} inline-flex items-center gap-2`} disabled={saving} type="submit">
+                    {!editingExpenseId && saving ? (
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white"
+                      />
+                    ) : null}
+                    {editingExpenseId ? 'Update' : saving ? 'Adding...' : 'Add'}
+                  </button>
+                )}
                 {editingExpenseId ? (
                   <button
                     className={secondaryButtonClass}
