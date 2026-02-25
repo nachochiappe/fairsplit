@@ -48,6 +48,8 @@ const compactFieldClass =
 const tableControlLabelClass = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
 const tableControlFieldClass =
   'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+const tableControlSearchFieldClass =
+  `${tableControlFieldClass} pr-10 [&::-webkit-search-cancel-button]:appearance-none`;
 const primaryButtonClass =
   'rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const secondaryButtonClass =
@@ -379,6 +381,7 @@ export function ExpensesClient({
   const [sortField, setSortField] = useState<ExpenseSortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const hasSearchQuery = searchQuery.trim().length > 0;
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
   const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
@@ -1670,13 +1673,26 @@ export function ExpensesClient({
               </div>
               <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-4">
                 <div className="flex items-center gap-2 md:hidden">
-                  <input
-                    className={tableControlFieldClass}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search expenses..."
-                    type="search"
-                    value={searchQuery}
-                  />
+                  <div className="relative min-w-0 flex-1">
+                    <input
+                      aria-label="Search expenses"
+                      className={tableControlSearchFieldClass}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search expenses..."
+                      type="search"
+                      value={searchQuery}
+                    />
+                    {hasSearchQuery ? (
+                      <button
+                        aria-label="Clear expense search"
+                        className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        onClick={() => setSearchQuery('')}
+                        type="button"
+                      >
+                        X
+                      </button>
+                    ) : null}
+                  </div>
                   <button
                     aria-controls="expense-mobile-filters"
                     aria-expanded={isMobileFiltersOpen}
@@ -1692,13 +1708,25 @@ export function ExpensesClient({
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
                     <label className="hidden lg:col-span-8 md:block">
                       <span className={tableControlLabelClass}>Search</span>
-                      <input
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder="Description, category, or payer"
-                        type="search"
-                        value={searchQuery}
-                      />
+                      <div className="relative">
+                        <input
+                          className={tableControlSearchFieldClass}
+                          onChange={(event) => setSearchQuery(event.target.value)}
+                          placeholder="Description, category, or payer"
+                          type="search"
+                          value={searchQuery}
+                        />
+                        {hasSearchQuery ? (
+                          <button
+                            aria-label="Clear expense search"
+                            className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                            onClick={() => setSearchQuery('')}
+                            type="button"
+                          >
+                            X
+                          </button>
+                        ) : null}
+                      </div>
                     </label>
                     <label className="lg:col-span-4">
                       <span className={tableControlLabelClass}>Category</span>
