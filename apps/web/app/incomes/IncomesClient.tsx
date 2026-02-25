@@ -33,6 +33,15 @@ const subtleButtonClass =
 const primaryButtonClass =
   'inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-6 py-3 text-base font-bold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 
+const userInitialToneClasses = [
+  'border-rose-200 bg-rose-100 text-rose-700',
+  'border-amber-200 bg-amber-100 text-amber-700',
+  'border-emerald-200 bg-emerald-100 text-emerald-700',
+  'border-cyan-200 bg-cyan-100 text-cyan-700',
+  'border-indigo-200 bg-indigo-100 text-indigo-700',
+  'border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700',
+] as const;
+
 function toSupportedCurrencyCode(value: string): SupportedCurrencyCode {
   const normalizedValue = value.trim().toUpperCase();
   return supportedCurrencyCodes.includes(normalizedValue as SupportedCurrencyCode)
@@ -53,6 +62,17 @@ function getPreviousMonth(month: string): string {
 function getUserInitial(name: string): string {
   const trimmedName = name.trim();
   return trimmedName.length > 0 ? trimmedName[0]!.toUpperCase() : '?';
+}
+
+function getUserInitialToneClass(userId: string): (typeof userInitialToneClasses)[number] {
+  let hash = 0;
+  for (let index = 0; index < userId.length; index += 1) {
+    hash = (hash << 5) - hash + userId.charCodeAt(index);
+    hash |= 0;
+  }
+
+  const toneIndex = Math.abs(hash) % userInitialToneClasses.length;
+  return userInitialToneClasses[toneIndex]!;
 }
 
 function buildIncomeDrafts(users: User[], incomes: Income[]): Record<string, IncomeDraft[]> {
@@ -507,7 +527,9 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                 <div className="flex min-w-0 items-center gap-4">
                   <span
                     aria-hidden="true"
-                    className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-full bg-slate-200 text-base font-bold text-slate-600"
+                    className={`inline-flex h-10 w-10 flex-none items-center justify-center rounded-full border text-base font-bold ${getUserInitialToneClass(
+                      user.id,
+                    )}`}
                   >
                     {getUserInitial(user.name)}
                   </span>

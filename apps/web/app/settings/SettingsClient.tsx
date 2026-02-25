@@ -14,6 +14,7 @@ import {
   getSuperCategories,
   renameCategory,
   SuperCategory,
+  updateUser,
   updateSuperCategory,
 } from '../../lib/api';
 
@@ -21,18 +22,33 @@ interface SettingsClientProps {
   month: string;
   initialCategories: Category[];
   initialSuperCategories: SuperCategory[];
+  currentUserId: string | null;
+  currentUserName: string | null;
+  currentUserEmail: string | null;
 }
 
 function formatCountLabel(count: number, singular: string, plural: string): string {
   return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
-export function SettingsClient({ month, initialCategories, initialSuperCategories }: SettingsClientProps) {
+export function SettingsClient({
+  month,
+  initialCategories,
+  initialSuperCategories,
+  currentUserId,
+  currentUserName,
+  currentUserEmail,
+}: SettingsClientProps) {
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [superCategories, setSuperCategories] = useState<SuperCategory[]>(initialSuperCategories);
   const [categoryName, setCategoryName] = useState('');
   const [categorySuperCategoryId, setCategorySuperCategoryId] = useState<string>('unassigned');
   const [superCategoryName, setSuperCategoryName] = useState('');
+  const [displayNameDraft, setDisplayNameDraft] = useState(currentUserName ?? '');
+  const [resolvedCurrentUserName, setResolvedCurrentUserName] = useState(currentUserName ?? '');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +76,39 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
     const [nextCategories, nextSuperCategories] = await Promise.all([getCategories(), getSuperCategories()]);
     setCategories(nextCategories);
     setSuperCategories(nextSuperCategories);
+  };
+
+  const onUpdateDisplayName = async () => {
+    if (!currentUserId) {
+      setProfileError('No active user found in session.');
+      return;
+    }
+
+    const nextName = displayNameDraft.trim();
+    if (!nextName) {
+      setProfileError('Display name is required.');
+      return;
+    }
+
+    if (nextName === resolvedCurrentUserName.trim()) {
+      setProfileSuccess('Display name is already up to date.');
+      setProfileError(null);
+      return;
+    }
+
+    try {
+      setProfileSaving(true);
+      setProfileError(null);
+      setProfileSuccess(null);
+      const updated = await updateUser(currentUserId, { name: nextName });
+      setResolvedCurrentUserName(updated.name);
+      setDisplayNameDraft(updated.name);
+      setProfileSuccess('Display name updated.');
+    } catch (profileUpdateError) {
+      setProfileError(profileUpdateError instanceof Error ? profileUpdateError.message : 'Failed to update display name');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const onCreateCategory = async () => {
@@ -360,8 +409,62 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
 
   return (
     <AppShell month={month} title="Settings" subtitle="Manage categories and super categories used for monthly expenses">
+      <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-semibold text-slate-900">Personal Information</h2>
+        <p className="mt-2 text-base text-slate-500">Your identity across the Fairsplit platform.</p>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div>
+              <p className="text-xl font-semibold text-slate-700">Display Name</p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  aria-label="Display name"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-medium text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  onChange={(event) => setDisplayNameDraft(event.target.value)}
+                  placeholder="Your name"
+                  value={displayNameDraft}
+                />
+                <button
+                  className="inline-flex h-12 items-center justify-center rounded-xl bg-brand-600 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={profileSaving || !currentUserId}
+                  onClick={() => void onUpdateDisplayName()}
+                  type="button"
+                >
+                  {profileSaving ? 'Updating...' : 'Update'}
+                </button>
+              </div>
+              <p className="mt-3 text-sm text-slate-500">This is how your partner will see you in shared expenses.</p>
+            </div>
+
+            <div>
+              <p className="text-xl font-semibold text-slate-700">Email Address</p>
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-300 bg-slate-100 px-4 py-3">
+                <span className="truncate text-lg font-medium text-slate-500">
+                  {currentUserEmail ?? 'No email available in this session'}
+                </span>
+                <svg aria-hidden="true" className="ml-3 h-6 w-6 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M5.5 8V6a4.5 4.5 0 1 1 9 0v2h.25A2.25 2.25 0 0 1 17 10.25v5.5A2.25 2.25 0 0 1 14.75 18h-9.5A2.25 2.25 0 0 1 3 15.75v-5.5A2.25 2.25 0 0 1 5.25 8h.25Zm7.5 0V6a3 3 0 1 0-6 0v2h6Z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {profileError ? (
+          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {profileError}
+          </div>
+        ) : null}
+        {profileSuccess ? (
+          <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            {profileSuccess}
+          </div>
+        ) : null}
+      </section>
+
       <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-3xl font-semibold text-slate-900">Super Categories</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Super Categories</h2>
         <p className="mt-2 text-base text-slate-500">Default system groups for high-level tracking.</p>
 
         {error ? (
@@ -408,7 +511,7 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
                 <div className="flex min-w-0 items-start gap-3">
                   {renderSuperCategoryIcon(superCategory.name)}
                   <div className="min-w-0">
-                    <p className="min-w-0 text-lg font-semibold text-slate-800 sm:text-xl">
+                    <p className="min-w-0 text-base font-semibold text-slate-800 sm:text-lg">
                       {superCategory.name}
                     </p>
                     <p className="text-sm font-medium text-slate-400 sm:text-base">
@@ -477,7 +580,7 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
       <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-3xl font-semibold text-slate-900">Detailed Categories</h2>
+            <h2 className="text-2xl font-semibold text-slate-900">Detailed Categories</h2>
             <p className="mt-2 text-base text-slate-500">Map specific spending labels to your super categories.</p>
           </div>
           <span className="inline-flex w-fit items-center rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">
@@ -550,7 +653,7 @@ export function SettingsClient({ month, initialCategories, initialSuperCategorie
 
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-xl font-semibold text-slate-800">{category.name}</h3>
+                        <h3 className="text-lg font-semibold text-slate-800">{category.name}</h3>
                         {category.archivedAt ? (
                           <span className="rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-600">
                             Archived

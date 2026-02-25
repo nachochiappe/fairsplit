@@ -1,4 +1,5 @@
-import { getCategories, getSuperCategories } from '../../lib/api';
+import { cookies } from 'next/headers';
+import { getCategories, getSuperCategories, getUsers } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { SettingsClient } from './SettingsClient';
 
@@ -7,14 +8,49 @@ interface SettingsPageProps {
 }
 
 const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
+const SESSION_COOKIE = 'fairsplit_session';
+
+function parseSessionCookie(rawValue: string | undefined): { userId: string | null; email: string | null } {
+  if (!rawValue) {
+    return { userId: null, email: null };
+  }
+
+  try {
+    const decoded = decodeURIComponent(rawValue);
+    const parsed = JSON.parse(decoded) as { userId?: unknown; email?: unknown };
+    return {
+      userId: typeof parsed.userId === 'string' && parsed.userId.trim().length > 0 ? parsed.userId : null,
+      email: typeof parsed.email === 'string' && parsed.email.trim().length > 0 ? parsed.email : null,
+    };
+  } catch {
+    return { userId: null, email: null };
+  }
+}
 
 export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? getCurrentMonth();
-  const [categories, superCategories] = await Promise.all([
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = parseSessionCookie(sessionCookie);
+
+  const [categories, superCategories, users] = await Promise.all([
     getCategories(SERVER_READ_CACHE),
     getSuperCategories(SERVER_READ_CACHE),
+    getUsers(SERVER_READ_CACHE),
   ]);
 
-  return <SettingsClient initialCategories={categories} initialSuperCategories={superCategories} month={month} />;
+  const currentUser = session.userId
+    ? users.find((user) => user.id === session.userId) ?? null
+    : null;
+
+  return (
+    <SettingsClient
+      currentUserEmail={session.email}
+      currentUserId={currentUser?.id ?? null}
+      currentUserName={currentUser?.name ?? null}
+      initialCategories={categories}
+      initialSuperCategories={superCategories}
+      month={month}
+    />
+  );
 }

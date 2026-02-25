@@ -149,6 +149,15 @@ export async function getUsers(init?: NextRequestInit): Promise<User[]> {
   return parseResponse<User[]>(response);
 }
 
+export async function updateUser(id: string, payload: { name: string }): Promise<User> {
+  const response = await fetchFromApi(`${API_BASE_URL}/users/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseResponse<User>(response);
+}
+
 export async function getMonths(init?: NextRequestInit): Promise<string[]> {
   const response = await fetchFromApi(`${API_BASE_URL}/months`, init ?? { cache: 'no-store' });
   return parseResponse<string[]>(response);
