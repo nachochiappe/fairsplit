@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { TitleMark } from '../../../components/TitleMark';
 
 const SESSION_COOKIE = 'fairsplit_session';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
@@ -82,9 +83,14 @@ export default function AuthCallbackPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg items-center px-4 py-10">
       <section className="w-full rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm md:p-9">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Auth callback</h1>
-        <p className="mt-4 text-sm text-slate-600">{status}</p>
+        <div className="flex items-center gap-6">
+          <TitleMark className="h-10 w-10 shrink-0 rounded-xl" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Auth callback</h1>
+            <p className="mt-4 text-sm text-slate-600">{status}</p>
+          </div>
+        </div>
       </section>
     </main>
   );

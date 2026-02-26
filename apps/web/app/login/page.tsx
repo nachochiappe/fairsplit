@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { TitleMark } from '../../components/TitleMark';
 
 const SESSION_COOKIE = 'fairsplit_session';
 
@@ -71,9 +72,14 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg items-center px-4 py-10">
       <section className="w-full rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm md:p-9">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-600">Enter your email to receive a magic link.</p>
+        <div className="flex items-center gap-6">
+          <TitleMark className="h-10 w-10 shrink-0 rounded-xl" />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Sign in</h1>
+            <p className="mt-2 text-sm text-slate-600">Enter your email to receive a magic link.</p>
+          </div>
+        </div>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm font-medium text-slate-700" htmlFor="email">
