@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { computeInstallmentAmounts } from '@fairsplit/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { AppShell } from '../../components/AppShell';
 import { ActionButton } from '../../components/ActionButton';
@@ -689,6 +689,8 @@ export function ExpensesClient({
         installmentEntryMode: 'perInstallment',
         totalAmount: undefined,
       });
+      form.resetField('amount', { defaultValue: undefined });
+      form.resetField('totalAmount', { defaultValue: undefined });
     },
     [defaultPaidByUserId, form],
   );
@@ -1547,7 +1549,26 @@ export function ExpensesClient({
                         <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                           $
                         </span>
-                        <input className={moneyInputClass} min="0" step="0.01" type="number" {...form.register('totalAmount')} />
+                        <Controller
+                          control={form.control}
+                          name="totalAmount"
+                          render={({ field }) => (
+                            <input
+                              className={moneyInputClass}
+                              min="0"
+                              step="0.01"
+                              type="number"
+                              value={field.value ?? ''}
+                              onBlur={field.onBlur}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                field.onChange(nextValue === '' ? undefined : Number(nextValue));
+                              }}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          )}
+                        />
                       </div>
                     </label>
                   ) : (
@@ -1557,7 +1578,26 @@ export function ExpensesClient({
                         <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                           $
                         </span>
-                        <input className={moneyInputClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                        <Controller
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <input
+                              className={moneyInputClass}
+                              min="0"
+                              step="0.01"
+                              type="number"
+                              value={field.value ?? ''}
+                              onBlur={field.onBlur}
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
+                                field.onChange(nextValue === '' ? undefined : Number(nextValue));
+                              }}
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          )}
+                        />
                       </div>
                     </label>
                   )}
@@ -1569,7 +1609,26 @@ export function ExpensesClient({
                     <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                       $
                     </span>
-                    <input className={moneyInputClass} min="0" step="0.01" type="number" {...form.register('amount')} />
+                    <Controller
+                      control={form.control}
+                      name="amount"
+                      render={({ field }) => (
+                        <input
+                          className={moneyInputClass}
+                          min="0"
+                          step="0.01"
+                          type="number"
+                          value={field.value ?? ''}
+                          onBlur={field.onBlur}
+                          onChange={(event) => {
+                            const nextValue = event.target.value;
+                            field.onChange(nextValue === '' ? undefined : Number(nextValue));
+                          }}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      )}
+                    />
                   </div>
                 </label>
               )}
