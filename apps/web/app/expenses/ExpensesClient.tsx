@@ -1432,7 +1432,7 @@ export function ExpensesClient({
                 <button
                   aria-controls="add-expense-panel"
                   aria-expanded={isMobileAddExpenseOpen}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
                   onClick={() => setIsMobileAddExpenseOpen((isOpen) => !isOpen)}
                   type="button"
                 >
@@ -1696,7 +1696,7 @@ export function ExpensesClient({
                 <button
                   aria-controls="fx-defaults-panel"
                   aria-expanded={isMobileFxOpen}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
+                  className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
                   onClick={() => setIsMobileFxOpen((isOpen) => !isOpen)}
                   type="button"
                 >
@@ -1799,7 +1799,7 @@ export function ExpensesClient({
                     {hasSearchQuery ? (
                       <button
                         aria-label="Clear expense search"
-                        className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                         onClick={() => setSearchQuery('')}
                         type="button"
                       >
@@ -1810,7 +1810,7 @@ export function ExpensesClient({
                   <button
                     aria-controls="expense-mobile-filters"
                     aria-expanded={isMobileFiltersOpen}
-                    className="shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    className="shrink-0 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 min-h-11"
                     onClick={() => setIsMobileFiltersOpen((isOpen) => !isOpen)}
                     type="button"
                   >
@@ -1833,7 +1833,7 @@ export function ExpensesClient({
                         {hasSearchQuery ? (
                           <button
                             aria-label="Clear expense search"
-                            className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                            className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                             onClick={() => setSearchQuery('')}
                             type="button"
                           >
@@ -1891,7 +1891,7 @@ export function ExpensesClient({
                         <p className="text-xs text-slate-500">Use filters to narrow results, then sort to compare spending quickly.</p>
                         {hasActiveControls ? (
                           <button
-                            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                            className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                             onClick={() => {
                               setSearchQuery('');
                               setSelectedCategoryId('all');
@@ -2084,7 +2084,7 @@ export function ExpensesClient({
                         <div className="flex items-center gap-3">
                           <button
                             aria-label={`Previous ${section.title} page`}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                             disabled={section.currentPage === 1 || sectionLoading[section.key]}
                             onClick={() =>
                               setSectionPages((previous) => ({
@@ -2100,7 +2100,7 @@ export function ExpensesClient({
                           </button>
                           <button
                             aria-label={`Next ${section.title} page`}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                             disabled={!section.canMoveNext || sectionLoading[section.key]}
                             onClick={async () => {
                               const targetPage = section.currentPage + 1;

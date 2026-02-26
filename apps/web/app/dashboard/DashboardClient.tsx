@@ -89,7 +89,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
             <button
               aria-controls="expense-category-chart-content"
               aria-expanded={isCategoryChartExpanded}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+              className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
               type="button"
               onClick={() => setIsCategoryChartExpanded((current) => !current)}
             >

@@ -525,7 +525,7 @@ export function SettingsClient({
                   <ActionButton
                     action="rename"
                     aria-label={`Rename ${superCategory.name}`}
-                    className="h-9 w-9 sm:hidden"
+                    className="h-11 w-11 sm:hidden"
                     disabled={saving}
                     onClick={() => void onRenameSuperCategory(superCategory)}
                     size="icon"
@@ -547,7 +547,7 @@ export function SettingsClient({
                     <ActionButton
                       action="archive"
                       aria-label={`Archive ${superCategory.name}`}
-                      className="h-9 w-9 sm:hidden"
+                      className="h-11 w-11 sm:hidden"
                       disabled={saving}
                       onClick={() => void onArchiveSuperCategory(superCategory)}
                       size="icon"
@@ -684,7 +684,7 @@ export function SettingsClient({
                       </label>
                       <select
                         id={`group-${category.id}`}
-                        className="h-7 min-h-7 min-w-0 max-w-[180px] flex-1 rounded-[16px] border border-slate-300 bg-slate-50 px-2 text-xs text-slate-700"
+                        className="h-11 min-h-11 min-w-0 max-w-[180px] flex-1 rounded-[16px] border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700"
                         disabled={saving}
                         onChange={(event) => void onAssignCategory(category, event.target.value)}
                         value={category.superCategoryId ?? 'unassigned'}
@@ -708,7 +708,7 @@ export function SettingsClient({
                     <ActionButton
                       action="rename"
                       aria-label={`Rename ${category.name}`}
-                      className="h-9 w-9 lg:hidden"
+                      className="h-11 w-11 lg:hidden"
                       onClick={() => void onRenameCategory(category)}
                       size="icon"
                     >
@@ -727,7 +727,7 @@ export function SettingsClient({
                     <ActionButton
                       action="archive"
                       aria-label={`Archive ${category.name}`}
-                      className="h-9 w-9 lg:hidden"
+                      className="h-11 w-11 lg:hidden"
                       onClick={() => void onArchiveCategory(category)}
                       size="icon"
                     >

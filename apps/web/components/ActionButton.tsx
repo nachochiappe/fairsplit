@@ -20,8 +20,8 @@ const actionToneClass: Record<ActionKind, string> = {
 export function ActionButton({ action, className, size = 'label', type = 'button', ...props }: ActionButtonProps) {
   const sizeClass =
     size === 'icon'
-      ? 'inline-flex h-8 w-8 items-center justify-center rounded-lg'
-      : 'inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-medium';
+      ? 'inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-lg md:h-10 md:w-10 lg:h-9 lg:w-9'
+      : 'inline-flex min-h-11 items-center justify-center rounded-lg px-3 py-2 text-sm font-medium md:min-h-10 md:py-1.5';
 
   const classes = [
     sizeClass,
