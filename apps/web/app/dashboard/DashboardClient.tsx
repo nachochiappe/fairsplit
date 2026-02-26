@@ -6,6 +6,7 @@ import { type Income, type SettlementResponse, type User } from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MonthSelector } from '../../components/MonthSelector';
+import { TitleMark } from '../../components/TitleMark';
 
 interface DashboardClientProps {
   month: string;
@@ -33,12 +34,15 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
     <main id="main-content" className="mx-auto min-h-screen w-full max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
       <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">Settlement Dashboard</h1>
-            <p className="mt-2 max-w-2xl text-base text-slate-600">
-              See fair monthly contributions and transfer recommendation
-            </p>
+          <div className="flex items-center gap-6">
+            <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">Settlement Dashboard</h1>
+              <p className="mt-2 max-w-2xl text-base text-slate-600">
+                See fair monthly contributions and transfer recommendation
+              </p>
+            </div>
           </div>
           <MonthSelector month={month} />
         </div>
