@@ -16,6 +16,6 @@
   <rect x="0" y="0" width="640" height="640" rx="40" ry="40" fill="#E2E8F0"/>
   <rect x="0" y="0" width="640" height="640" rx="40" ry="40" fill="url(#gloss)"/>
   <g clip-path="url(#squareClip)">
-    <rect x="-160" y="294" width="960" height="52" fill="url(#band)" transform="rotate(45 320 320)"/>
+    <rect x="-160" y="275" width="960" height="90" fill="url(#band)" transform="rotate(45 320 320)"/>
   </g>
 </svg>
