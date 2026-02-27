@@ -3,10 +3,6 @@ import { getCategories, getSuperCategories, getUsers } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { SettingsClient } from './SettingsClient';
 
-interface SettingsPageProps {
-  searchParams?: Promise<{ month?: string }>;
-}
-
 const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
 const SESSION_COOKIE = 'fairsplit_session';
 
@@ -27,9 +23,8 @@ function parseSessionCookie(rawValue: string | undefined): { userId: string | nu
   }
 }
 
-export default async function SettingsPage({ searchParams }: SettingsPageProps) {
-  const resolvedSearchParams = await searchParams;
-  const month = resolvedSearchParams?.month ?? getCurrentMonth();
+export default async function SettingsPage() {
+  const month = getCurrentMonth();
   const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = parseSessionCookie(sessionCookie);
 

@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const links = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/incomes', label: 'Incomes' },
-  { href: '/expenses', label: 'Expenses' },
-  { href: '/settings', label: 'Settings' },
+  { href: '/dashboard', label: 'Dashboard', monthScoped: true },
+  { href: '/incomes', label: 'Incomes', monthScoped: true },
+  { href: '/expenses', label: 'Expenses', monthScoped: true },
+  { href: '/settings', label: 'Settings', monthScoped: false },
 ];
 
 export function Nav({ month }: { month: string }) {
@@ -19,7 +19,7 @@ export function Nav({ month }: { month: string }) {
       className="mb-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-sm backdrop-blur md:grid-cols-5"
     >
       {links.map((link) => {
-        const href = month ? `${link.href}?month=${month}` : link.href;
+        const href = month && link.monthScoped ? `${link.href}?month=${month}` : link.href;
         const isCurrent = pathname === link.href;
 
         return (
