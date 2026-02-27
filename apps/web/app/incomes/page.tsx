@@ -6,7 +6,7 @@ interface IncomesPageProps {
   searchParams?: Promise<{ month?: string }>;
 }
 
-const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
+const SERVER_READ_CACHE = { cache: 'no-store' } as const;
 const SESSION_COOKIE = 'fairsplit_session';
 
 function parseSessionCookie(rawValue: string | undefined): { userId: string | null } {
