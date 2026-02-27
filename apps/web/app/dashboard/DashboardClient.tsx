@@ -55,7 +55,7 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
         <NavItem href="/dashboard" label="Dashboard" month={month} />
         <NavItem href="/incomes" label="Incomes" month={month} />
         <NavItem href="/expenses" label="Expenses" month={month} />
-        <NavItem href="/settings" label="Settings" month={month} />
+        <NavItem href="/settings" label="Settings" month={month} monthScoped={false} />
         <form action="/logout" method="post" className="h-full">
           <button
             type="submit"
@@ -203,9 +203,9 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NavItem({ href, label, month }: { href: string; label: string; month: string }) {
+function NavItem({ href, label, month, monthScoped = true }: { href: string; label: string; month: string; monthScoped?: boolean }) {
   const pathname = usePathname();
-  const fullHref = `${href}?month=${month}`;
+  const fullHref = monthScoped ? `${href}?month=${month}` : href;
   const isCurrent = pathname === href;
 
   return (
