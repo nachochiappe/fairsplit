@@ -9,6 +9,7 @@ import {
   assignCategorySuperCategory,
   Category,
   createCategory,
+  createHouseholdInvite,
   createSuperCategory,
   getCategories,
   getSuperCategories,
@@ -52,6 +53,11 @@ export function SettingsClient({
   const [saving, setSaving] = useState(false);
   const [superCategoryError, setSuperCategoryError] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -109,6 +115,34 @@ export function SettingsClient({
       setProfileError(profileUpdateError instanceof Error ? profileUpdateError.message : 'Failed to update display name');
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const onCreateInviteCode = async () => {
+    try {
+      setInviteLoading(true);
+      setInviteError(null);
+      setInviteSuccess(null);
+      const invite = await createHouseholdInvite();
+      setInviteCode(invite.code);
+      setInviteExpiresAt(invite.expiresAt);
+      setInviteSuccess('Invite code generated. Share it with your partner.');
+    } catch (inviteCreateError) {
+      setInviteError(inviteCreateError instanceof Error ? inviteCreateError.message : 'Failed to create invite code');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const onCopyInviteCode = async () => {
+    if (!inviteCode) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      setInviteSuccess('Invite code copied to clipboard.');
+    } catch {
+      setInviteError('Unable to copy invite code. Please copy it manually.');
     }
   };
 
@@ -460,6 +494,51 @@ export function SettingsClient({
         {profileSuccess ? (
           <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
             {profileSuccess}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-semibold text-slate-900">Invite Someone</h2>
+        <p className="mt-2 text-base text-slate-500">Generate a one-time code so another person can join your household.</p>
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button
+              className="inline-flex h-12 items-center justify-center rounded-xl bg-brand-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={inviteLoading}
+              onClick={() => void onCreateInviteCode()}
+              type="button"
+            >
+              {inviteLoading ? 'Generating...' : 'Generate Invite Code'}
+            </button>
+            {inviteCode ? (
+              <button
+                className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-300 bg-white px-6 text-base font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                onClick={() => void onCopyInviteCode()}
+                type="button"
+              >
+                Copy Code
+              </button>
+            ) : null}
+          </div>
+          {inviteCode ? (
+            <div className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Invite code</p>
+              <p className="mt-1 text-xl font-bold tracking-[0.2em] text-slate-900">{inviteCode}</p>
+              {inviteExpiresAt ? (
+                <p className="mt-2 text-sm text-slate-500">Expires: {new Date(inviteExpiresAt).toLocaleString()}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        {inviteError ? (
+          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {inviteError}
+          </div>
+        ) : null}
+        {inviteSuccess ? (
+          <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            {inviteSuccess}
           </div>
         ) : null}
       </section>

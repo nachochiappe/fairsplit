@@ -13,11 +13,14 @@ model User {
   email            String?
   authUserId       String?
   householdId      String?
+  onboardingHouseholdDecisionAt DateTime?
   household        Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
   createdAt        DateTime          @default(now())
   incomes          MonthlyIncome[]
   paidExpenses     Expense[]         @relation("ExpensePaidByUser")
   fixedTemplates   ExpenseTemplate[] @relation("TemplatePaidByUser")
+  createdInvites   HouseholdInvite[] @relation("InviteCreatedBy")
+  consumedInvites  HouseholdInvite[] @relation("InviteConsumedBy")
 
   @@unique([authUserId])
   @@index([householdId])
@@ -187,4 +190,23 @@ model Household {
   categories      Category[]
   superCategories SuperCategory[]
   exchangeRates   MonthlyExchangeRate[]
+  invites         HouseholdInvite[]
+}
+
+model HouseholdInvite {
+  id               String     @id @default(cuid())
+  householdId      String
+  household        Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  code             String     @unique
+  createdByUserId  String
+  createdByUser    User       @relation("InviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  consumedByUserId String?
+  consumedByUser   User?      @relation("InviteConsumedBy", fields: [consumedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime   @default(now())
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  isRevoked        Boolean    @default(false)
+
+  @@index([householdId, expiresAt])
+  @@index([createdByUserId])
 }

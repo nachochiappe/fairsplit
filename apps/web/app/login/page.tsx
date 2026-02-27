@@ -6,6 +6,27 @@ import { TitleMark } from '../../components/TitleMark';
 
 const SESSION_COOKIE = 'fairsplit_session';
 
+function parseSessionCookie(): { needsHouseholdSetup: boolean } {
+  const cookiePair = document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${SESSION_COOKIE}=`));
+  if (!cookiePair) {
+    return { needsHouseholdSetup: false };
+  }
+
+  try {
+    const rawValue = cookiePair.slice(`${SESSION_COOKIE}=`.length);
+    const parsed = JSON.parse(decodeURIComponent(rawValue)) as { needsHouseholdSetup?: unknown; householdId?: unknown };
+    if (typeof parsed.needsHouseholdSetup === 'boolean') {
+      return { needsHouseholdSetup: parsed.needsHouseholdSetup };
+    }
+    return { needsHouseholdSetup: !(typeof parsed.householdId === 'string' && parsed.householdId.trim().length > 0) };
+  } catch {
+    return { needsHouseholdSetup: false };
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -24,7 +45,8 @@ export default function LoginPage() {
     }
 
     if (document.cookie.includes(`${SESSION_COOKIE}=`)) {
-      router.replace('/dashboard');
+      const session = parseSessionCookie();
+      router.replace(session.needsHouseholdSetup ? '/onboarding/household' : '/dashboard');
     }
   }, [router]);
 

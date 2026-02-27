@@ -105,3 +105,34 @@ pnpm lint
 ```
 
 Note: API integration tests require `TEST_DATABASE_URL` and will fail if it is missing or matches `DATABASE_URL`.
+
+## Real Email E2E (AgentMail)
+
+Run:
+
+```bash
+pnpm test:e2e:agentmail:onboarding
+```
+
+Required env vars:
+- `AGENTMAIL_API_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Optional overrides:
+- `E2E_APP_URL` (default `http://localhost:3100`)
+- `E2E_API_BASE_URL` (default `http://localhost:4100/api`)
+- `E2E_EMAIL_TIMEOUT_MS` (default `300000`)
+- `E2E_EMAIL_POLL_MS` (default `3000`)
+- `E2E_AGENTMAIL_INVITER_INBOX_ID` and `E2E_AGENTMAIL_JOINER_INBOX_ID` (optional, useful when AgentMail inbox creation limit is reached)
+- `E2E_FORCE_LOCAL_CALLBACK` (default `true`, rewrites Supabase verify links to local `/auth/callback`)
+
+This test:
+- Requests real Supabase magic links to AgentMail inboxes.
+- Completes both user logins through callback links in browser (`playwright-cli`).
+- Generates an invite from user A household.
+- Uses user B onboarding UI to join with invite code.
+- Verifies setup is completed and locked for user B.
+
+Important:
+- Keep web/API dev servers on the same ports used by the test (`3100` and `4100`), or explicitly set `E2E_APP_URL`/`E2E_API_BASE_URL`.
