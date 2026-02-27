@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TitleMark } from '../../../components/TitleMark';
+import type { AuthLinkResponse } from '../../../lib/api';
 
 const SESSION_COOKIE = 'fairsplit_session';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
@@ -61,17 +62,19 @@ export default function AuthCallbackPage() {
           throw new Error(data.error ?? 'Failed to link account.');
         }
 
-        const linked = await response.json();
+        const linked = (await response.json()) as AuthLinkResponse;
         const sessionPayload = {
           userId: linked?.user?.id,
           householdId: linked?.user?.householdId,
           email: linked?.user?.email,
           authUserId: linked?.user?.authUserId,
+          onboardingHouseholdDecisionAt: linked?.user?.onboardingHouseholdDecisionAt ?? null,
+          needsHouseholdSetup: linked?.needsHouseholdSetup ?? false,
         };
 
         document.cookie = `${SESSION_COOKIE}=${encodeURIComponent(JSON.stringify(sessionPayload))}; Path=/; Max-Age=2592000; SameSite=Lax`;
         setStatus('Account linked. Redirecting...');
-        router.replace('/dashboard');
+        router.replace(linked?.needsHouseholdSetup ? '/onboarding/household' : '/dashboard');
       } catch (error) {
         setStatus(error instanceof Error ? error.message : 'Authentication failed.');
       }

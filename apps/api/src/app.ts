@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
 import cors from 'cors';
 import Decimal from 'decimal.js';
 import express, { Express, Request, Response } from 'express';
@@ -114,8 +115,10 @@ const upsertMonthlyExchangeRateSchema = z.object({
 const authLinkSchema = z.object({
   authUserId: z.string().trim().min(1),
   email: z.string().trim().email(),
-  householdId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(1).optional(),
+});
+const joinHouseholdWithCodeSchema = z.object({
+  code: z.string().trim().min(4).max(64),
 });
 
 type ExpenseWithRelations = Awaited<
@@ -245,7 +248,13 @@ interface RequestAuthContext {
   householdId: string;
 }
 
-async function requireAuthContext(req: Request, res: Response): Promise<RequestAuthContext | null> {
+interface RequestUserContext {
+  userId: string;
+  householdId: string | null;
+  onboardingHouseholdDecisionAt: Date | null;
+}
+
+async function requireUserContext(req: Request, res: Response): Promise<RequestUserContext | null> {
   const rawUserId = req.header('x-fairsplit-user-id')?.trim();
   if (!rawUserId) {
     res.status(401).json({ error: 'Missing authentication context.' });
@@ -254,18 +263,50 @@ async function requireAuthContext(req: Request, res: Response): Promise<RequestA
 
   const user = await prisma.user.findUnique({
     where: { id: rawUserId },
-    select: { id: true, householdId: true },
+    select: { id: true, householdId: true, onboardingHouseholdDecisionAt: true },
   });
   if (!user) {
     res.status(401).json({ error: 'Invalid authentication context.' });
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    householdId: user.householdId,
+    onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt,
+  };
+}
+
+async function requireAuthContext(req: Request, res: Response): Promise<RequestAuthContext | null> {
+  const user = await requireUserContext(req, res);
+  if (!user) {
     return null;
   }
   if (!user.householdId) {
     res.status(403).json({ error: 'Authenticated user is not linked to a household.' });
     return null;
   }
+  if (!user.onboardingHouseholdDecisionAt) {
+    res.status(403).json({ error: 'Household setup is required before accessing this endpoint.' });
+    return null;
+  }
 
-  return { userId: user.id, householdId: user.householdId };
+  return { userId: user.userId, householdId: user.householdId };
+}
+
+function normalizeInviteCode(rawCode: string): string {
+  return rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function generateInviteCode(length = 8): string {
+  const bytes = randomBytes(length);
+  let code = '';
+  for (let index = 0; index < length; index += 1) {
+    code += INVITE_CODE_ALPHABET[bytes[index] % INVITE_CODE_ALPHABET.length];
+  }
+  return code;
 }
 
 export const createApp = (): Express => {
@@ -290,7 +331,6 @@ export const createApp = (): Express => {
 
     const authUserId = parsed.data.authUserId;
     const email = parsed.data.email.trim().toLowerCase();
-    const householdId = parsed.data.householdId?.trim();
     const displayName = parsed.data.name?.trim() ?? defaultNameFromEmail(email);
 
     const toResponse = (user: {
@@ -299,6 +339,7 @@ export const createApp = (): Express => {
       email: string | null;
       authUserId: string | null;
       householdId: string | null;
+      onboardingHouseholdDecisionAt: Date | null;
       createdAt: Date;
       household: { id: string; name: string; createdAt: Date } | null;
     }, created: boolean) => ({
@@ -308,6 +349,7 @@ export const createApp = (): Express => {
         email: user.email,
         authUserId: user.authUserId,
         householdId: user.householdId,
+        onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt?.toISOString() ?? null,
         createdAt: user.createdAt.toISOString(),
       },
       household: user.household
@@ -318,6 +360,7 @@ export const createApp = (): Express => {
           }
         : null,
       created,
+      needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
     });
 
     try {
@@ -329,12 +372,8 @@ export const createApp = (): Express => {
         return res.json(toResponse(linkedByAuthId, false));
       }
 
-      const candidateWhere = householdId
-        ? { email: { equals: email, mode: 'insensitive' as const }, householdId, authUserId: null }
-        : { email: { equals: email, mode: 'insensitive' as const }, authUserId: null };
-
       const candidateMatches = await prisma.user.findMany({
-        where: candidateWhere,
+        where: { email: { equals: email, mode: 'insensitive' as const }, authUserId: null },
         include: { household: true },
         take: 2,
       });
@@ -376,43 +415,15 @@ export const createApp = (): Express => {
         return res.json(toResponse(linked, false));
       }
 
-      if (householdId) {
-        const existingHousehold = await prisma.household.findUnique({
-          where: { id: householdId },
-        });
-        if (!existingHousehold) {
-          return res.status(404).json({ error: 'Household not found.' });
-        }
-
-        const createdInExistingHousehold = await prisma.user.create({
-          data: {
-            name: displayName,
-            email,
-            authUserId,
-            householdId: existingHousehold.id,
-          },
-          include: { household: true },
-        });
-
-        return res.status(201).json(toResponse(createdInExistingHousehold, true));
-      }
-
-      const created = await prisma.$transaction(async (tx) => {
-        const household = await tx.household.create({
-          data: {
-            name: `${displayName}'s Household`,
-          },
-        });
-        const user = await tx.user.create({
-          data: {
-            name: displayName,
-            email,
-            authUserId,
-            householdId: household.id,
-          },
-          include: { household: true },
-        });
-        return user;
+      const created = await prisma.user.create({
+        data: {
+          name: displayName,
+          email,
+          authUserId,
+          householdId: null,
+          onboardingHouseholdDecisionAt: null,
+        },
+        include: { household: true },
       });
 
       return res.status(201).json(toResponse(created, true));
@@ -435,6 +446,228 @@ export const createApp = (): Express => {
         error: error instanceof Error ? error.message : 'Failed to link auth identity.',
       });
     }
+  });
+
+  app.get('/api/household/setup-status', async (req: Request, res: Response) => {
+    const auth = await requireUserContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const needsHouseholdSetup = auth.householdId === null && auth.onboardingHouseholdDecisionAt === null;
+    return res.json({
+      needsHouseholdSetup,
+      decisionLocked: auth.onboardingHouseholdDecisionAt !== null,
+    });
+  });
+
+  app.post('/api/household/invites', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const code = generateInviteCode(8);
+      try {
+        const invite = await prisma.householdInvite.create({
+          data: {
+            householdId: auth.householdId,
+            code,
+            createdByUserId: auth.userId,
+            expiresAt,
+          },
+        });
+
+        return res.status(201).json({
+          code: invite.code,
+          expiresAt: invite.expiresAt.toISOString(),
+        });
+      } catch (error) {
+        if (getPrismaErrorCode(error) !== 'P2002') {
+          return res.status(500).json({ error: 'Failed to create invite code.' });
+        }
+      }
+    }
+
+    return res.status(500).json({ error: 'Failed to create invite code. Please retry.' });
+  });
+
+  app.post('/api/household/join-with-code', async (req: Request, res: Response) => {
+    const auth = await requireUserContext(req, res);
+    if (!auth) {
+      return;
+    }
+    if (auth.householdId || auth.onboardingHouseholdDecisionAt) {
+      return res.status(409).json({ error: 'Household setup has already been completed.' });
+    }
+
+    const parsed = joinHouseholdWithCodeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const normalizedCode = normalizeInviteCode(parsed.data.code);
+    const invite = await prisma.householdInvite.findUnique({
+      where: { code: normalizedCode },
+      include: { household: true },
+    });
+    if (!invite) {
+      return res.status(404).json({ error: 'Invite code not found.' });
+    }
+    if (invite.isRevoked || invite.consumedAt || invite.expiresAt.getTime() <= Date.now()) {
+      return res.status(410).json({ error: 'Invite code is no longer valid.' });
+    }
+
+    const decisionAt = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.updateMany({
+        where: {
+          id: auth.userId,
+          householdId: null,
+          onboardingHouseholdDecisionAt: null,
+        },
+        data: {
+          householdId: invite.householdId,
+          onboardingHouseholdDecisionAt: decisionAt,
+        },
+      });
+      if (updatedUser.count !== 1) {
+        throw new Error('Household setup has already been completed.');
+      }
+
+      const consumed = await tx.householdInvite.updateMany({
+        where: {
+          id: invite.id,
+          consumedAt: null,
+          isRevoked: false,
+        },
+        data: {
+          consumedAt: decisionAt,
+          consumedByUserId: auth.userId,
+        },
+      });
+      if (consumed.count !== 1) {
+        throw new Error('Invite code is no longer valid.');
+      }
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: auth.userId },
+        include: { household: true },
+      });
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.message.includes('Invite code')) {
+        return null;
+      }
+      if (error instanceof Error && error.message.includes('setup has already')) {
+        return 'LOCKED' as const;
+      }
+      throw error;
+    });
+
+    if (result === null) {
+      return res.status(410).json({ error: 'Invite code is no longer valid.' });
+    }
+    if (result === 'LOCKED') {
+      return res.status(409).json({ error: 'Household setup has already been completed.' });
+    }
+
+    return res.json({
+      user: {
+        id: result.id,
+        name: result.name,
+        email: result.email,
+        authUserId: result.authUserId,
+        householdId: result.householdId,
+        onboardingHouseholdDecisionAt: result.onboardingHouseholdDecisionAt?.toISOString() ?? null,
+        createdAt: result.createdAt.toISOString(),
+      },
+      household: result.household
+        ? {
+            id: result.household.id,
+            name: result.household.name,
+            createdAt: result.household.createdAt.toISOString(),
+          }
+        : null,
+      needsHouseholdSetup: false,
+    });
+  });
+
+  app.post('/api/household/skip-setup', async (req: Request, res: Response) => {
+    const auth = await requireUserContext(req, res);
+    if (!auth) {
+      return;
+    }
+    if (auth.householdId || auth.onboardingHouseholdDecisionAt) {
+      return res.status(409).json({ error: 'Household setup has already been completed.' });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { id: true, name: true, email: true, authUserId: true, createdAt: true },
+    });
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const decisionAt = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const household = await tx.household.create({
+        data: {
+          name: `${existingUser.name}'s Household`,
+        },
+      });
+
+      const updated = await tx.user.updateMany({
+        where: {
+          id: auth.userId,
+          householdId: null,
+          onboardingHouseholdDecisionAt: null,
+        },
+        data: {
+          householdId: household.id,
+          onboardingHouseholdDecisionAt: decisionAt,
+        },
+      });
+      if (updated.count !== 1) {
+        throw new Error('Household setup has already been completed.');
+      }
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: auth.userId },
+        include: { household: true },
+      });
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.message.includes('setup has already')) {
+        return null;
+      }
+      throw error;
+    });
+
+    if (!result) {
+      return res.status(409).json({ error: 'Household setup has already been completed.' });
+    }
+
+    return res.json({
+      user: {
+        id: result.id,
+        name: result.name,
+        email: result.email,
+        authUserId: result.authUserId,
+        householdId: result.householdId,
+        onboardingHouseholdDecisionAt: result.onboardingHouseholdDecisionAt?.toISOString() ?? null,
+        createdAt: result.createdAt.toISOString(),
+      },
+      household: result.household
+        ? {
+            id: result.household.id,
+            name: result.household.name,
+            createdAt: result.household.createdAt.toISOString(),
+          }
+        : null,
+      needsHouseholdSetup: false,
+    });
   });
 
   app.get('/api/months', async (req: Request, res: Response) => {

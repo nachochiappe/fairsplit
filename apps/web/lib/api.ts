@@ -120,6 +120,31 @@ export interface SettlementResponse {
   transfer: null | { fromUserId: string; toUserId: string; amount: string };
 }
 
+export interface HouseholdSetupStatus {
+  needsHouseholdSetup: boolean;
+  decisionLocked: boolean;
+}
+
+export interface AuthLinkResponse {
+  user: {
+    id: string;
+    name: string;
+    email: string | null;
+    authUserId: string | null;
+    householdId: string | null;
+    onboardingHouseholdDecisionAt: string | null;
+    createdAt: string;
+  };
+  household: { id: string; name: string; createdAt: string } | null;
+  created?: boolean;
+  needsHouseholdSetup: boolean;
+}
+
+export interface HouseholdInvite {
+  code: string;
+  expiresAt: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 const SESSION_COOKIE = 'fairsplit_session';
 type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
@@ -487,4 +512,39 @@ export async function getSettlement(
     init ?? { cache: 'no-store' },
   );
   return parseResponse<SettlementResponse>(response);
+}
+
+export async function getHouseholdSetupStatus(init?: NextRequestInit): Promise<HouseholdSetupStatus> {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/setup-status`, init ?? { cache: 'no-store' });
+  return parseResponse<HouseholdSetupStatus>(response);
+}
+
+export async function createHouseholdInvite(init?: NextRequestInit): Promise<HouseholdInvite> {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/invites`, {
+    ...(init ?? {}),
+    method: 'POST',
+    headers: { ...(init?.headers ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return parseResponse<HouseholdInvite>(response);
+}
+
+export async function joinHouseholdWithCode(code: string, init?: NextRequestInit): Promise<AuthLinkResponse> {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/join-with-code`, {
+    ...(init ?? {}),
+    method: 'POST',
+    headers: { ...(init?.headers ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  return parseResponse<AuthLinkResponse>(response);
+}
+
+export async function skipHouseholdSetup(init?: NextRequestInit): Promise<AuthLinkResponse> {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/skip-setup`, {
+    ...(init ?? {}),
+    method: 'POST',
+    headers: { ...(init?.headers ?? {}), 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return parseResponse<AuthLinkResponse>(response);
 }
