@@ -27,11 +27,14 @@ export default async function SettingsPage() {
   const month = getCurrentMonth();
   const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = parseSessionCookie(sessionCookie);
+  const serverReadInit = session.userId
+    ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-user-id': session.userId } } as const)
+    : SERVER_READ_CACHE;
 
   const [categories, superCategories, users] = await Promise.all([
-    getCategories(SERVER_READ_CACHE),
-    getSuperCategories(SERVER_READ_CACHE),
-    getUsers(SERVER_READ_CACHE),
+    getCategories(serverReadInit),
+    getSuperCategories(serverReadInit),
+    getUsers(serverReadInit),
   ]);
 
   const currentUser = session.userId

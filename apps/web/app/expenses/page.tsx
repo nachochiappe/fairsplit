@@ -42,17 +42,20 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
   const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = parseSessionCookie(sessionCookie);
-  const users = await getUsers(SERVER_READ_CACHE);
+  const serverReadInit = session.userId
+    ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-user-id': session.userId } } as const)
+    : SERVER_READ_CACHE;
+  const users = await getUsers(serverReadInit);
   const currentUserId = session.userId && users.some((user) => user.id === session.userId) ? session.userId : null;
   const fixedData = await getExpenses(
     month,
     { type: 'fixed', sortBy: 'date', sortDir: 'desc', limit: INITIAL_EXPENSES_PAGE_SIZE, hydrate: true, includeCount: true },
-    SERVER_READ_CACHE,
+    serverReadInit,
   );
   const oneTimeData = await getExpenses(
     month,
     { type: 'oneTime', sortBy: 'date', sortDir: 'desc', limit: INITIAL_EXPENSES_PAGE_SIZE, hydrate: false, includeCount: false },
-    SERVER_READ_CACHE,
+    serverReadInit,
   );
   const installmentData = await getExpenses(
     month,
@@ -64,7 +67,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       hydrate: false,
       includeCount: false,
     },
-    SERVER_READ_CACHE,
+    serverReadInit,
   );
   const totalsData = await getExpenses(
     month,
@@ -76,15 +79,15 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       includeCount: false,
       includeTotals: true,
     },
-    SERVER_READ_CACHE,
+    serverReadInit,
   );
-  const categories = await getCategories(SERVER_READ_CACHE);
-  const exchangeRates = await getExchangeRates(month, SERVER_READ_CACHE);
+  const categories = await getCategories(serverReadInit);
+  const exchangeRates = await getExchangeRates(month, serverReadInit);
   let totalExpensesArs = '0.00';
   let noIncomeWarning: string | null = null;
 
   try {
-    const settlement = await getSettlement(month, SERVER_READ_CACHE, { hydrate: false });
+    const settlement = await getSettlement(month, serverReadInit, { hydrate: false });
     totalExpensesArs = settlement.totalExpenses;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load settlement';
@@ -96,7 +99,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
     const allExpensesForMonth = await getExpenses(
       month,
       { sortBy: 'date', sortDir: 'desc', hydrate: false, includeCount: false },
-      SERVER_READ_CACHE,
+      serverReadInit,
     );
     const total = allExpensesForMonth.expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
     totalExpensesArs = total.toFixed(2);

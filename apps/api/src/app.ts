@@ -240,6 +240,34 @@ function defaultNameFromEmail(email: string): string {
     .join(' ');
 }
 
+interface RequestAuthContext {
+  userId: string;
+  householdId: string;
+}
+
+async function requireAuthContext(req: Request, res: Response): Promise<RequestAuthContext | null> {
+  const rawUserId = req.header('x-fairsplit-user-id')?.trim();
+  if (!rawUserId) {
+    res.status(401).json({ error: 'Missing authentication context.' });
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: rawUserId },
+    select: { id: true, householdId: true },
+  });
+  if (!user) {
+    res.status(401).json({ error: 'Invalid authentication context.' });
+    return null;
+  }
+  if (!user.householdId) {
+    res.status(403).json({ error: 'Authenticated user is not linked to a household.' });
+    return null;
+  }
+
+  return { userId: user.id, householdId: user.householdId };
+}
+
 export const createApp = (): Express => {
   const app = express();
   const normalizeCurrencyCode = (value: string) => {
@@ -409,18 +437,39 @@ export const createApp = (): Express => {
     }
   });
 
-  app.get('/api/months', async (_req: Request, res: Response) => {
+  app.get('/api/months', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const [incomeMonths, expenseMonths] = await Promise.all([
-      prisma.monthlyIncome.findMany({ distinct: ['month'], select: { month: true } }),
-      prisma.expense.findMany({ distinct: ['month'], select: { month: true } }),
+      prisma.monthlyIncome.findMany({
+        where: { householdId: auth.householdId },
+        distinct: ['month'],
+        select: { month: true },
+      }),
+      prisma.expense.findMany({
+        where: { householdId: auth.householdId },
+        distinct: ['month'],
+        select: { month: true },
+      }),
     ]);
 
     const months = Array.from(new Set([...incomeMonths, ...expenseMonths].map((entry) => entry.month))).sort();
     res.json(months);
   });
 
-  app.get('/api/users', async (_req: Request, res: Response) => {
-    const users = await prisma.user.findMany({ orderBy: { createdAt: 'asc' } });
+  app.get('/api/users', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const users = await prisma.user.findMany({
+      where: { householdId: auth.householdId },
+      orderBy: { createdAt: 'asc' },
+    });
     res.json(
       users.map((user) => ({
         id: user.id,
@@ -431,13 +480,20 @@ export const createApp = (): Express => {
   });
 
   app.post('/api/users', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = createUserSchema.safeParse(req.body);
 
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const user = await prisma.user.create({ data: { name: parsed.data.name } });
+    const user = await prisma.user.create({
+      data: { name: parsed.data.name, householdId: auth.householdId },
+    });
     return res.status(201).json({
       id: user.id,
       name: user.name,
@@ -446,6 +502,11 @@ export const createApp = (): Express => {
   });
 
   app.patch('/api/users/:id', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = updateUserSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -456,8 +517,13 @@ export const createApp = (): Express => {
     if (!userId) {
       return res.status(400).json({ error: 'User id is required' });
     }
+    if (userId !== auth.userId) {
+      return res.status(403).json({ error: 'You can only update your own profile.' });
+    }
 
-    const existing = await prisma.user.findUnique({ where: { id: userId } });
+    const existing = await prisma.user.findFirst({
+      where: { id: userId, householdId: auth.householdId },
+    });
     if (!existing) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -474,8 +540,14 @@ export const createApp = (): Express => {
     });
   });
 
-  app.get('/api/categories', async (_req: Request, res: Response) => {
+  app.get('/api/categories', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const categories = await prisma.category.findMany({
+      where: { householdId: auth.householdId },
       orderBy: [{ archivedAt: 'asc' }, { superCategory: { sortOrder: 'asc' } }, { name: 'asc' }],
       include: {
         superCategory: {
@@ -493,8 +565,19 @@ export const createApp = (): Express => {
     return res.json(categories.map((category) => serializeCategory(category)));
   });
 
-  app.get('/api/super-categories', async (_req: Request, res: Response) => {
+  app.get('/api/super-categories', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const superCategories = await prisma.superCategory.findMany({
+      where: {
+        OR: [
+          { householdId: auth.householdId },
+          { householdId: null, isSystem: true },
+        ],
+      },
       orderBy: [{ archivedAt: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
       include: {
         _count: {
@@ -509,16 +592,25 @@ export const createApp = (): Express => {
   });
 
   app.post('/api/categories', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = createCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     if (parsed.data.superCategoryId) {
-      const superCategory = await prisma.superCategory.findUnique({
-        where: { id: parsed.data.superCategoryId },
+      const superCategory = await prisma.superCategory.findFirst({
+        where: {
+          id: parsed.data.superCategoryId,
+          archivedAt: null,
+          OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+        },
       });
-      if (!superCategory || superCategory.archivedAt) {
+      if (!superCategory) {
         return res.status(400).json({ error: 'Super category must exist and be active.' });
       }
     }
@@ -527,6 +619,7 @@ export const createApp = (): Express => {
       const created = await prisma.category.create({
         data: {
           name: parsed.data.name,
+          householdId: auth.householdId,
           superCategoryId: parsed.data.superCategoryId ?? null,
         },
         include: {
@@ -553,14 +646,27 @@ export const createApp = (): Express => {
   });
 
   app.put('/api/categories/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = renameCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
+    const category = await prisma.category.findFirst({
+      where: { id: req.params.id, householdId: auth.householdId },
+      select: { id: true },
+    });
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found.' });
+    }
+
     try {
       const updated = await prisma.category.update({
-        where: { id: req.params.id },
+        where: { id: category.id },
         data: { name: parsed.data.name },
         include: {
           superCategory: {
@@ -589,23 +695,39 @@ export const createApp = (): Express => {
   });
 
   app.put('/api/categories/:id/super-category', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = assignCategorySuperCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     if (parsed.data.superCategoryId) {
-      const superCategory = await prisma.superCategory.findUnique({
-        where: { id: parsed.data.superCategoryId },
+      const superCategory = await prisma.superCategory.findFirst({
+        where: {
+          id: parsed.data.superCategoryId,
+          archivedAt: null,
+          OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+        },
       });
-      if (!superCategory || superCategory.archivedAt) {
+      if (!superCategory) {
         return res.status(400).json({ error: 'Super category must exist and be active.' });
       }
     }
 
     try {
+      const category = await prisma.category.findFirst({
+        where: { id: req.params.id, householdId: auth.householdId },
+        select: { id: true },
+      });
+      if (!category) {
+        return res.status(404).json({ error: 'Category not found.' });
+      }
       const updated = await prisma.category.update({
-        where: { id: req.params.id },
+        where: { id: category.id },
         data: { superCategoryId: parsed.data.superCategoryId },
         include: {
           superCategory: {
@@ -626,6 +748,11 @@ export const createApp = (): Express => {
   });
 
   app.post('/api/categories/:id/archive', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = archiveCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -639,7 +766,7 @@ export const createApp = (): Express => {
         },
       },
     });
-    if (!sourceCategory) {
+    if (!sourceCategory || sourceCategory.householdId !== auth.householdId) {
       return res.status(404).json({ error: 'Category not found.' });
     }
 
@@ -651,8 +778,8 @@ export const createApp = (): Express => {
     }
 
     const replacementCategory = parsed.data.replacementCategoryId
-      ? await prisma.category.findUnique({
-          where: { id: parsed.data.replacementCategoryId },
+      ? await prisma.category.findFirst({
+          where: { id: parsed.data.replacementCategoryId, householdId: auth.householdId },
         })
       : null;
     if (parsed.data.replacementCategoryId && (!replacementCategory || replacementCategory.archivedAt)) {
@@ -665,11 +792,11 @@ export const createApp = (): Express => {
     await prisma.$transaction(async (tx) => {
       if (replacementCategory) {
         await tx.expense.updateMany({
-          where: { categoryId: sourceCategory.id },
+          where: { categoryId: sourceCategory.id, householdId: auth.householdId },
           data: { categoryId: replacementCategory.id },
         });
         await tx.expenseTemplate.updateMany({
-          where: { categoryId: sourceCategory.id },
+          where: { categoryId: sourceCategory.id, householdId: auth.householdId },
           data: { categoryId: replacementCategory.id },
         });
       }
@@ -683,6 +810,11 @@ export const createApp = (): Express => {
   });
 
   app.post('/api/super-categories', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = createSuperCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -696,6 +828,7 @@ export const createApp = (): Express => {
         data: {
           name: parsed.data.name,
           slug,
+          householdId: auth.householdId,
           color: parsed.data.color ?? '#64748b',
           icon: parsed.data.icon ?? null,
           sortOrder: parsed.data.sortOrder ?? 1000,
@@ -719,6 +852,11 @@ export const createApp = (): Express => {
   });
 
   app.put('/api/super-categories/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = updateSuperCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -727,9 +865,17 @@ export const createApp = (): Express => {
       return res.status(400).json({ error: 'At least one field is required.' });
     }
 
+    const superCategory = await prisma.superCategory.findFirst({
+      where: { id: req.params.id, householdId: auth.householdId },
+      select: { id: true },
+    });
+    if (!superCategory) {
+      return res.status(404).json({ error: 'Super category not found.' });
+    }
+
     try {
       const updated = await prisma.superCategory.update({
-        where: { id: req.params.id },
+        where: { id: superCategory.id },
         data: {
           ...(parsed.data.name ? { name: parsed.data.name } : {}),
           ...(parsed.data.color ? { color: parsed.data.color } : {}),
@@ -757,13 +903,18 @@ export const createApp = (): Express => {
   });
 
   app.post('/api/super-categories/:id/archive', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = archiveSuperCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const source = await prisma.superCategory.findUnique({
-      where: { id: req.params.id },
+    const source = await prisma.superCategory.findFirst({
+      where: { id: req.params.id, householdId: auth.householdId },
       include: {
         _count: {
           select: { categories: true },
@@ -778,8 +929,11 @@ export const createApp = (): Express => {
     }
 
     const replacement = parsed.data.replacementSuperCategoryId
-      ? await prisma.superCategory.findUnique({
-          where: { id: parsed.data.replacementSuperCategoryId },
+      ? await prisma.superCategory.findFirst({
+          where: {
+            id: parsed.data.replacementSuperCategoryId,
+            OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+          },
         })
       : null;
     if (parsed.data.replacementSuperCategoryId && (!replacement || replacement.archivedAt)) {
@@ -791,7 +945,7 @@ export const createApp = (): Express => {
 
     await prisma.$transaction(async (tx) => {
       await tx.category.updateMany({
-        where: { superCategoryId: source.id },
+        where: { superCategoryId: source.id, householdId: auth.householdId },
         data: { superCategoryId: replacement?.id ?? null },
       });
       await tx.superCategory.update({
@@ -804,13 +958,18 @@ export const createApp = (): Express => {
   });
 
   app.get('/api/exchange-rates', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = monthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const rates = await prisma.monthlyExchangeRate.findMany({
-      where: { month: parsed.data.month },
+      where: { month: parsed.data.month, householdId: auth.householdId },
       orderBy: { currencyCode: 'asc' },
     });
 
@@ -825,27 +984,38 @@ export const createApp = (): Express => {
   });
 
   app.put('/api/exchange-rates', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = upsertMonthlyExchangeRateSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const rate = await prisma.monthlyExchangeRate.upsert({
+    const normalizedRate = new Decimal(parsed.data.rateToArs).toFixed(6);
+    const existing = await prisma.monthlyExchangeRate.findFirst({
       where: {
-        month_currencyCode: {
-          month: parsed.data.month,
-          currencyCode: parsed.data.currencyCode,
-        },
-      },
-      update: {
-        rateToArs: new Decimal(parsed.data.rateToArs).toFixed(6),
-      },
-      create: {
         month: parsed.data.month,
         currencyCode: parsed.data.currencyCode,
-        rateToArs: new Decimal(parsed.data.rateToArs).toFixed(6),
+        householdId: auth.householdId,
       },
+      select: { id: true },
     });
+    const rate = existing
+      ? await prisma.monthlyExchangeRate.update({
+          where: { id: existing.id },
+          data: { rateToArs: normalizedRate },
+        })
+      : await prisma.monthlyExchangeRate.create({
+          data: {
+            month: parsed.data.month,
+            currencyCode: parsed.data.currencyCode,
+            rateToArs: normalizedRate,
+            householdId: auth.householdId,
+          },
+        });
 
     return res.json({
       id: rate.id,
@@ -856,13 +1026,18 @@ export const createApp = (): Express => {
   });
 
   app.get('/api/incomes', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = monthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const incomes = await prisma.monthlyIncome.findMany({
-      where: { month: parsed.data.month },
+      where: { month: parsed.data.month, householdId: auth.householdId },
       orderBy: [{ user: { createdAt: 'asc' } }, { id: 'asc' }],
       include: { user: true },
     });
@@ -884,12 +1059,19 @@ export const createApp = (): Express => {
   });
 
   app.put('/api/incomes', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = replaceIncomeEntriesSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { id: parsed.data.userId } });
+    const existingUser = await prisma.user.findFirst({
+      where: { id: parsed.data.userId, householdId: auth.householdId },
+    });
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -905,6 +1087,7 @@ export const createApp = (): Express => {
               where: {
                 month: parsed.data.month,
                 currencyCode: { in: requestedCurrencies },
+                householdId: auth.householdId,
               },
             })
           : [];
@@ -914,6 +1097,7 @@ export const createApp = (): Express => {
           where: {
             month: parsed.data.month,
             userId: parsed.data.userId,
+            householdId: auth.householdId,
           },
         });
 
@@ -928,22 +1112,27 @@ export const createApp = (): Express => {
               fxRateUsed = monthRate;
             } else if (entry.fxRate !== undefined) {
               const normalizedFxRate = new Decimal(entry.fxRate).toFixed(6);
-              const upsertedRate = await tx.monthlyExchangeRate.upsert({
+              const existingRate = await tx.monthlyExchangeRate.findFirst({
                 where: {
-                  month_currencyCode: {
-                    month: parsed.data.month,
-                    currencyCode,
-                  },
-                },
-                update: {
-                  rateToArs: normalizedFxRate,
-                },
-                create: {
                   month: parsed.data.month,
                   currencyCode,
-                  rateToArs: normalizedFxRate,
+                  householdId: auth.householdId,
                 },
+                select: { id: true },
               });
+              const upsertedRate = existingRate
+                ? await tx.monthlyExchangeRate.update({
+                    where: { id: existingRate.id },
+                    data: { rateToArs: normalizedFxRate },
+                  })
+                : await tx.monthlyExchangeRate.create({
+                    data: {
+                      month: parsed.data.month,
+                      currencyCode,
+                      rateToArs: normalizedFxRate,
+                      householdId: auth.householdId,
+                    },
+                  });
               fxRateUsed = upsertedRate.rateToArs.toFixed(6);
               monthRateByCurrency.set(currencyCode, fxRateUsed);
             } else {
@@ -960,6 +1149,7 @@ export const createApp = (): Express => {
             data: {
               month: parsed.data.month,
               userId: parsed.data.userId,
+              householdId: auth.householdId,
               description: entry.description,
               amount: amountArs,
               amountOriginal,
@@ -995,6 +1185,11 @@ export const createApp = (): Express => {
   });
 
   app.get('/api/expenses', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = expenseListQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -1008,7 +1203,7 @@ export const createApp = (): Express => {
       await ensureInstallmentsForMonth(parsed.data.month);
     }
 
-    const baseWhere: Record<string, unknown> = { month: parsed.data.month };
+    const baseWhere: Record<string, unknown> = { month: parsed.data.month, householdId: auth.householdId };
     if (parsed.data.search) {
       baseWhere.OR = [
         { description: { contains: parsed.data.search, mode: 'insensitive' } },
@@ -1124,26 +1319,27 @@ export const createApp = (): Express => {
   });
 
   app.post('/api/expenses', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = createExpenseSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { id: parsed.data.paidByUserId } });
+    const existingUser = await prisma.user.findFirst({
+      where: { id: parsed.data.paidByUserId, householdId: auth.householdId },
+    });
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const category = await prisma.category.findUnique({ where: { id: parsed.data.categoryId } });
+    const category = await prisma.category.findFirst({
+      where: { id: parsed.data.categoryId, householdId: auth.householdId },
+    });
     if (!category || category.archivedAt) {
       return res.status(400).json({ error: 'Category must exist and be active.' });
-    }
-
-    const householdId = existingUser.householdId ?? category.householdId ?? null;
-    if (!householdId) {
-      return res.status(400).json({ error: 'User and category must belong to a household.' });
-    }
-    if (existingUser.householdId && category.householdId && existingUser.householdId !== category.householdId) {
-      return res.status(400).json({ error: 'User and category must belong to the same household.' });
     }
 
     const currencyCode = parsed.data.currencyCode;
@@ -1173,7 +1369,7 @@ export const createApp = (): Express => {
           currencyCode,
           fxRate: fxRateUsed,
           paidByUserId: parsed.data.paidByUserId,
-          householdId,
+          householdId: auth.householdId,
           dayOfMonth,
           isActive: true,
         },
@@ -1191,7 +1387,7 @@ export const createApp = (): Express => {
         amountArs,
         currencyCode,
         fxRateUsed,
-        householdId,
+        householdId: auth.householdId,
         templateId,
         paidByUserId: parsed.data.paidByUserId,
         isInstallment: installmentPayload.isInstallment,
@@ -1210,24 +1406,35 @@ export const createApp = (): Express => {
   });
 
   app.put('/api/expenses/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsedBody = updateExpenseSchema.safeParse(req.body);
     if (!parsedBody.success) {
       return res.status(400).json({ error: parsedBody.error.flatten() });
     }
 
-    const existing = await prisma.expense.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.expense.findFirst({
+      where: { id: req.params.id, householdId: auth.householdId },
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Expense not found' });
     }
 
     if (parsedBody.data.paidByUserId) {
-      const existingUser = await prisma.user.findUnique({ where: { id: parsedBody.data.paidByUserId } });
+      const existingUser = await prisma.user.findFirst({
+        where: { id: parsedBody.data.paidByUserId, householdId: auth.householdId },
+      });
       if (!existingUser) {
         return res.status(404).json({ error: 'User not found' });
       }
     }
     if (parsedBody.data.categoryId) {
-      const category = await prisma.category.findUnique({ where: { id: parsedBody.data.categoryId } });
+      const category = await prisma.category.findFirst({
+        where: { id: parsedBody.data.categoryId, householdId: auth.householdId },
+      });
       if (!category || category.archivedAt) {
         return res.status(400).json({ error: 'Category must exist and be active.' });
       }
@@ -1282,16 +1489,26 @@ export const createApp = (): Express => {
       where: { id: updated.id },
       include: { paidByUser: true, category: { include: { superCategory: true } } },
     });
+    if (withRelations.householdId !== auth.householdId) {
+      return res.status(404).json({ error: 'Expense not found' });
+    }
     return res.json(serializeExpense(withRelations));
   });
 
   app.delete('/api/expenses/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsedBody = deleteExpenseSchema.safeParse(req.body ?? {});
     if (!parsedBody.success) {
       return res.status(400).json({ error: parsedBody.error.flatten() });
     }
 
-    const existing = await prisma.expense.findUnique({ where: { id: req.params.id } });
+    const existing = await prisma.expense.findFirst({
+      where: { id: req.params.id, householdId: auth.householdId },
+    });
     if (!existing) {
       return res.status(404).json({ error: 'Expense not found' });
     }
@@ -1311,6 +1528,11 @@ export const createApp = (): Express => {
   });
 
   app.get('/api/settlement', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
     const parsed = monthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -1325,9 +1547,9 @@ export const createApp = (): Express => {
     }
 
     const [users, incomes, expenses] = await Promise.all([
-      prisma.user.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.monthlyIncome.findMany({ where: { month } }),
-      prisma.expense.findMany({ where: { month } }),
+      prisma.user.findMany({ where: { householdId: auth.householdId }, orderBy: { createdAt: 'asc' } }),
+      prisma.monthlyIncome.findMany({ where: { month, householdId: auth.householdId } }),
+      prisma.expense.findMany({ where: { month, householdId: auth.householdId } }),
     ]);
 
     const incomesByUser: Record<string, string> = {};
