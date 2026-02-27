@@ -172,6 +172,14 @@ function slugify(value: string): string {
     .slice(0, 48);
 }
 
+function getPrismaErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+  const candidate = error as { code?: unknown };
+  return typeof candidate.code === 'string' ? candidate.code : null;
+}
+
 function serializeCategory(
   category: {
     id: string;
@@ -535,7 +543,12 @@ export const createApp = (): Express => {
       });
       return res.status(201).json(serializeCategory(created));
     } catch (error) {
-      return res.status(409).json({ error: 'Category name already exists.' });
+      const code = getPrismaErrorCode(error);
+      if (code === 'P2002') {
+        return res.status(409).json({ error: 'Category name already exists.' });
+      }
+      console.error('Failed to create category', error);
+      return res.status(500).json({ error: 'Failed to create category.' });
     }
   });
 
@@ -563,7 +576,15 @@ export const createApp = (): Express => {
       });
       return res.json(serializeCategory(updated));
     } catch (error) {
-      return res.status(404).json({ error: 'Category not found or name already exists.' });
+      const code = getPrismaErrorCode(error);
+      if (code === 'P2025') {
+        return res.status(404).json({ error: 'Category not found.' });
+      }
+      if (code === 'P2002') {
+        return res.status(409).json({ error: 'Category name already exists.' });
+      }
+      console.error('Failed to rename category', error);
+      return res.status(500).json({ error: 'Failed to rename category.' });
     }
   });
 
@@ -688,7 +709,12 @@ export const createApp = (): Express => {
       });
       return res.status(201).json(serializeSuperCategory(created));
     } catch (error) {
-      return res.status(409).json({ error: 'Super category name already exists.' });
+      const code = getPrismaErrorCode(error);
+      if (code === 'P2002') {
+        return res.status(409).json({ error: 'Super category name already exists.' });
+      }
+      console.error('Failed to create super category', error);
+      return res.status(500).json({ error: 'Failed to create super category.' });
     }
   });
 
@@ -718,7 +744,15 @@ export const createApp = (): Express => {
       });
       return res.json(serializeSuperCategory(updated));
     } catch (error) {
-      return res.status(404).json({ error: 'Super category not found or name already exists.' });
+      const code = getPrismaErrorCode(error);
+      if (code === 'P2025') {
+        return res.status(404).json({ error: 'Super category not found.' });
+      }
+      if (code === 'P2002') {
+        return res.status(409).json({ error: 'Super category name already exists.' });
+      }
+      console.error('Failed to update super category', error);
+      return res.status(500).json({ error: 'Failed to update super category.' });
     }
   });
 
