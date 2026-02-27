@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import { DashboardClient } from './DashboardClient';
 import {
   getExpenses,
@@ -22,10 +23,32 @@ interface ExpenseCategorySlice {
 }
 
 const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
+const SESSION_COOKIE = 'fairsplit_session';
+
+function parseSessionCookie(rawValue: string | undefined): { userId: string | null } {
+  if (!rawValue) {
+    return { userId: null };
+  }
+
+  try {
+    const decoded = decodeURIComponent(rawValue);
+    const parsed = JSON.parse(decoded) as { userId?: unknown };
+    return {
+      userId: typeof parsed.userId === 'string' && parsed.userId.trim().length > 0 ? parsed.userId : null,
+    };
+  } catch {
+    return { userId: null };
+  }
+}
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
+  const sessionCookie = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = parseSessionCookie(sessionCookie);
+  const serverReadInit = session.userId
+    ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-user-id': session.userId } } as const)
+    : SERVER_READ_CACHE;
   let users: User[] = [];
   let incomes: Income[] = [];
   let settlementResult: SettlementResponse | null = null;
@@ -33,9 +56,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   try {
     [users, incomes, settlementResult, expensesResult] = await Promise.all([
-      getUsers(SERVER_READ_CACHE),
-      getIncomes(month, SERVER_READ_CACHE),
-      getSettlement(month, SERVER_READ_CACHE, { hydrate: false }).catch((error: unknown) => {
+      getUsers(serverReadInit),
+      getIncomes(month, serverReadInit),
+      getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Failed to load settlement';
         if (message.includes('Cannot calculate settlement when total income is non-positive')) {
           return null;
@@ -43,7 +66,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         throw error;
       }),
-      getExpenses(month, undefined, SERVER_READ_CACHE).then((result) => result.expenses),
+      getExpenses(month, undefined, serverReadInit).then((result) => result.expenses),
     ]);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to connect to API';

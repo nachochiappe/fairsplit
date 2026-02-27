@@ -121,11 +121,54 @@ export interface SettlementResponse {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
+const SESSION_COOKIE = 'fairsplit_session';
 type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
+
+function parseSessionCookieValue(rawValue: string | undefined): { userId: string | null } {
+  if (!rawValue) {
+    return { userId: null };
+  }
+
+  try {
+    const decoded = decodeURIComponent(rawValue);
+    const parsed = JSON.parse(decoded) as { userId?: unknown };
+    return {
+      userId: typeof parsed.userId === 'string' && parsed.userId.trim().length > 0 ? parsed.userId : null,
+    };
+  } catch {
+    return { userId: null };
+  }
+}
+
+function getSessionUserIdFromBrowserCookie(): string | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const cookiePair = document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${SESSION_COOKIE}=`));
+  if (!cookiePair) {
+    return null;
+  }
+
+  const rawValue = cookiePair.slice(`${SESSION_COOKIE}=`.length);
+  return parseSessionCookieValue(rawValue).userId;
+}
 
 async function fetchFromApi(input: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(input, init);
+    const headers = new Headers(init?.headers ?? {});
+    const sessionUserId = getSessionUserIdFromBrowserCookie();
+    if (sessionUserId) {
+      headers.set('x-fairsplit-user-id', sessionUserId);
+    }
+
+    return await fetch(input, {
+      ...init,
+      headers,
+    });
   } catch (error) {
     const message =
       error instanceof Error
