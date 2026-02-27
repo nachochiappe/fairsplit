@@ -56,6 +56,10 @@ const secondaryButtonClass =
   'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
 const moneyInputClass =
   `${fieldClass} pl-8 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`;
+const pillToggleTrackClass =
+  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-slate-300 bg-slate-200 transition-colors duration-200 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 peer-checked:border-brand-600 peer-checked:bg-brand-600';
+const pillToggleThumbClass =
+  'absolute left-[2px] top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-5';
 const SEARCH_DEBOUNCE_MS = 350;
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
 const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
@@ -1426,7 +1430,11 @@ export function ExpensesClient({
 
         <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
           <div className="min-w-0 space-y-4">
-            <form className={`${cardClass} min-w-0 space-y-3`} onSubmit={submit} ref={expenseFormRef}>
+            <form
+              className="min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+              onSubmit={submit}
+              ref={expenseFormRef}
+            >
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-base font-semibold text-slate-900">
                   {editingExpenseId ? 'Edit expense' : 'Add expense'}
@@ -1457,86 +1465,112 @@ export function ExpensesClient({
                 id="add-expense-panel"
               >
                 <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">Date</span>
-                <input
-                  className={`${fieldClass} leading-tight [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
-                  lang="en"
-                  type="date"
-                  {...form.register('date')}
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">Description</span>
-                <input className={fieldClass} {...form.register('description')} />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">Category</span>
-                <select className={fieldClass} {...form.register('categoryId')}>
-                  {sortedActiveCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Date</span>
+                  <input
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 [color-scheme:light] [&::-webkit-date-and-time-value]:text-left"
+                    lang="en"
+                    type="date"
+                    {...form.register('date')}
+                  />
+                </label>
                 <label className="block text-sm">
-                  <span className="mb-1 block text-slate-700">Currency</span>
-                  <select className={fieldClass} {...form.register('currencyCode')}>
-                    {supportedCurrencyCodes.map((currencyCode) => (
-                      <option key={currencyCode} value={currencyCode}>
-                        {currencyCode}
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Description</span>
+                  <input
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    {...form.register('description')}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Category</span>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                    {...form.register('categoryId')}
+                  >
+                    {sortedActiveCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
                       </option>
                     ))}
                   </select>
                 </label>
-                <label className="block text-sm">
-                  <span className="mb-1 block text-slate-700">FX to ARS</span>
-                  <div className="relative">
-                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
-                      $
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">Currency</span>
+                    <select
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                      {...form.register('currencyCode')}
+                    >
+                      {supportedCurrencyCodes.map((currencyCode) => (
+                        <option key={currencyCode} value={currencyCode}>
+                          {currencyCode}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-xs font-medium text-slate-600">FX to ARS</span>
+                    <div className="relative">
+                      <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
+                        $
+                      </span>
+                      <input
+                        className={`${moneyInputClass} rounded-lg disabled:bg-slate-100`}
+                        disabled={watchedCurrencyCode === 'ARS'}
+                        min="0"
+                        step="0.000001"
+                        type="number"
+                        {...form.register('fxRate')}
+                      />
+                    </div>
+                  </label>
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-2.5">
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
+                    <span>Recurring expense</span>
+                    <span className="relative inline-flex items-center">
+                      <input className="peer sr-only" type="checkbox" {...form.register('fixedEnabled')} />
+                      <span aria-hidden="true" className={pillToggleTrackClass} />
+                      <span aria-hidden="true" className={pillToggleThumbClass} />
                     </span>
-                    <input
-                      className={`${moneyInputClass} disabled:bg-slate-100`}
-                      disabled={watchedCurrencyCode === 'ARS'}
-                      min="0"
-                      step="0.000001"
-                      type="number"
-                      {...form.register('fxRate')}
-                    />
-                  </div>
-                </label>
-              </div>
-
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" {...form.register('fixedEnabled')} />
-                Recurring expense
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" {...form.register('nextMonthExpense')} />
-                Next-month expense
-              </label>
-              {editingExpenseId ? (
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input checked={watchedApplyToFuture} type="checkbox" {...form.register('applyToFuture')} />
-                  Apply changes to future months
-                </label>
-              ) : null}
-
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" {...form.register('installmentEnabled')} />
-                Installments
-              </label>
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
+                    <span>Next-month expense</span>
+                    <span className="relative inline-flex items-center">
+                      <input className="peer sr-only" type="checkbox" {...form.register('nextMonthExpense')} />
+                      <span aria-hidden="true" className={pillToggleTrackClass} />
+                      <span aria-hidden="true" className={pillToggleThumbClass} />
+                    </span>
+                  </label>
+                  {editingExpenseId ? (
+                    <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
+                      <span>Apply changes to future months</span>
+                      <span className="relative inline-flex items-center">
+                        <input className="peer sr-only" checked={watchedApplyToFuture} type="checkbox" {...form.register('applyToFuture')} />
+                        <span aria-hidden="true" className={pillToggleTrackClass} />
+                        <span aria-hidden="true" className={pillToggleThumbClass} />
+                      </span>
+                    </label>
+                  ) : null}
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
+                    <span>Installments</span>
+                    <span className="relative inline-flex items-center">
+                      <input className="peer sr-only" type="checkbox" {...form.register('installmentEnabled')} />
+                      <span aria-hidden="true" className={pillToggleTrackClass} />
+                      <span aria-hidden="true" className={pillToggleThumbClass} />
+                    </span>
+                  </label>
+                </div>
 
               {watchedInstallmentEnabled ? (
                 <>
                   <label className="block text-sm">
-                    <span className="mb-1 block text-slate-700">Installment count</span>
+                    <span className="mb-1 block text-xs font-medium text-slate-600">Installment count</span>
                     <input className={fieldClass} min="2" type="number" {...form.register('installmentCount')} />
                   </label>
                   <label className="block text-sm">
-                    <span className="mb-1 block text-slate-700">Entry mode</span>
+                    <span className="mb-1 block text-xs font-medium text-slate-600">Entry mode</span>
                     <select className={fieldClass} {...form.register('installmentEntryMode')}>
                       <option value="perInstallment">Per installment amount</option>
                       <option value="total">Total amount</option>
@@ -1544,7 +1578,7 @@ export function ExpensesClient({
                   </label>
                   {watchedInstallmentEntryMode === 'total' ? (
                     <label className="block text-sm">
-                      <span className="mb-1 block text-slate-700">Total amount</span>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Total amount</span>
                       <div className="relative">
                         <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                           $
@@ -1573,7 +1607,7 @@ export function ExpensesClient({
                     </label>
                   ) : (
                     <label className="block text-sm">
-                      <span className="mb-1 block text-slate-700">Per-installment amount</span>
+                      <span className="mb-1 block text-xs font-medium text-slate-600">Per-installment amount</span>
                       <div className="relative">
                         <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                           $
@@ -1604,7 +1638,7 @@ export function ExpensesClient({
                 </>
               ) : (
                 <label className="block text-sm">
-                  <span className="mb-1 block text-slate-700">Amount</span>
+                  <span className="mb-1 block text-xs font-medium text-slate-600">Amount</span>
                   <div className="relative">
                     <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                       $
@@ -1647,8 +1681,11 @@ export function ExpensesClient({
               ) : null}
 
               <label className="block text-sm">
-                <span className="mb-1 block text-slate-700">Paid by</span>
-                <select className={fieldClass} {...form.register('paidByUserId')}>
+                <span className="mb-1 block text-xs font-medium text-slate-600">Paid by</span>
+                <select
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  {...form.register('paidByUserId')}
+                >
                   {users.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.name}
@@ -1723,7 +1760,12 @@ export function ExpensesClient({
                     </span>
                   </div>
                 ) : (
-                  <button className={`${primaryButtonClass} inline-flex items-center gap-2`} disabled={saving} type="submit">
+                  <button
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={saving}
+                    type="submit"
+                  >
+                    <span aria-hidden="true" className="text-base leading-none">+</span>
                     {!editingExpenseId && saving ? (
                       <span
                         aria-hidden="true"
