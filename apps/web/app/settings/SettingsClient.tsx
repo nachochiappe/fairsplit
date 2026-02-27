@@ -50,7 +50,8 @@ export function SettingsClient({
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [superCategoryError, setSuperCategoryError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -118,7 +119,7 @@ export function SettingsClient({
 
     try {
       setSaving(true);
-      setError(null);
+      setCategoryError(null);
       await createCategory({
         name: categoryName.trim(),
         superCategoryId: categorySuperCategoryId === 'unassigned' ? null : categorySuperCategoryId,
@@ -127,7 +128,7 @@ export function SettingsClient({
       setCategorySuperCategoryId('unassigned');
       await loadSettings();
     } catch (categoryError) {
-      setError(categoryError instanceof Error ? categoryError.message : 'Failed to create category');
+      setCategoryError(categoryError instanceof Error ? categoryError.message : 'Failed to create category');
     } finally {
       setSaving(false);
     }
@@ -145,11 +146,11 @@ export function SettingsClient({
 
     try {
       setSaving(true);
-      setError(null);
+      setCategoryError(null);
       await renameCategory(category.id, { name: nextName });
       await loadSettings();
     } catch (renameError) {
-      setError(renameError instanceof Error ? renameError.message : 'Failed to rename category');
+      setCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename category');
     } finally {
       setSaving(false);
     }
@@ -158,13 +159,13 @@ export function SettingsClient({
   const onAssignCategory = async (category: Category, nextSuperCategoryId: string) => {
     try {
       setSaving(true);
-      setError(null);
+      setCategoryError(null);
       await assignCategorySuperCategory(category.id, {
         superCategoryId: nextSuperCategoryId === 'unassigned' ? null : nextSuperCategoryId,
       });
       await loadSettings();
     } catch (assignError) {
-      setError(assignError instanceof Error ? assignError.message : 'Failed to assign category');
+      setCategoryError(assignError instanceof Error ? assignError.message : 'Failed to assign category');
     } finally {
       setSaving(false);
     }
@@ -177,7 +178,7 @@ export function SettingsClient({
 
     const replacements = activeCategories.filter((entry) => entry.id !== category.id);
     if (replacements.length === 0) {
-      setError('At least one active replacement category is required before archiving.');
+      setCategoryError('At least one active replacement category is required before archiving.');
       return;
     }
 
@@ -193,17 +194,17 @@ export function SettingsClient({
 
     const replacement = replacements.find((entry) => entry.name.toLowerCase() === replacementName.toLowerCase());
     if (!replacement) {
-      setError('Replacement category not found.');
+      setCategoryError('Replacement category not found.');
       return;
     }
 
     try {
       setSaving(true);
-      setError(null);
+      setCategoryError(null);
       await archiveCategory(category.id, { replacementCategoryId: replacement.id });
       await loadSettings();
     } catch (archiveError) {
-      setError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
+      setCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
     } finally {
       setSaving(false);
     }
@@ -216,7 +217,7 @@ export function SettingsClient({
 
     try {
       setSaving(true);
-      setError(null);
+      setSuperCategoryError(null);
       const nextSortOrder =
         sortedActiveSuperCategories.length > 0
           ? Math.max(...sortedActiveSuperCategories.map((entry) => entry.sortOrder)) + 10
@@ -228,7 +229,7 @@ export function SettingsClient({
       setSuperCategoryName('');
       await loadSettings();
     } catch (superCategoryError) {
-      setError(superCategoryError instanceof Error ? superCategoryError.message : 'Failed to create super category');
+      setSuperCategoryError(superCategoryError instanceof Error ? superCategoryError.message : 'Failed to create super category');
     } finally {
       setSaving(false);
     }
@@ -242,11 +243,11 @@ export function SettingsClient({
 
     try {
       setSaving(true);
-      setError(null);
+      setSuperCategoryError(null);
       await updateSuperCategory(superCategory.id, { name: nextName });
       await loadSettings();
     } catch (renameError) {
-      setError(renameError instanceof Error ? renameError.message : 'Failed to rename super category');
+      setSuperCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename super category');
     } finally {
       setSaving(false);
     }
@@ -271,19 +272,19 @@ export function SettingsClient({
       : undefined;
 
     if (replacementName && !replacement) {
-      setError('Replacement super category not found.');
+      setSuperCategoryError('Replacement super category not found.');
       return;
     }
 
     try {
       setSaving(true);
-      setError(null);
+      setSuperCategoryError(null);
       await archiveSuperCategory(superCategory.id, {
         replacementSuperCategoryId: replacement?.id,
       });
       await loadSettings();
     } catch (archiveError) {
-      setError(archiveError instanceof Error ? archiveError.message : 'Failed to archive super category');
+      setSuperCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive super category');
     } finally {
       setSaving(false);
     }
@@ -467,9 +468,9 @@ export function SettingsClient({
         <h2 className="text-2xl font-semibold text-slate-900">Super Categories</h2>
         <p className="mt-2 text-base text-slate-500">Default system groups for high-level tracking.</p>
 
-        {error ? (
+        {superCategoryError ? (
           <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
+            {superCategoryError}
           </div>
         ) : null}
 
@@ -630,6 +631,12 @@ export function SettingsClient({
             </button>
           </div>
         </div>
+
+        {categoryError ? (
+          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {categoryError}
+          </div>
+        ) : null}
 
         <div className="mt-5 space-y-4">
           {categories.map((category) => (
