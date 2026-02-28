@@ -623,27 +623,29 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                           </select>
                         </div>
 
-                        <div className="relative">
+                        <div>
                           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:hidden">
                             FX to ARS
                           </span>
-                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
-                          <input
-                            type="text"
-                            name={`income-fx-${user.id}-${index}`}
-                            aria-label={`${user.name} income fx rate ${index + 1}`}
-                            autoComplete="off"
-                            inputMode="decimal"
-                            value={row.currencyCode === 'ARS' ? '1' : row.fxRate}
-                            onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
-                            disabled={row.currencyCode === 'ARS'}
-                            className={`${moneyFieldClass} ${
-                              row.currencyCode === 'ARS'
-                                ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none disabled:opacity-100'
-                                : ''
-                            }`}
-                            placeholder="FX to ARS"
-                          />
+                          <div className="relative">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
+                            <input
+                              type="text"
+                              name={`income-fx-${user.id}-${index}`}
+                              aria-label={`${user.name} income fx rate ${index + 1}`}
+                              autoComplete="off"
+                              inputMode="decimal"
+                              value={row.currencyCode === 'ARS' ? '1' : row.fxRate}
+                              onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
+                              disabled={row.currencyCode === 'ARS'}
+                              className={`${moneyFieldClass} ${
+                                row.currencyCode === 'ARS'
+                                  ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none disabled:opacity-100'
+                                  : ''
+                              }`}
+                              placeholder="FX to ARS"
+                            />
+                          </div>
                         </div>
                       </div>
 
