@@ -15,6 +15,7 @@ import {
   getSuperCategories,
   renameCategory,
   SuperCategory,
+  unarchiveCategory,
   updateUser,
   updateSuperCategory,
 } from '../../lib/api';
@@ -61,6 +62,19 @@ export function SettingsClient({
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
+    [categories],
+  );
+
+  const sortedCategories = useMemo(
+    () =>
+      [...categories].sort((left, right) => {
+        const leftArchived = left.archivedAt !== null;
+        const rightArchived = right.archivedAt !== null;
+        if (leftArchived !== rightArchived) {
+          return leftArchived ? 1 : -1;
+        }
+        return left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+      }),
     [categories],
   );
 
@@ -210,35 +224,30 @@ export function SettingsClient({
       return;
     }
 
-    const replacements = activeCategories.filter((entry) => entry.id !== category.id);
-    if (replacements.length === 0) {
-      setCategoryError('At least one active replacement category is required before archiving.');
-      return;
+    try {
+      setSaving(true);
+      setCategoryError(null);
+      await archiveCategory(category.id);
+      await loadSettings();
+    } catch (archiveError) {
+      setCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
+    } finally {
+      setSaving(false);
     }
+  };
 
-    const replacementName = window
-      .prompt(
-        `Type replacement category name before archiving: ${replacements.map((c) => c.name).join(', ')}`,
-      )
-      ?.trim();
-
-    if (!replacementName) {
-      return;
-    }
-
-    const replacement = replacements.find((entry) => entry.name.toLowerCase() === replacementName.toLowerCase());
-    if (!replacement) {
-      setCategoryError('Replacement category not found.');
+  const onUnarchiveCategory = async (category: Category) => {
+    if (!category.archivedAt) {
       return;
     }
 
     try {
       setSaving(true);
       setCategoryError(null);
-      await archiveCategory(category.id, { replacementCategoryId: replacement.id });
+      await unarchiveCategory(category.id);
       await loadSettings();
-    } catch (archiveError) {
-      setCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
+    } catch (unarchiveError) {
+      setCategoryError(unarchiveError instanceof Error ? unarchiveError.message : 'Failed to unarchive category');
     } finally {
       setSaving(false);
     }
@@ -448,6 +457,48 @@ export function SettingsClient({
         <h2 className="text-2xl font-semibold text-slate-900">Personal Information</h2>
         <p className="mt-2 text-base text-slate-500">Your identity across the Fairsplit platform.</p>
 
+        <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          <h3 className="text-base font-semibold text-slate-900">Invite Someone</h3>
+          <p className="mt-1 text-xs text-slate-600">Generate a one-time code so another person can join your household.</p>
+          <button
+            className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-md bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={inviteLoading}
+            onClick={() => void onCreateInviteCode()}
+            type="button"
+          >
+            {inviteLoading ? 'Generating...' : 'Generate Invite Code'}
+          </button>
+          {inviteCode ? (
+            <div className="mt-3 rounded-lg border border-slate-300 bg-white/90 px-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Invite code</p>
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-bold tracking-[0.15em] text-slate-900">{inviteCode}</p>
+                <button
+                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  onClick={() => void onCopyInviteCode()}
+                  type="button"
+                >
+                  Copy
+                </button>
+              </div>
+              {inviteExpiresAt ? (
+                <p className="mt-1 text-xs text-slate-500">Expires: {new Date(inviteExpiresAt).toLocaleString()}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        {inviteError ? (
+          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {inviteError}
+          </div>
+        ) : null}
+        {inviteSuccess ? (
+          <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            {inviteSuccess}
+          </div>
+        ) : null}
+
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
@@ -455,13 +506,13 @@ export function SettingsClient({
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
                   aria-label="Display name"
-                  className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-lg font-medium text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onChange={(event) => setDisplayNameDraft(event.target.value)}
                   placeholder="Your name"
                   value={displayNameDraft}
                 />
                 <button
-                  className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand-600 px-6 text-lg font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   disabled={profileSaving || !currentUserId}
                   onClick={() => void onUpdateDisplayName()}
                   type="button"
@@ -475,7 +526,7 @@ export function SettingsClient({
             <div className="min-w-0">
               <p className="text-xl font-semibold text-slate-700">Email Address</p>
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3">
-                <span className="min-w-0 truncate text-lg font-medium text-slate-500">
+                <span className="min-w-0 truncate text-base font-medium text-slate-500">
                   {currentUserEmail ?? 'No email available in this session'}
                 </span>
                 <svg aria-hidden="true" className="ml-3 h-6 w-6 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
@@ -494,51 +545,6 @@ export function SettingsClient({
         {profileSuccess ? (
           <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
             {profileSuccess}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Invite Someone</h2>
-        <p className="mt-2 text-base text-slate-500">Generate a one-time code so another person can join your household.</p>
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <button
-              className="inline-flex h-12 items-center justify-center rounded-xl bg-brand-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={inviteLoading}
-              onClick={() => void onCreateInviteCode()}
-              type="button"
-            >
-              {inviteLoading ? 'Generating...' : 'Generate Invite Code'}
-            </button>
-            {inviteCode ? (
-              <button
-                className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-300 bg-white px-6 text-base font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                onClick={() => void onCopyInviteCode()}
-                type="button"
-              >
-                Copy Code
-              </button>
-            ) : null}
-          </div>
-          {inviteCode ? (
-            <div className="mt-4 rounded-xl border border-slate-300 bg-white px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Invite code</p>
-              <p className="mt-1 text-xl font-bold tracking-[0.2em] text-slate-900">{inviteCode}</p>
-              {inviteExpiresAt ? (
-                <p className="mt-2 text-sm text-slate-500">Expires: {new Date(inviteExpiresAt).toLocaleString()}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-        {inviteError ? (
-          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {inviteError}
-          </div>
-        ) : null}
-        {inviteSuccess ? (
-          <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-            {inviteSuccess}
           </div>
         ) : null}
       </section>
@@ -718,7 +724,7 @@ export function SettingsClient({
         ) : null}
 
         <div className="mt-5 space-y-4">
-          {categories.map((category) => (
+          {sortedCategories.map((category) => (
             <div
               key={category.id}
               className={
@@ -832,7 +838,30 @@ export function SettingsClient({
                       Archive
                     </ActionButton>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
+                    <ActionButton
+                      action="edit"
+                      aria-label={`Unarchive ${category.name}`}
+                      className="h-11 w-11 lg:hidden"
+                      onClick={() => void onUnarchiveCategory(category)}
+                      size="icon"
+                    >
+                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <path d="M7 10l5-5 5 5" />
+                        <path d="M12 5v12" />
+                      </svg>
+                    </ActionButton>
+                    <ActionButton
+                      action="edit"
+                      className="hidden lg:inline-flex"
+                      onClick={() => void onUnarchiveCategory(category)}
+                    >
+                      Unarchive
+                    </ActionButton>
+                  </div>
+                )}
               </div>
             </div>
           ))}

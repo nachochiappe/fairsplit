@@ -1003,13 +1003,6 @@ export const createApp = (): Express => {
       return res.status(404).json({ error: 'Category not found.' });
     }
 
-    const isInUse = sourceCategory._count.expenses > 0 || sourceCategory._count.expenseTemplates > 0;
-    if (isInUse && !parsed.data.replacementCategoryId) {
-      return res.status(400).json({
-        error: 'This category has assigned expenses. Choose a replacement category before archiving.',
-      });
-    }
-
     const replacementCategory = parsed.data.replacementCategoryId
       ? await prisma.category.findFirst({
           where: { id: parsed.data.replacementCategoryId, householdId: auth.householdId },
@@ -1037,6 +1030,38 @@ export const createApp = (): Express => {
         where: { id: sourceCategory.id },
         data: { archivedAt: new Date() },
       });
+    });
+
+    return res.status(204).send();
+  });
+
+  app.post('/api/categories/:id/unarchive', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const category = await prisma.category.findFirst({
+      where: {
+        id: req.params.id,
+        householdId: auth.householdId,
+      },
+      select: {
+        id: true,
+        archivedAt: true,
+      },
+    });
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found.' });
+    }
+
+    if (!category.archivedAt) {
+      return res.status(204).send();
+    }
+
+    await prisma.category.update({
+      where: { id: category.id },
+      data: { archivedAt: null },
     });
 
     return res.status(204).send();
