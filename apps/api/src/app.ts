@@ -415,15 +415,24 @@ export const createApp = (): Express => {
         return res.json(toResponse(linked, false));
       }
 
-      const created = await prisma.user.create({
-        data: {
-          name: displayName,
-          email,
-          authUserId,
-          householdId: null,
-          onboardingHouseholdDecisionAt: null,
-        },
-        include: { household: true },
+      const decisionAt = new Date();
+      const created = await prisma.$transaction(async (tx) => {
+        const household = await tx.household.create({
+          data: {
+            name: `${displayName}'s Household`,
+          },
+        });
+
+        return tx.user.create({
+          data: {
+            name: displayName,
+            email,
+            authUserId,
+            householdId: household.id,
+            onboardingHouseholdDecisionAt: decisionAt,
+          },
+          include: { household: true },
+        });
       });
 
       return res.status(201).json(toResponse(created, true));
