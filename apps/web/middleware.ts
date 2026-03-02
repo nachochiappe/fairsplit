@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-
-const SESSION_COOKIE = 'fairsplit_session';
+import { parseSessionToken, SESSION_COOKIE } from './lib/session';
 
 function hasSession(request: NextRequest): boolean {
-  return Boolean(request.cookies.get(SESSION_COOKIE)?.value);
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  return parseSessionToken(token) !== null;
 }
 
 function needsHouseholdSetup(request: NextRequest): boolean {
@@ -12,17 +12,8 @@ function needsHouseholdSetup(request: NextRequest): boolean {
   if (!rawCookie) {
     return false;
   }
-
-  try {
-    const decoded = decodeURIComponent(rawCookie);
-    const parsed = JSON.parse(decoded) as { needsHouseholdSetup?: unknown; householdId?: unknown };
-    if (typeof parsed.needsHouseholdSetup === 'boolean') {
-      return parsed.needsHouseholdSetup;
-    }
-    return !(typeof parsed.householdId === 'string' && parsed.householdId.trim().length > 0);
-  } catch {
-    return false;
-  }
+  const parsed = parseSessionToken(rawCookie);
+  return Boolean(parsed?.needsHouseholdSetup);
 }
 
 export function middleware(request: NextRequest) {

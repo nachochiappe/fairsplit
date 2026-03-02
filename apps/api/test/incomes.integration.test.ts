@@ -2,22 +2,43 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '@fairsplit/db';
 import { createApp } from '../src/app';
+import { issueSessionToken } from '../src/lib/session';
 
 const app = createApp();
 const month = '2099-11';
 let userId = '';
 let categoryId = '';
+let householdId = '';
+let sessionToken = '';
 
 describe('PUT /api/incomes', () => {
   beforeAll(async () => {
     const suffix = Date.now().toString(36);
+    const household = await prisma.household.create({
+      data: { name: `Income HH ${suffix}` },
+    });
+    householdId = household.id;
     const created = await prisma.user.create({
-      data: { name: `Income Test ${suffix}` },
+      data: {
+        name: `Income Test ${suffix}`,
+        householdId,
+        onboardingHouseholdDecisionAt: new Date(),
+      },
     });
     userId = created.id;
+    sessionToken = issueSessionToken(
+      {
+        id: created.id,
+        householdId: created.householdId,
+        email: created.email,
+        authUserId: created.authUserId,
+        onboardingHouseholdDecisionAt: created.onboardingHouseholdDecisionAt,
+      },
+      process.env.FAIRSPLIT_SESSION_SECRET!,
+    );
 
     const category = await prisma.category.create({
-      data: { name: `Income FX ${suffix}` },
+      data: { name: `Income FX ${suffix}`, householdId },
     });
     categoryId = category.id;
   });
@@ -32,11 +53,14 @@ describe('PUT /api/incomes', () => {
     if (categoryId) {
       await prisma.category.delete({ where: { id: categoryId } });
     }
+    if (householdId) {
+      await prisma.household.deleteMany({ where: { id: householdId } });
+    }
     await prisma.$disconnect();
   });
 
   it('supports multiple income entries per user/month and replaces previous values', async () => {
-    const createManyResponse = await request(app).put('/api/incomes').send({
+    const createManyResponse = await request(app).put('/api/incomes').set('x-fairsplit-session', sessionToken).send({
       month,
       userId,
       entries: [
@@ -48,7 +72,7 @@ describe('PUT /api/incomes', () => {
     expect(createManyResponse.status).toBe(200);
     expect(createManyResponse.body).toHaveLength(2);
 
-    const firstRead = await request(app).get('/api/incomes').query({ month });
+    const firstRead = await request(app).get('/api/incomes').set('x-fairsplit-session', sessionToken).query({ month });
     expect(firstRead.status).toBe(200);
 
     const firstUserEntries = firstRead.body
@@ -58,7 +82,7 @@ describe('PUT /api/incomes', () => {
 
     expect(firstUserEntries).toEqual(['Monotributo:250.50', 'Sueldo:1000.00']);
 
-    const replaceResponse = await request(app).put('/api/incomes').send({
+    const replaceResponse = await request(app).put('/api/incomes').set('x-fairsplit-session', sessionToken).send({
       month,
       userId,
       entries: [{ description: 'Sueldo', amount: 500 }],
@@ -67,7 +91,7 @@ describe('PUT /api/incomes', () => {
     expect(replaceResponse.status).toBe(200);
     expect(replaceResponse.body).toHaveLength(1);
 
-    const secondRead = await request(app).get('/api/incomes').query({ month });
+    const secondRead = await request(app).get('/api/incomes').set('x-fairsplit-session', sessionToken).query({ month });
     expect(secondRead.status).toBe(200);
 
     const secondUserEntries = secondRead.body
@@ -89,7 +113,7 @@ describe('PUT /api/incomes', () => {
       create: { month, currencyCode: 'USD', rateToArs: '1000.000000' },
     });
 
-    const response = await request(app).put('/api/incomes').send({
+    const response = await request(app).put('/api/incomes').set('x-fairsplit-session', sessionToken).send({
       month,
       userId,
       entries: [{ description: 'USD salary', amount: 10, currencyCode: 'USD', fxRate: 2000 }],
@@ -122,7 +146,7 @@ describe('PUT /api/incomes', () => {
       },
     });
 
-    const incomeResponse = await request(app).put('/api/incomes').send({
+    const incomeResponse = await request(app).put('/api/incomes').set('x-fairsplit-session', sessionToken).send({
       month,
       userId,
       entries: [{ description: 'EUR consulting', amount: 5, currencyCode: 'EUR', fxRate: 1200 }],
@@ -146,7 +170,7 @@ describe('PUT /api/incomes', () => {
     });
     expect(createdRate.rateToArs.toFixed(6)).toBe('1200.000000');
 
-    const expenseResponse = await request(app).post('/api/expenses').send({
+    const expenseResponse = await request(app).post('/api/expenses').set('x-fairsplit-session', sessionToken).send({
       month,
       date: `${month}-05`,
       description: 'Software subscription',
@@ -173,7 +197,7 @@ describe('PUT /api/incomes', () => {
       create: { month, currencyCode: 'USD', rateToArs: '1100.000000' },
     });
 
-    const expenseResponse = await request(app).post('/api/expenses').send({
+    const expenseResponse = await request(app).post('/api/expenses').set('x-fairsplit-session', sessionToken).send({
       month,
       date: `${month}-10`,
       description: 'USD service',

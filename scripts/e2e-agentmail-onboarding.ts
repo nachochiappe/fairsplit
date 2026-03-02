@@ -88,18 +88,10 @@ interface AgentmailMessage {
   extracted_html?: string | null;
 }
 
-interface SessionPayload {
-  userId: string;
-  householdId: string | null;
-  needsHouseholdSetup?: boolean;
-  email?: string | null;
-  authUserId?: string | null;
-  onboardingHouseholdDecisionAt?: string | null;
-}
-
 interface AuthIdentity {
   authUserId: string;
   email: string;
+  accessToken: string;
 }
 
 interface LocalAuthLinkResponse {
@@ -111,6 +103,7 @@ interface LocalAuthLinkResponse {
     onboardingHouseholdDecisionAt: string | null;
   };
   needsHouseholdSetup: boolean;
+  sessionToken: string;
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -314,21 +307,21 @@ function playwrightEscape(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
-async function postAppApi<T>(path: string, userId: string, body: unknown): Promise<T> {
+async function postAppApi<T>(path: string, sessionToken: string, body: unknown): Promise<T> {
   return requestJson<T>(`${env.apiBaseUrl}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-fairsplit-user-id': userId,
+      'x-fairsplit-session': sessionToken,
     },
     body: JSON.stringify(body),
   });
 }
 
-async function getSetupStatus(userId: string): Promise<{ needsHouseholdSetup: boolean; decisionLocked: boolean }> {
+async function getSetupStatus(sessionToken: string): Promise<{ needsHouseholdSetup: boolean; decisionLocked: boolean }> {
   return requestJson<{ needsHouseholdSetup: boolean; decisionLocked: boolean }>(`${env.apiBaseUrl}/household/setup-status`, {
     headers: {
-      'x-fairsplit-user-id': userId,
+      'x-fairsplit-session': sessionToken,
     },
   });
 }
@@ -347,7 +340,7 @@ async function resolveIdentityFromAuthLink(authLink: string): Promise<AuthIdenti
     if (!authUserId || !email) {
       throw new Error('Could not extract auth identity from callback token.');
     }
-    return { authUserId, email };
+    return { authUserId, email, accessToken };
   }
 
   if (!url.pathname.includes('/auth/v1/verify')) {
@@ -375,13 +368,6 @@ async function resolveIdentityFromAuthLink(authLink: string): Promise<AuthIdenti
     }),
   });
 
-  const fromUser = verifyResponse.user?.id && verifyResponse.user?.email
-    ? { authUserId: verifyResponse.user.id, email: verifyResponse.user.email.toLowerCase() }
-    : null;
-  if (fromUser) {
-    return fromUser;
-  }
-
   if (!verifyResponse.access_token) {
     throw new Error('Supabase verify response did not include user identity.');
   }
@@ -391,7 +377,7 @@ async function resolveIdentityFromAuthLink(authLink: string): Promise<AuthIdenti
   if (!authUserId || !email) {
     throw new Error('Could not extract auth identity from verify response token.');
   }
-  return { authUserId, email };
+  return { authUserId, email, accessToken: verifyResponse.access_token };
 }
 
 async function linkIdentityToLocalUser(identity: AuthIdentity): Promise<LocalAuthLinkResponse> {
@@ -401,23 +387,13 @@ async function linkIdentityToLocalUser(identity: AuthIdentity): Promise<LocalAut
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      authUserId: identity.authUserId,
-      email: identity.email,
+      accessToken: identity.accessToken,
     }),
   });
 }
 
 function persistSessionInBrowser(payload: LocalAuthLinkResponse): void {
-  const sessionPayload: SessionPayload = {
-    userId: payload.user.id,
-    householdId: payload.user.householdId,
-    email: payload.user.email,
-    authUserId: payload.user.authUserId,
-    onboardingHouseholdDecisionAt: payload.user.onboardingHouseholdDecisionAt,
-    needsHouseholdSetup: payload.needsHouseholdSetup,
-  };
-  const encoded = encodeURIComponent(JSON.stringify(sessionPayload));
-  const escapedValue = playwrightEscape(encoded);
+  const escapedValue = playwrightEscape(payload.sessionToken);
   runPlaywright(`playwright-cli open '${env.appUrl}/login'`);
   runPlaywright(
     `playwright-cli run-code \"async (page) => { await page.goto('${env.appUrl}/login'); await page.context().addCookies([{ name: 'fairsplit_session', value: '${escapedValue}', url: '${env.appUrl}' }]); return { ok: true }; }\"`,
@@ -455,8 +431,8 @@ async function main(): Promise<void> {
   console.log(`Inviter userId: ${inviterSession.user.id}`);
 
   console.log('Completing inviter setup and generating invite code...');
-  await postAppApi('/household/skip-setup', inviterSession.user.id, {});
-  const invite = await postAppApi<{ code: string; expiresAt: string }>('/household/invites', inviterSession.user.id, {});
+  const inviterSetup = await postAppApi<LocalAuthLinkResponse>('/household/skip-setup', inviterSession.sessionToken, {});
+  const invite = await postAppApi<{ code: string; expiresAt: string }>('/household/invites', inviterSetup.sessionToken, {});
   console.log(`Invite code: ${invite.code} (expires ${invite.expiresAt})`);
 
   console.log('Resolving joiner identity from real email auth link...');
@@ -468,7 +444,7 @@ async function main(): Promise<void> {
   console.log('Joining household in UI with invite code...');
   await joinWithCodeInUi(invite.code);
 
-  const joinerStatus = await getSetupStatus(joinerSession.user.id);
+  const joinerStatus = await getSetupStatus(joinerSession.sessionToken);
   if (joinerStatus.needsHouseholdSetup || !joinerStatus.decisionLocked) {
     throw new Error(`Joiner setup status invalid: ${JSON.stringify(joinerStatus)}`);
   }

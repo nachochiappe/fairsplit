@@ -2,21 +2,43 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@fairsplit/db';
 import { createApp } from '../src/app';
+import { issueSessionToken } from '../src/lib/session';
 
 const app = createApp();
 const month = '2099-07';
 let testUserId = '';
 let testCategoryId = '';
+let householdId = '';
+let sessionToken = '';
 
 describe('expenses pagination', () => {
   beforeAll(async () => {
+    const suffix = Date.now().toString(36);
+    const household = await prisma.household.create({
+      data: { name: `Pagination HH ${suffix}` },
+    });
+    householdId = household.id;
     const user = await prisma.user.create({
-      data: { name: `Pagination Test ${Date.now().toString(36)}` },
+      data: {
+        name: `Pagination Test ${suffix}`,
+        householdId,
+        onboardingHouseholdDecisionAt: new Date(),
+      },
     });
     testUserId = user.id;
+    sessionToken = issueSessionToken(
+      {
+        id: user.id,
+        householdId: user.householdId,
+        email: user.email,
+        authUserId: user.authUserId,
+        onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt,
+      },
+      process.env.FAIRSPLIT_SESSION_SECRET!,
+    );
 
     const category = await prisma.category.create({
-      data: { name: `Pagination Category ${Date.now().toString(36)}` },
+      data: { name: `Pagination Category ${Date.now().toString(36)}`, householdId },
     });
     testCategoryId = category.id;
   });
@@ -39,6 +61,9 @@ describe('expenses pagination', () => {
     if (testCategoryId) {
       await prisma.category.delete({ where: { id: testCategoryId } });
     }
+    if (householdId) {
+      await prisma.household.deleteMany({ where: { id: householdId } });
+    }
     await prisma.$disconnect();
   });
 
@@ -46,7 +71,7 @@ describe('expenses pagination', () => {
     const dates = [`${month}-01`, `${month}-02`, `${month}-03`];
 
     for (const [index, date] of dates.entries()) {
-      const response = await request(app).post('/api/expenses').send({
+      const response = await request(app).post('/api/expenses').set('x-fairsplit-session', sessionToken).send({
         month,
         date,
         description: `Expense ${index + 1}`,
@@ -57,7 +82,7 @@ describe('expenses pagination', () => {
       expect(response.status).toBe(201);
     }
 
-    const firstPage = await request(app).get('/api/expenses').query({
+    const firstPage = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({
       month,
       limit: 2,
       sortBy: 'date',
@@ -75,7 +100,7 @@ describe('expenses pagination', () => {
     );
     expect(firstPage.body.pagination.nextCursor).toEqual(expect.any(String));
 
-    const secondPage = await request(app).get('/api/expenses').query({
+    const secondPage = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({
       month,
       limit: 2,
       cursor: firstPage.body.pagination.nextCursor,
@@ -96,7 +121,7 @@ describe('expenses pagination', () => {
   });
 
   it('rejects cursor when limit is missing', async () => {
-    const response = await request(app).get('/api/expenses').query({
+    const response = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({
       month,
       cursor: 'invalid-cursor',
     });

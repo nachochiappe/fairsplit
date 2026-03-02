@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '@fairsplit/db';
 import { createApp } from '../src/app';
+import { issueSessionToken } from '../src/lib/session';
 
 const app = createApp();
 const month = '2099-12';
@@ -9,21 +10,45 @@ let userAId = '';
 let userBId = '';
 let categoryHousingId = '';
 let categoryFoodId = '';
+let householdId = '';
+let sessionToken = '';
 
 describe('GET /api/settlement', () => {
   beforeAll(async () => {
     const suffix = Date.now().toString(36);
+    const household = await prisma.household.create({
+      data: { name: `Settlement HH ${suffix}` },
+    });
+    householdId = household.id;
     const userA = await prisma.user.create({
-      data: { name: `Integration A ${suffix}` },
+      data: {
+        name: `Integration A ${suffix}`,
+        householdId,
+        onboardingHouseholdDecisionAt: new Date(),
+      },
     });
     userAId = userA.id;
+    sessionToken = issueSessionToken(
+      {
+        id: userA.id,
+        householdId: userA.householdId,
+        email: userA.email,
+        authUserId: userA.authUserId,
+        onboardingHouseholdDecisionAt: userA.onboardingHouseholdDecisionAt,
+      },
+      process.env.FAIRSPLIT_SESSION_SECRET!,
+    );
 
     const userB = await prisma.user.create({
-      data: { name: `Integration B ${suffix}` },
+      data: {
+        name: `Integration B ${suffix}`,
+        householdId,
+        onboardingHouseholdDecisionAt: new Date(),
+      },
     });
     userBId = userB.id;
-    const housing = await prisma.category.create({ data: { name: `Housing ${suffix}` } });
-    const food = await prisma.category.create({ data: { name: `Food ${suffix}` } });
+    const housing = await prisma.category.create({ data: { name: `Housing ${suffix}`, householdId } });
+    const food = await prisma.category.create({ data: { name: `Food ${suffix}`, householdId } });
     categoryHousingId = housing.id;
     categoryFoodId = food.id;
 
@@ -31,6 +56,7 @@ describe('GET /api/settlement', () => {
       data: [
         {
           month,
+          householdId,
           userId: userA.id,
           description: 'Salary',
           amount: '6000.00',
@@ -40,6 +66,7 @@ describe('GET /api/settlement', () => {
         },
         {
           month,
+          householdId,
           userId: userB.id,
           description: 'Salary',
           amount: '3000.00',
@@ -54,6 +81,7 @@ describe('GET /api/settlement', () => {
       data: [
         {
           month,
+          householdId,
           date: new Date('2026-02-05T12:00:00.000Z'),
           description: 'Rent',
           categoryId: categoryHousingId,
@@ -65,6 +93,7 @@ describe('GET /api/settlement', () => {
         },
         {
           month,
+          householdId,
           date: new Date('2026-02-10T12:00:00.000Z'),
           description: 'Groceries',
           categoryId: categoryFoodId,
@@ -90,11 +119,14 @@ describe('GET /api/settlement', () => {
     if (categoryIds.length > 0) {
       await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
     }
+    if (householdId) {
+      await prisma.household.deleteMany({ where: { id: householdId } });
+    }
     await prisma.$disconnect();
   });
 
   it('returns settlement breakdown and transfer', async () => {
-    const response = await request(app).get('/api/settlement').query({ month });
+    const response = await request(app).get('/api/settlement').set('x-fairsplit-session', sessionToken).query({ month });
 
     expect(response.status).toBe(200);
     expect(response.body.month).toBe(month);

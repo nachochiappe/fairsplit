@@ -4,25 +4,12 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TitleMark } from '../../../components/TitleMark';
 import type { AuthLinkResponse } from '../../../lib/api';
-
-const SESSION_COOKIE = 'fairsplit_session';
+import { SESSION_COOKIE } from '../../../lib/session';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 
 function parseHashParams(hash: string): URLSearchParams {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash;
   return new URLSearchParams(raw);
-}
-
-function decodeJwtPayload(token: string): Record<string, unknown> {
-  const parts = token.split('.');
-  if (parts.length < 2) {
-    throw new Error('Invalid access token format');
-  }
-
-  const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-  const json = atob(padded);
-  return JSON.parse(json) as Record<string, unknown>;
 }
 
 export default function AuthCallbackPage() {
@@ -38,22 +25,13 @@ export default function AuthCallbackPage() {
           throw new Error('Missing access token in callback URL.');
         }
 
-        const payload = decodeJwtPayload(accessToken);
-        const authUserId = typeof payload.sub === 'string' ? payload.sub : null;
-        const email = typeof payload.email === 'string' ? payload.email : null;
-
-        if (!authUserId || !email) {
-          throw new Error('Invalid token payload. Expected sub and email claims.');
-        }
-
         const response = await fetch(`${API_BASE_URL}/auth/link`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            authUserId,
-            email,
+            accessToken,
           }),
         });
 
@@ -63,16 +41,7 @@ export default function AuthCallbackPage() {
         }
 
         const linked = (await response.json()) as AuthLinkResponse;
-        const sessionPayload = {
-          userId: linked?.user?.id,
-          householdId: linked?.user?.householdId,
-          email: linked?.user?.email,
-          authUserId: linked?.user?.authUserId,
-          onboardingHouseholdDecisionAt: linked?.user?.onboardingHouseholdDecisionAt ?? null,
-          needsHouseholdSetup: linked?.needsHouseholdSetup ?? false,
-        };
-
-        document.cookie = `${SESSION_COOKIE}=${encodeURIComponent(JSON.stringify(sessionPayload))}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        document.cookie = `${SESSION_COOKIE}=${linked.sessionToken}; Path=/; Max-Age=2592000; SameSite=Lax`;
         setStatus('Account linked. Redirecting...');
         router.replace(linked?.needsHouseholdSetup ? '/onboarding/household' : '/dashboard');
       } catch (error) {

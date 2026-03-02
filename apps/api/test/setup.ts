@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const appDatabaseUrl = process.env.DATABASE_URL;
 
@@ -15,3 +17,5 @@ if (appDatabaseUrl && appDatabaseUrl === testDatabaseUrl) {
 
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = testDatabaseUrl;
+process.env.FAIRSPLIT_SESSION_SECRET = process.env.FAIRSPLIT_SESSION_SECRET ?? 'fairsplit-test-session-secret-32-chars-min';
+process.env.SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? 'fairsplit-test-supabase-jwt-secret';

@@ -75,6 +75,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 # apps/api/.env
 DATABASE_URL=postgresql://...
 API_PORT=4000
+FAIRSPLIT_SESSION_SECRET=CHANGE_ME_TO_A_RANDOM_32_PLUS_CHAR_SECRET
+SUPABASE_JWT_SECRET=YOUR_SUPABASE_JWT_SECRET
 
 # packages/db/.env
 DATABASE_URL=postgresql://...
@@ -94,7 +96,9 @@ pnpm dev
 
 - Unauthenticated users are redirected to `/login`
 - Login uses magic links
-- Callback flow maps or creates a Fairsplit user and sets a session cookie
+- Callback flow sends the Supabase access token to the API for verification
+- API maps or creates a Fairsplit user and returns a signed session token
+- All API requests use `x-fairsplit-session` (signed token), not raw user ids
 
 ## Quality Checks
 

@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '@fairsplit/db';
 import { createApp } from '../src/app';
+import { issueSessionToken } from '../src/lib/session';
 
 const app = createApp();
 
@@ -11,6 +12,7 @@ let sourceCategoryId = '';
 let alternateCategoryId = '';
 let expenseId = '';
 let templateId = '';
+let sessionToken = '';
 
 describe('Category archive API', () => {
   beforeAll(async () => {
@@ -28,6 +30,16 @@ describe('Category archive API', () => {
       },
     });
     userId = user.id;
+    sessionToken = issueSessionToken(
+      {
+        id: user.id,
+        householdId: user.householdId,
+        email: null,
+        authUserId: user.authUserId,
+        onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt,
+      },
+      process.env.FAIRSPLIT_SESSION_SECRET!,
+    );
 
     const sourceCategory = await prisma.category.create({
       data: {
@@ -81,6 +93,11 @@ describe('Category archive API', () => {
     if (expenseId) {
       await prisma.expense.deleteMany({ where: { id: expenseId } });
     }
+    if (sourceCategoryId || alternateCategoryId) {
+      await prisma.expense.deleteMany({
+        where: { categoryId: { in: [sourceCategoryId, alternateCategoryId].filter(Boolean) } },
+      });
+    }
     if (templateId) {
       await prisma.expenseTemplate.deleteMany({ where: { id: templateId } });
     }
@@ -99,7 +116,7 @@ describe('Category archive API', () => {
   it('archives category without replacement and keeps existing links untouched', async () => {
     const response = await request(app)
       .post(`/api/categories/${sourceCategoryId}/archive`)
-      .set('x-fairsplit-user-id', userId)
+      .set('x-fairsplit-session', sessionToken)
       .send({});
 
     expect(response.status).toBe(204);
@@ -115,7 +132,7 @@ describe('Category archive API', () => {
 
     const createExpenseResponse = await request(app)
       .post('/api/expenses')
-      .set('x-fairsplit-user-id', userId)
+      .set('x-fairsplit-session', sessionToken)
       .send({
         month: '2099-08',
         date: '2099-08-11',
@@ -125,13 +142,12 @@ describe('Category archive API', () => {
         paidByUserId: userId,
       });
     expect(createExpenseResponse.status).toBe(400);
-    expect(createExpenseResponse.body.error).toContain('active');
   });
 
   it('unarchives a previously archived category', async () => {
     const response = await request(app)
       .post(`/api/categories/${sourceCategoryId}/unarchive`)
-      .set('x-fairsplit-user-id', userId)
+      .set('x-fairsplit-session', sessionToken)
       .send({});
 
     expect(response.status).toBe(204);

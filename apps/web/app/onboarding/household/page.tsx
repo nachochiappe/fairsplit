@@ -4,19 +4,10 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { joinHouseholdWithCode, skipHouseholdSetup, type AuthLinkResponse } from '../../../lib/api';
 import { TitleMark } from '../../../components/TitleMark';
-
-const SESSION_COOKIE = 'fairsplit_session';
+import { SESSION_COOKIE } from '../../../lib/session';
 
 function persistSessionCookie(payload: AuthLinkResponse): void {
-  const sessionPayload = {
-    userId: payload.user.id,
-    householdId: payload.user.householdId,
-    email: payload.user.email,
-    authUserId: payload.user.authUserId,
-    onboardingHouseholdDecisionAt: payload.user.onboardingHouseholdDecisionAt,
-    needsHouseholdSetup: payload.needsHouseholdSetup,
-  };
-  document.cookie = `${SESSION_COOKIE}=${encodeURIComponent(JSON.stringify(sessionPayload))}; Path=/; Max-Age=2592000; SameSite=Lax`;
+  document.cookie = `${SESSION_COOKIE}=${payload.sessionToken}; Path=/; Max-Age=2592000; SameSite=Lax`;
 }
 
 export default function HouseholdOnboardingPage() {

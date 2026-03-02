@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { prisma } from '@fairsplit/db';
 import { createApp } from '../src/app';
+import { issueSessionToken } from '../src/lib/session';
 
 const app = createApp();
 const monthA = '2099-04';
@@ -9,15 +10,36 @@ const monthB = '2099-05';
 const monthC = '2099-06';
 let testUserId = '';
 let testCategoryId = '';
+let householdId = '';
+let sessionToken = '';
 
 describe('installment expenses', () => {
   beforeAll(async () => {
+    const suffix = Date.now().toString(36);
+    const household = await prisma.household.create({
+      data: { name: `Installment HH ${suffix}` },
+    });
+    householdId = household.id;
     const created = await prisma.user.create({
-      data: { name: `Installment Test ${Date.now().toString(36)}` },
+      data: {
+        name: `Installment Test ${suffix}`,
+        householdId,
+        onboardingHouseholdDecisionAt: new Date(),
+      },
     });
     testUserId = created.id;
+    sessionToken = issueSessionToken(
+      {
+        id: created.id,
+        householdId: created.householdId,
+        email: created.email,
+        authUserId: created.authUserId,
+        onboardingHouseholdDecisionAt: created.onboardingHouseholdDecisionAt,
+      },
+      process.env.FAIRSPLIT_SESSION_SECRET!,
+    );
     const category = await prisma.category.create({
-      data: { name: `Tech ${Date.now().toString(36)}` },
+      data: { name: `Tech ${Date.now().toString(36)}`, householdId },
     });
     testCategoryId = category.id;
   });
@@ -42,12 +64,15 @@ describe('installment expenses', () => {
     if (testCategoryId) {
       await prisma.category.delete({ where: { id: testCategoryId } });
     }
+    if (householdId) {
+      await prisma.household.deleteMany({ where: { id: householdId } });
+    }
     await prisma.$disconnect();
   });
 
   it('creates installment rows and lazily generates upcoming months', async () => {
     const purchaseDate = `${monthA}-10`;
-    const createResponse = await request(app).post('/api/expenses').send({
+    const createResponse = await request(app).post('/api/expenses').set('x-fairsplit-session', sessionToken).send({
       month: monthA,
       date: purchaseDate,
       description: 'Laptop',
@@ -71,7 +96,7 @@ describe('installment expenses', () => {
       }),
     );
 
-    const mayResponse = await request(app).get('/api/expenses').query({ month: monthB });
+    const mayResponse = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
     expect(mayResponse.status).toBe(200);
     const maySeriesExpense = mayResponse.body.expenses.find(
       (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
@@ -81,14 +106,14 @@ describe('installment expenses', () => {
     expect(maySeriesExpense.installment.number).toBe(2);
     expect(maySeriesExpense.date).toBe(purchaseDate);
 
-    const mayResponseRepeat = await request(app).get('/api/expenses').query({ month: monthB });
+    const mayResponseRepeat = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
     expect(mayResponseRepeat.status).toBe(200);
     const repeatSeriesMatches = mayResponseRepeat.body.expenses.filter(
       (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
     );
     expect(repeatSeriesMatches).toHaveLength(1);
 
-    const juneResponse = await request(app).get('/api/expenses').query({ month: monthC });
+    const juneResponse = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthC });
     expect(juneResponse.status).toBe(200);
     const juneSeriesExpense = juneResponse.body.expenses.find(
       (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
@@ -100,7 +125,7 @@ describe('installment expenses', () => {
   });
 
   it('applies update and delete scope to future installments', async () => {
-    const createResponse = await request(app).post('/api/expenses').send({
+    const createResponse = await request(app).post('/api/expenses').set('x-fairsplit-session', sessionToken).send({
       month: monthA,
       date: `${monthA}-10`,
       description: 'Phone',
@@ -116,10 +141,10 @@ describe('installment expenses', () => {
     const createdId = createResponse.body.id as string;
     const createdSeriesId = createResponse.body.installment.seriesId as string;
 
-    await request(app).get('/api/expenses').query({ month: monthB });
-    await request(app).get('/api/expenses').query({ month: monthC });
+    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
+    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthC });
 
-    const updateResponse = await request(app).put(`/api/expenses/${createdId}`).send({
+    const updateResponse = await request(app).put(`/api/expenses/${createdId}`).set('x-fairsplit-session', sessionToken).send({
       description: 'Phone Updated',
       installment: {
         enabled: true,
@@ -133,29 +158,38 @@ describe('installment expenses', () => {
     expect(updateResponse.status).toBe(200);
     expect(updateResponse.body.amountOriginal).toBe('30.00');
 
-    const mayAfterUpdate = await request(app).get('/api/expenses').query({ month: monthB });
+    const mayAfterUpdate = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
     const mayUpdated = mayAfterUpdate.body.expenses.find(
       (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
     );
     expect(mayUpdated.description).toBe('Phone Updated');
     expect(mayUpdated.amountOriginal).toBe('30.00');
 
-    const deleteResponse = await request(app).delete(`/api/expenses/${createdId}`).send({ applyScope: 'future' });
+    const deleteResponse = await request(app)
+      .delete(`/api/expenses/${createdId}`)
+      .set('x-fairsplit-session', sessionToken)
+      .send({ applyScope: 'future' });
     expect(deleteResponse.status).toBe(204);
 
-    const aprilAfterDelete = await request(app).get('/api/expenses').query({ month: monthA });
+    const aprilAfterDelete = await request(app)
+      .get('/api/expenses')
+      .set('x-fairsplit-session', sessionToken)
+      .query({ month: monthA });
     expect(
       aprilAfterDelete.body.expenses.filter(
         (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
       ),
     ).toHaveLength(0);
-    const mayAfterDelete = await request(app).get('/api/expenses').query({ month: monthB });
+    const mayAfterDelete = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
     expect(
       mayAfterDelete.body.expenses.filter(
         (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
       ),
     ).toHaveLength(0);
-    const juneAfterDelete = await request(app).get('/api/expenses').query({ month: monthC });
+    const juneAfterDelete = await request(app)
+      .get('/api/expenses')
+      .set('x-fairsplit-session', sessionToken)
+      .query({ month: monthC });
     expect(
       juneAfterDelete.body.expenses.filter(
         (expense: { installment: { seriesId: string } | null }) => expense.installment?.seriesId === createdSeriesId,
