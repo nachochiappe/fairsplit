@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '@fairsplit/db';
 import { createApp } from '../src/app';
@@ -10,6 +11,28 @@ let candidateUserId = '';
 let claimedUserId = '';
 let createdUserId = '';
 let createdHouseholdId = '';
+
+function toBase64Url(input: string): string {
+  return Buffer.from(input, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function createAccessToken(authUserId: string, email: string): string {
+  const header = toBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = toBase64Url(
+    JSON.stringify({
+      sub: authUserId,
+      email,
+      exp: Math.floor(Date.now() / 1000) + 60 * 5,
+    }),
+  );
+  const signature = createHmac('sha256', process.env.SUPABASE_JWT_SECRET!)
+    .update(`${header}.${payload}`)
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+  return `${header}.${payload}.${signature}`;
+}
 
 describe('POST /api/auth/link', () => {
   beforeAll(async () => {
@@ -49,9 +72,9 @@ describe('POST /api/auth/link', () => {
 
   it('claims an existing email-matched user and preserves the historical user id', async () => {
     const authUserId = `supabase-user-${suffix}`;
+    const email = `nacho.${suffix}@example.com`;
     const response = await request(app).post('/api/auth/link').send({
-      authUserId,
-      email: `nacho.${suffix}@example.com`,
+      accessToken: createAccessToken(authUserId, email),
     });
 
     expect(response.status).toBe(200);
@@ -65,24 +88,24 @@ describe('POST /api/auth/link', () => {
     expect(persisted.authUserId).toBe(authUserId);
   });
 
-  it('creates a new household + participant when no email mapping exists', async () => {
+  it('creates a new participant without household assignment when no email mapping exists', async () => {
     const authUserId = `supabase-new-user-${suffix}`;
+    const email = `brand.new.${suffix}@example.com`;
     const response = await request(app).post('/api/auth/link').send({
-      authUserId,
-      email: `brand.new.${suffix}@example.com`,
+      accessToken: createAccessToken(authUserId, email),
       name: 'Brand New',
     });
 
     expect(response.status).toBe(201);
     expect(response.body.created).toBe(true);
     expect(response.body.user.authUserId).toBe(authUserId);
-    expect(response.body.household).toBeTruthy();
+    expect(response.body.household).toBeNull();
+    expect(response.body.needsHouseholdSetup).toBe(true);
 
     createdUserId = response.body.user.id;
-    createdHouseholdId = response.body.household.id;
 
     const createdUser = await prisma.user.findUniqueOrThrow({ where: { id: createdUserId } });
-    expect(createdUser.householdId).toBe(createdHouseholdId);
-    expect(createdUser.email).toBe(`brand.new.${suffix}@example.com`);
+    expect(createdUser.householdId).toBeNull();
+    expect(createdUser.email).toBe(email);
   });
 });

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-
-const SESSION_COOKIE = 'fairsplit_session';
+import { SESSION_COOKIE } from '../../lib/session';
 
 export async function POST(request: Request) {
   const response = NextResponse.redirect(new URL('/login', request.url));

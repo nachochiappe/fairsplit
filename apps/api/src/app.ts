@@ -29,6 +29,8 @@ import {
   ensureFixedExpensesForMonth,
   resolveFxRateForMonth,
 } from './lib/fixed-expenses';
+import { getSessionSecret, issueSessionToken, verifySessionToken } from './lib/session';
+import { verifySupabaseAccessToken } from './lib/supabase-auth';
 
 const monthQuerySchema = z.object({
   month: monthSchema,
@@ -113,8 +115,7 @@ const upsertMonthlyExchangeRateSchema = z.object({
   rateToArs: z.coerce.number().gt(0),
 });
 const authLinkSchema = z.object({
-  authUserId: z.string().trim().min(1),
-  email: z.string().trim().email(),
+  accessToken: z.string().trim().min(1),
   name: z.string().trim().min(1).optional(),
 });
 const joinHouseholdWithCodeSchema = z.object({
@@ -255,17 +256,35 @@ interface RequestUserContext {
 }
 
 async function requireUserContext(req: Request, res: Response): Promise<RequestUserContext | null> {
-  const rawUserId = req.header('x-fairsplit-user-id')?.trim();
-  if (!rawUserId) {
+  let sessionSecret: string;
+  try {
+    sessionSecret = getSessionSecret();
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+    return null;
+  }
+
+  const rawSessionToken = req.header('x-fairsplit-session')?.trim();
+  if (!rawSessionToken) {
     res.status(401).json({ error: 'Missing authentication context.' });
     return null;
   }
 
+  const session = verifySessionToken(rawSessionToken, sessionSecret);
+  if (!session) {
+    res.status(401).json({ error: 'Invalid authentication context.' });
+    return null;
+  }
+
   const user = await prisma.user.findUnique({
-    where: { id: rawUserId },
-    select: { id: true, householdId: true, onboardingHouseholdDecisionAt: true },
+    where: { id: session.userId },
+    select: { id: true, householdId: true, onboardingHouseholdDecisionAt: true, authUserId: true },
   });
   if (!user) {
+    res.status(401).json({ error: 'Invalid authentication context.' });
+    return null;
+  }
+  if (session.authUserId && user.authUserId && session.authUserId !== user.authUserId) {
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
@@ -329,9 +348,20 @@ export const createApp = (): Express => {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const authUserId = parsed.data.authUserId;
-    const email = parsed.data.email.trim().toLowerCase();
-    const displayName = parsed.data.name?.trim() ?? defaultNameFromEmail(email);
+    const identity = await verifySupabaseAccessToken(parsed.data.accessToken).catch(() => null);
+    if (!identity) {
+      return res.status(401).json({ error: 'Invalid access token.' });
+    }
+
+    const authUserId = identity.authUserId;
+    const email = identity.email;
+    const displayName = parsed.data.name?.trim() ?? defaultNameFromEmail(identity.email);
+    let sessionSecret: string;
+    try {
+      sessionSecret = getSessionSecret();
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+    }
 
     const toResponse = (user: {
       id: string;
@@ -361,6 +391,7 @@ export const createApp = (): Express => {
         : null,
       created,
       needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
+      sessionToken: issueSessionToken(user, sessionSecret),
     });
 
     try {
@@ -582,6 +613,13 @@ export const createApp = (): Express => {
       return res.status(409).json({ error: 'Household setup has already been completed.' });
     }
 
+    let sessionSecret: string;
+    try {
+      sessionSecret = getSessionSecret();
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+    }
+
     return res.json({
       user: {
         id: result.id,
@@ -600,6 +638,7 @@ export const createApp = (): Express => {
           }
         : null,
       needsHouseholdSetup: false,
+      sessionToken: issueSessionToken(result, sessionSecret),
     });
   });
 
@@ -658,6 +697,13 @@ export const createApp = (): Express => {
       return res.status(409).json({ error: 'Household setup has already been completed.' });
     }
 
+    let sessionSecret: string;
+    try {
+      sessionSecret = getSessionSecret();
+    } catch (error) {
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+    }
+
     return res.json({
       user: {
         id: result.id,
@@ -676,6 +722,7 @@ export const createApp = (): Express => {
           }
         : null,
       needsHouseholdSetup: false,
+      sessionToken: issueSessionToken(result, sessionSecret),
     });
   });
 
@@ -1354,7 +1401,7 @@ export const createApp = (): Express => {
               where: {
                 month: parsed.data.month,
                 currencyCode: { in: requestedCurrencies },
-                householdId: auth.householdId,
+                OR: [{ householdId: auth.householdId }, { householdId: null }],
               },
             })
           : [];
@@ -1383,7 +1430,7 @@ export const createApp = (): Express => {
                 where: {
                   month: parsed.data.month,
                   currencyCode,
-                  householdId: auth.householdId,
+                  OR: [{ householdId: auth.householdId }, { householdId: null }],
                 },
                 select: { id: true },
               });
