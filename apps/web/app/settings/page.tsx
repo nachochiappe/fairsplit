@@ -2,14 +2,15 @@ import { cookies } from 'next/headers';
 import { getCategories, getSuperCategories, getUsers } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { SettingsClient } from './SettingsClient';
-import { parseSessionToken, SESSION_COOKIE } from '../../lib/session';
+import { SESSION_COOKIE } from '../../lib/session';
+import { verifySessionCookieToken } from '../../lib/session-server';
 
 const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
 
 export default async function SettingsPage() {
   const month = getCurrentMonth();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
-  const session = parseSessionToken(sessionToken);
+  const session = await verifySessionCookieToken(sessionToken);
   const serverReadInit = sessionToken
     ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-session': sessionToken } } as const)
     : SERVER_READ_CACHE;
@@ -27,7 +28,7 @@ export default async function SettingsPage() {
 
   return (
     <SettingsClient
-      currentUserEmail={session?.email ?? null}
+      currentUserEmail={null}
       currentUserId={currentUser?.id ?? null}
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}

@@ -65,6 +65,23 @@ function verifyHs256Jwt(token: string, secret: string): SupabaseAuthIdentity | n
     return null;
   }
 
+  const expectedIssuer =
+    process.env.SUPABASE_JWT_ISSUER ??
+    (process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL.replace(/\/+$/g, '')}/auth/v1` : null);
+  if (expectedIssuer && payload.iss !== expectedIssuer) {
+    return null;
+  }
+
+  const expectedAudience = process.env.SUPABASE_JWT_AUDIENCE ?? 'authenticated';
+  const audienceClaim = payload.aud;
+  const audienceMatches =
+    typeof audienceClaim === 'string'
+      ? audienceClaim === expectedAudience
+      : Array.isArray(audienceClaim) && audienceClaim.some((entry) => entry === expectedAudience);
+  if (!audienceMatches) {
+    return null;
+  }
+
   return { authUserId, email };
 }
 

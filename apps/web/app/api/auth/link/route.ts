@@ -1,17 +1,9 @@
-import { revalidatePath } from 'next/cache';
-import { cookies } from 'next/headers';
 import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { CSRF_COOKIE, SESSION_COOKIE } from '../../../lib/session';
+import { CSRF_COOKIE, SESSION_COOKIE } from '../../../../lib/session';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
-
-interface ProxyMutationOptions {
-  upstreamPath: string;
-  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  revalidatePaths?: string[];
-}
 
 function secureCookies(): boolean {
   return process.env.NODE_ENV === 'production';
@@ -34,54 +26,27 @@ function sanitizeJsonBody(body: string): string {
   }
 }
 
-function isSameOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (!origin) {
-    return false;
-  }
-  return origin === new URL(request.url).origin;
-}
-
-export async function proxyMutation(request: Request, options: ProxyMutationOptions): Promise<Response> {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!sessionToken) {
-    return Response.json({ error: 'Missing authentication context.' }, { status: 401 });
-  }
-  if (!isSameOrigin(request)) {
-    return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
-  }
-
-  const csrfCookie = cookieStore.get(CSRF_COOKIE)?.value;
-  const csrfHeader = request.headers.get('x-fairsplit-csrf')?.trim();
-  if (!csrfCookie || !csrfHeader || csrfHeader !== csrfCookie) {
-    return Response.json({ error: 'Invalid CSRF token.' }, { status: 403 });
-  }
-
-  const rawBody = await request.text();
+export async function POST(request: Request): Promise<Response> {
   const contentType = request.headers.get('content-type') ?? 'application/json';
-  const upstreamResponse = await fetch(`${API_BASE_URL}${options.upstreamPath}`, {
-    method: options.method,
+  const upstreamResponse = await fetch(`${API_BASE_URL}/auth/link`, {
+    method: 'POST',
     headers: {
       'Content-Type': contentType,
-      'x-fairsplit-session': sessionToken,
     },
-    body: rawBody.length > 0 ? rawBody : undefined,
+    body: await request.text(),
     cache: 'no-store',
   });
 
   const responseBody = await upstreamResponse.text();
   const contentTypeHeader = upstreamResponse.headers.get('content-type') ?? 'application/json';
-  if (upstreamResponse.ok) {
-    for (const path of options.revalidatePaths ?? []) {
-      revalidatePath(path);
-    }
-  }
   const isJsonResponse = contentTypeHeader.includes('application/json');
   const safeBody = isJsonResponse ? sanitizeJsonBody(responseBody) : responseBody;
   const response = new NextResponse(safeBody, {
     status: upstreamResponse.status,
-    headers: { 'Content-Type': contentTypeHeader },
+    headers: {
+      'Content-Type': contentTypeHeader,
+      'Cache-Control': 'no-store',
+    },
   });
 
   if (upstreamResponse.ok && isJsonResponse) {
@@ -112,7 +77,5 @@ export async function proxyMutation(request: Request, options: ProxyMutationOpti
     }
   }
 
-  response.headers.set('Content-Type', contentTypeHeader);
-  response.headers.set('Cache-Control', 'no-store');
   return response;
 }

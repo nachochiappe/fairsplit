@@ -76,7 +76,11 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 DATABASE_URL=postgresql://...
 API_PORT=4000
 FAIRSPLIT_SESSION_SECRET=CHANGE_ME_TO_A_RANDOM_32_PLUS_CHAR_SECRET
+# Optional for legacy HS256 projects. Leave unset for ECC/RS projects.
 SUPABASE_JWT_SECRET=YOUR_SUPABASE_JWT_SECRET
+SUPABASE_JWT_AUDIENCE=authenticated
+# Optional override, defaults to ${SUPABASE_URL}/auth/v1
+SUPABASE_JWT_ISSUER=https://YOUR_PROJECT_REF.supabase.co/auth/v1
 SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
@@ -100,6 +104,8 @@ pnpm dev
 - Login uses magic links
 - Callback flow sends the Supabase access token to the API for verification
 - API maps or creates a Fairsplit user and returns a signed session token
+- Web stores `fairsplit_session` as `HttpOnly` cookie and proxies requests with `x-fairsplit-session`
+- Mutations require CSRF token validation (`fairsplit_csrf` + `x-fairsplit-csrf`)
 - All API requests use `x-fairsplit-session` (signed token), not raw user ids
 
 ## Quality Checks

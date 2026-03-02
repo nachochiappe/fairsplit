@@ -2,13 +2,8 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { joinHouseholdWithCode, skipHouseholdSetup, type AuthLinkResponse } from '../../../lib/api';
+import { joinHouseholdWithCode, skipHouseholdSetup } from '../../../lib/api';
 import { TitleMark } from '../../../components/TitleMark';
-import { SESSION_COOKIE } from '../../../lib/session';
-
-function persistSessionCookie(payload: AuthLinkResponse): void {
-  document.cookie = `${SESSION_COOKIE}=${payload.sessionToken}; Path=/; Max-Age=2592000; SameSite=Lax`;
-}
 
 export default function HouseholdOnboardingPage() {
   const router = useRouter();
@@ -28,8 +23,7 @@ export default function HouseholdOnboardingPage() {
     try {
       setError(null);
       setIsSubmitting(true);
-      const result = await joinHouseholdWithCode(normalizedCode);
-      persistSessionCookie(result);
+      await joinHouseholdWithCode(normalizedCode);
       router.replace('/dashboard');
     } catch (joinError) {
       setError(joinError instanceof Error ? joinError.message : 'Failed to join household.');
@@ -46,8 +40,7 @@ export default function HouseholdOnboardingPage() {
     try {
       setError(null);
       setIsSkipping(true);
-      const result = await skipHouseholdSetup();
-      persistSessionCookie(result);
+      await skipHouseholdSetup();
       router.replace('/dashboard');
     } catch (skipError) {
       setError(skipError instanceof Error ? skipError.message : 'Failed to complete setup.');

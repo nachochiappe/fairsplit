@@ -278,13 +278,19 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, householdId: true, onboardingHouseholdDecisionAt: true, authUserId: true },
+    select: {
+      id: true,
+      householdId: true,
+      onboardingHouseholdDecisionAt: true,
+      sessionRevokedAt: true,
+    },
   });
   if (!user) {
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
-  if (session.authUserId && user.authUserId && session.authUserId !== user.authUserId) {
+  const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
+  if (revokedAt !== null && session.iat <= revokedAt) {
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
@@ -486,6 +492,20 @@ export const createApp = (): Express => {
         error: error instanceof Error ? error.message : 'Failed to link auth identity.',
       });
     }
+  });
+
+  app.post('/api/auth/logout', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: user.userId },
+      data: { sessionRevokedAt: new Date(Date.now() + 1000) },
+    });
+
+    res.status(204).send();
   });
 
   app.get('/api/household/setup-status', async (req: Request, res: Response) => {
