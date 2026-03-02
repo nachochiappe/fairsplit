@@ -1,12 +1,9 @@
 export const SESSION_COOKIE = 'fairsplit_session';
+export const CSRF_COOKIE = 'fairsplit_csrf';
 
 export interface SessionPayload {
   v: 1;
   userId: string;
-  householdId: string | null;
-  email: string | null;
-  authUserId: string | null;
-  onboardingHouseholdDecisionAt: string | null;
   needsHouseholdSetup: boolean;
   iat: number;
   exp: number;
@@ -56,11 +53,6 @@ export function parseSessionToken(sessionToken: string | undefined): SessionPayl
     return {
       v: 1,
       userId: parsed.userId,
-      householdId: typeof parsed.householdId === 'string' ? parsed.householdId : null,
-      email: typeof parsed.email === 'string' ? parsed.email : null,
-      authUserId: typeof parsed.authUserId === 'string' ? parsed.authUserId : null,
-      onboardingHouseholdDecisionAt:
-        typeof parsed.onboardingHouseholdDecisionAt === 'string' ? parsed.onboardingHouseholdDecisionAt : null,
       needsHouseholdSetup: Boolean(parsed.needsHouseholdSetup),
       iat: parsed.iat,
       exp: parsed.exp,
@@ -81,6 +73,13 @@ export function getSessionCookieValueFromBrowser(): string | null {
   return cookiePair ? cookiePair.slice(`${SESSION_COOKIE}=`.length) : null;
 }
 
-export function parseSessionFromBrowserCookie(): SessionPayload | null {
-  return parseSessionToken(getSessionCookieValueFromBrowser() ?? undefined);
+export function getCsrfCookieValueFromBrowser(): string | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+  const cookiePair = document.cookie
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(`${CSRF_COOKIE}=`));
+  return cookiePair ? cookiePair.slice(`${CSRF_COOKIE}=`.length) : null;
 }

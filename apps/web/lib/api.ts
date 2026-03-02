@@ -1,4 +1,4 @@
-import { getSessionCookieValueFromBrowser } from './session';
+import { getCsrfCookieValueFromBrowser } from './session';
 
 export interface User {
   id: string;
@@ -140,7 +140,6 @@ export interface AuthLinkResponse {
   household: { id: string; name: string; createdAt: string } | null;
   created?: boolean;
   needsHouseholdSetup: boolean;
-  sessionToken: string;
 }
 
 export interface HouseholdInvite {
@@ -154,12 +153,27 @@ type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: stri
 async function fetchFromApi(input: string, init?: RequestInit): Promise<Response> {
   try {
     const headers = new Headers(init?.headers ?? {});
-    const sessionToken = getSessionCookieValueFromBrowser();
-    if (sessionToken) {
-      headers.set('x-fairsplit-session', sessionToken);
+    let endpoint = input;
+    const method = (init?.method ?? 'GET').toUpperCase();
+
+    if (typeof window !== 'undefined') {
+      const isReadRequest = method === 'GET' || method === 'HEAD';
+      if (input.startsWith(API_BASE_URL)) {
+        const upstreamPath = input.slice(API_BASE_URL.length);
+        if (upstreamPath.startsWith('/')) {
+          endpoint = isReadRequest ? `/api/read?path=${encodeURIComponent(upstreamPath)}` : `/api${upstreamPath}`;
+        }
+      }
+
+      if (!isReadRequest) {
+        const csrf = getCsrfCookieValueFromBrowser();
+        if (csrf) {
+          headers.set('x-fairsplit-csrf', csrf);
+        }
+      }
     }
 
-    return await fetch(input, {
+    return await fetch(endpoint, {
       ...init,
       headers,
     });

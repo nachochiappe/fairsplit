@@ -2,7 +2,8 @@ import { cookies } from 'next/headers';
 import { ExpensesClient } from './ExpensesClient';
 import { Expense, getCategories, getExchangeRates, getExpenses, getSettlement, getUsers } from '../../lib/api';
 import { DEFAULT_MAX_ROWS_PER_SECTION, getSectionFetchBatchSize } from './pagination';
-import { parseSessionToken, SESSION_COOKIE } from '../../lib/session';
+import { SESSION_COOKIE } from '../../lib/session';
+import { verifySessionCookieToken } from '../../lib/session-server';
 
 interface ExpensesPageProps {
   searchParams?: Promise<{ month?: string }>;
@@ -25,7 +26,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
-  const session = parseSessionToken(sessionToken);
+  const session = await verifySessionCookieToken(sessionToken);
   const serverReadInit = sessionToken
     ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-session': sessionToken } } as const)
     : SERVER_READ_CACHE;

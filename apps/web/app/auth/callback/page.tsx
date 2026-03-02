@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TitleMark } from '../../../components/TitleMark';
 import type { AuthLinkResponse } from '../../../lib/api';
-import { SESSION_COOKIE } from '../../../lib/session';
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 
 function parseHashParams(hash: string): URLSearchParams {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash;
@@ -39,7 +37,7 @@ export default function AuthCallbackPage() {
           throw new Error('Missing access token in callback URL.');
         }
 
-        const response = await fetch(`${API_BASE_URL}/auth/link`, {
+        const response = await fetch('/api/auth/link', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -55,7 +53,6 @@ export default function AuthCallbackPage() {
         }
 
         const linked = (await response.json()) as AuthLinkResponse;
-        document.cookie = `${SESSION_COOKIE}=${linked.sessionToken}; Path=/; Max-Age=2592000; SameSite=Lax`;
         setStatus('Account linked. Redirecting...');
         router.replace(linked?.needsHouseholdSetup ? '/onboarding/household' : '/dashboard');
       } catch (error) {

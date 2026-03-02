@@ -1,33 +1,46 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { parseSessionToken, SESSION_COOKIE } from './lib/session';
+import { CSRF_COOKIE, SESSION_COOKIE } from './lib/session';
+import { verifySessionCookieToken } from './lib/session-server';
 
-function hasSession(request: NextRequest): boolean {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  return parseSessionToken(token) !== null;
+function secureCookie(): boolean {
+  return process.env.NODE_ENV === 'production';
 }
 
-function needsHouseholdSetup(request: NextRequest): boolean {
-  const rawCookie = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!rawCookie) {
-    return false;
+function maybeSetCsrfCookie(request: NextRequest, response: NextResponse, loggedIn: boolean): NextResponse {
+  if (!loggedIn || request.cookies.get(CSRF_COOKIE)?.value) {
+    return response;
   }
-  const parsed = parseSessionToken(rawCookie);
-  return Boolean(parsed?.needsHouseholdSetup);
+
+  response.cookies.set({
+    name: CSRF_COOKIE,
+    value: crypto.randomUUID().replace(/-/g, ''),
+    path: '/',
+    maxAge: 60 * 60 * 24 * 30,
+    sameSite: 'lax',
+    secure: secureCookie(),
+    httpOnly: false,
+  });
+  return response;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const loggedIn = hasSession(request);
-  const requiresSetup = needsHouseholdSetup(request);
+  const session = await verifySessionCookieToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const loggedIn = session !== null;
+  const requiresSetup = Boolean(session?.needsHouseholdSetup);
 
   if (pathname === '/auth/callback') {
-    return NextResponse.next();
+    return maybeSetCsrfCookie(request, NextResponse.next(), loggedIn);
   }
 
   if (pathname === '/login') {
     if (loggedIn) {
-      return NextResponse.redirect(new URL(requiresSetup ? '/onboarding/household' : '/dashboard', request.url));
+      return maybeSetCsrfCookie(
+        request,
+        NextResponse.redirect(new URL(requiresSetup ? '/onboarding/household' : '/dashboard', request.url)),
+        loggedIn,
+      );
     }
     return NextResponse.next();
   }
@@ -37,19 +50,19 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     if (!requiresSetup) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return maybeSetCsrfCookie(request, NextResponse.redirect(new URL('/dashboard', request.url)), loggedIn);
     }
-    return NextResponse.next();
+    return maybeSetCsrfCookie(request, NextResponse.next(), loggedIn);
   }
 
   if (!loggedIn) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
   if (requiresSetup) {
-    return NextResponse.redirect(new URL('/onboarding/household', request.url));
+    return maybeSetCsrfCookie(request, NextResponse.redirect(new URL('/onboarding/household', request.url)), loggedIn);
   }
 
-  return NextResponse.next();
+  return maybeSetCsrfCookie(request, NextResponse.next(), loggedIn);
 }
 
 export const config = {

@@ -22,6 +22,7 @@ function createAccessToken(authUserId: string, email: string): string {
     JSON.stringify({
       sub: authUserId,
       email,
+      aud: 'authenticated',
       exp: Math.floor(Date.now() / 1000) + 60 * 5,
     }),
   );

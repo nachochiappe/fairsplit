@@ -1,14 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 export interface SessionClaims {
   v: 1;
   userId: string;
-  householdId: string | null;
-  email: string | null;
-  authUserId: string | null;
-  onboardingHouseholdDecisionAt: string | null;
   needsHouseholdSetup: boolean;
   iat: number;
   exp: number;
@@ -48,8 +44,6 @@ export function issueSessionToken(
   user: {
     id: string;
     householdId: string | null;
-    email: string | null;
-    authUserId: string | null;
     onboardingHouseholdDecisionAt: Date | null;
   },
   secret: string,
@@ -58,10 +52,6 @@ export function issueSessionToken(
   const claims: SessionClaims = {
     v: 1,
     userId: user.id,
-    householdId: user.householdId,
-    email: user.email,
-    authUserId: user.authUserId,
-    onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt?.toISOString() ?? null,
     needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
     iat: now,
     exp: now + SESSION_TTL_SECONDS,
@@ -120,11 +110,6 @@ export function verifySessionToken(token: string, secret: string): SessionClaims
   return {
     v: 1,
     userId: claims.userId,
-    householdId: typeof claims.householdId === 'string' ? claims.householdId : null,
-    email: typeof claims.email === 'string' ? claims.email : null,
-    authUserId: typeof claims.authUserId === 'string' ? claims.authUserId : null,
-    onboardingHouseholdDecisionAt:
-      typeof claims.onboardingHouseholdDecisionAt === 'string' ? claims.onboardingHouseholdDecisionAt : null,
     needsHouseholdSetup: Boolean(claims.needsHouseholdSetup),
     iat: claims.iat,
     exp: claims.exp,

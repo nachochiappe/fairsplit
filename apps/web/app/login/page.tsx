@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TitleMark } from '../../components/TitleMark';
-import { parseSessionFromBrowserCookie, SESSION_COOKIE } from '../../lib/session';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,14 +18,6 @@ export default function LoginPage() {
   useEffect(() => {
     if (window.location.hash.includes('access_token=')) {
       router.replace(`/auth/callback${window.location.hash}`);
-      return;
-    }
-
-    if (document.cookie.includes(`${SESSION_COOKIE}=`)) {
-      const session = parseSessionFromBrowserCookie();
-      if (session) {
-        router.replace(session.needsHouseholdSetup ? '/onboarding/household' : '/dashboard');
-      }
     }
   }, [router]);
 
