@@ -5,6 +5,12 @@ interface SupabaseAuthIdentity {
   email: string;
 }
 
+function normalizeAccessToken(rawToken: string): string {
+  const trimmed = rawToken.trim();
+  const bearerPrefix = /^Bearer\s+/i;
+  return bearerPrefix.test(trimmed) ? trimmed.replace(bearerPrefix, '').trim() : trimmed;
+}
+
 function decodeJwtPart(part: string): Record<string, unknown> | null {
   const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
   const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
@@ -64,15 +70,19 @@ function verifyHs256Jwt(token: string, secret: string): SupabaseAuthIdentity | n
 
 async function verifyWithSupabaseUserEndpoint(accessToken: string): Promise<SupabaseAuthIdentity | null> {
   const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const supabaseApiKey =
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!supabaseUrl || !supabaseApiKey) {
     return null;
   }
 
   const response = await fetch(`${supabaseUrl.replace(/\/+$/g, '')}/auth/v1/user`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      apikey: supabaseAnonKey,
+      apikey: supabaseApiKey,
     },
   });
 
@@ -90,10 +100,18 @@ async function verifyWithSupabaseUserEndpoint(accessToken: string): Promise<Supa
 }
 
 export async function verifySupabaseAccessToken(accessToken: string): Promise<SupabaseAuthIdentity | null> {
-  const jwtSecret = process.env.SUPABASE_JWT_SECRET;
-  if (jwtSecret && jwtSecret.trim().length > 0) {
-    return verifyHs256Jwt(accessToken, jwtSecret);
+  const normalizedToken = normalizeAccessToken(accessToken);
+  if (!normalizedToken) {
+    return null;
   }
 
-  return verifyWithSupabaseUserEndpoint(accessToken);
+  const jwtSecret = process.env.SUPABASE_JWT_SECRET;
+  if (jwtSecret && jwtSecret.trim().length > 0) {
+    const verifiedWithSecret = verifyHs256Jwt(normalizedToken, jwtSecret);
+    if (verifiedWithSecret) {
+      return verifiedWithSecret;
+    }
+  }
+
+  return verifyWithSupabaseUserEndpoint(normalizedToken);
 }

@@ -12,6 +12,21 @@ function parseHashParams(hash: string): URLSearchParams {
   return new URLSearchParams(raw);
 }
 
+function getAccessTokenFromCallbackUrl(): string | null {
+  const hash = parseHashParams(window.location.hash);
+  const hashToken = hash.get('access_token');
+  if (hashToken && hashToken.trim().length > 0) {
+    return hashToken;
+  }
+
+  const queryToken = new URLSearchParams(window.location.search).get('access_token');
+  if (queryToken && queryToken.trim().length > 0) {
+    return queryToken;
+  }
+
+  return null;
+}
+
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [status, setStatus] = useState('Linking account...');
@@ -19,8 +34,7 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const run = async () => {
       try {
-        const hash = parseHashParams(window.location.hash);
-        const accessToken = hash.get('access_token');
+        const accessToken = getAccessTokenFromCallbackUrl();
         if (!accessToken) {
           throw new Error('Missing access token in callback URL.');
         }

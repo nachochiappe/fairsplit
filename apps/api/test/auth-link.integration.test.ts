@@ -88,7 +88,7 @@ describe('POST /api/auth/link', () => {
     expect(persisted.authUserId).toBe(authUserId);
   });
 
-  it('creates a new participant without household assignment when no email mapping exists', async () => {
+  it('creates a new household + participant when no email mapping exists', async () => {
     const authUserId = `supabase-new-user-${suffix}`;
     const email = `brand.new.${suffix}@example.com`;
     const response = await request(app).post('/api/auth/link').send({
@@ -99,13 +99,14 @@ describe('POST /api/auth/link', () => {
     expect(response.status).toBe(201);
     expect(response.body.created).toBe(true);
     expect(response.body.user.authUserId).toBe(authUserId);
-    expect(response.body.household).toBeNull();
-    expect(response.body.needsHouseholdSetup).toBe(true);
+    expect(response.body.household).toBeTruthy();
+    expect(response.body.needsHouseholdSetup).toBe(false);
 
     createdUserId = response.body.user.id;
+    createdHouseholdId = response.body.household.id;
 
     const createdUser = await prisma.user.findUniqueOrThrow({ where: { id: createdUserId } });
-    expect(createdUser.householdId).toBeNull();
+    expect(createdUser.householdId).toBe(createdHouseholdId);
     expect(createdUser.email).toBe(email);
   });
 });
