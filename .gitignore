@@ -16,6 +16,7 @@ apps/api/test-results
 # Database and local data
 prisma/migrations
 packages/db/data
+supabase/
 
 # Generated docs and automation artifacts
 docs/
