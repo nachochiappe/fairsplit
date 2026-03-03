@@ -7,6 +7,7 @@
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "test:e2e:local:auth-callback": "pnpm --filter @fairsplit/api exec tsx ../../scripts/e2e-local-auth-callback.ts",
     "test:e2e:agentmail:onboarding": "pnpm --filter @fairsplit/api exec tsx ../../scripts/e2e-agentmail-onboarding.ts",
     "lint": "pnpm -r lint",
     "format": "prettier --write .",
