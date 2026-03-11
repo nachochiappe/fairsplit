@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { getCategories, getSuperCategories, getUsers } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
+import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SettingsClient } from './SettingsClient';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -11,15 +12,23 @@ export default async function SettingsPage() {
   const month = getCurrentMonth();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionCookieToken(sessionToken);
-  const serverReadInit = sessionToken
-    ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-session': sessionToken } } as const)
-    : SERVER_READ_CACHE;
+  const requestId = await getServerRequestId();
+  const serverReadInit = buildServerApiInit(
+    requestId,
+    SERVER_READ_CACHE,
+    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
+  );
 
-  const [categories, superCategories, users] = await Promise.all([
-    getCategories(serverReadInit),
-    getSuperCategories(serverReadInit),
-    getUsers(serverReadInit),
-  ]);
+  const [categories, superCategories, users] = await withServerApiLogging(
+    requestId,
+    { month, route: '/settings' },
+    async () =>
+      Promise.all([
+        getCategories(serverReadInit),
+        getSuperCategories(serverReadInit),
+        getUsers(serverReadInit),
+      ]),
+  );
 
   const sessionUserId = session?.userId ?? null;
   const currentUser = sessionUserId

@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fairsplit/logging": "workspace:*",
     "@fairsplit/shared": "workspace:*",
     "@hookform/resolvers": "^3.10.0",
     "next": "^15.1.7",

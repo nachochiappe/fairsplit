@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { ExpensesClient } from './ExpensesClient';
 import { Expense, getCategories, getExchangeRates, getExpenses, getSettlement, getUsers } from '../../lib/api';
+import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { DEFAULT_MAX_ROWS_PER_SECTION, getSectionFetchBatchSize } from './pagination';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -27,48 +28,74 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionCookieToken(sessionToken);
-  const serverReadInit = sessionToken
-    ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-session': sessionToken } } as const)
-    : SERVER_READ_CACHE;
-  const users = await getUsers(serverReadInit);
+  const requestId = await getServerRequestId();
+  const serverReadInit = buildServerApiInit(
+    requestId,
+    SERVER_READ_CACHE,
+    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
+  );
+  const users = await withServerApiLogging(requestId, { month, route: '/expenses', step: 'users' }, () =>
+    getUsers(serverReadInit),
+  );
   const sessionUserId = session?.userId ?? null;
   const currentUserId = sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
-  const fixedData = await getExpenses(
-    month,
-    { type: 'fixed', sortBy: 'date', sortDir: 'desc', limit: INITIAL_EXPENSES_PAGE_SIZE, hydrate: true, includeCount: true },
-    serverReadInit,
+  const [fixedData, oneTimeData, installmentData, totalsData, categories, exchangeRates] = await withServerApiLogging(
+    requestId,
+    { month, route: '/expenses', step: 'bootstrap' },
+    async () =>
+      Promise.all([
+        getExpenses(
+          month,
+          {
+            type: 'fixed',
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: INITIAL_EXPENSES_PAGE_SIZE,
+            hydrate: true,
+            includeCount: true,
+          },
+          serverReadInit,
+        ),
+        getExpenses(
+          month,
+          {
+            type: 'oneTime',
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: INITIAL_EXPENSES_PAGE_SIZE,
+            hydrate: false,
+            includeCount: false,
+          },
+          serverReadInit,
+        ),
+        getExpenses(
+          month,
+          {
+            type: 'installment',
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: INITIAL_EXPENSES_PAGE_SIZE,
+            hydrate: false,
+            includeCount: false,
+          },
+          serverReadInit,
+        ),
+        getExpenses(
+          month,
+          {
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: 1,
+            hydrate: false,
+            includeCount: false,
+            includeTotals: true,
+          },
+          serverReadInit,
+        ),
+        getCategories(serverReadInit),
+        getExchangeRates(month, serverReadInit),
+      ]),
   );
-  const oneTimeData = await getExpenses(
-    month,
-    { type: 'oneTime', sortBy: 'date', sortDir: 'desc', limit: INITIAL_EXPENSES_PAGE_SIZE, hydrate: false, includeCount: false },
-    serverReadInit,
-  );
-  const installmentData = await getExpenses(
-    month,
-    {
-      type: 'installment',
-      sortBy: 'date',
-      sortDir: 'desc',
-      limit: INITIAL_EXPENSES_PAGE_SIZE,
-      hydrate: false,
-      includeCount: false,
-    },
-    serverReadInit,
-  );
-  const totalsData = await getExpenses(
-    month,
-    {
-      sortBy: 'date',
-      sortDir: 'desc',
-      limit: 1,
-      hydrate: false,
-      includeCount: false,
-      includeTotals: true,
-    },
-    serverReadInit,
-  );
-  const categories = await getCategories(serverReadInit);
-  const exchangeRates = await getExchangeRates(month, serverReadInit);
   let totalExpensesArs = '0.00';
   let noIncomeWarning: string | null = null;
 
@@ -82,10 +109,15 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
     }
 
     noIncomeWarning = NO_INCOME_WARNING;
-    const allExpensesForMonth = await getExpenses(
-      month,
-      { sortBy: 'date', sortDir: 'desc', hydrate: false, includeCount: false },
-      serverReadInit,
+    const allExpensesForMonth = await withServerApiLogging(
+      requestId,
+      { month, route: '/expenses', step: 'fallback-expenses' },
+      () =>
+        getExpenses(
+          month,
+          { sortBy: 'date', sortDir: 'desc', hydrate: false, includeCount: false },
+          serverReadInit,
+        ),
     );
     const total = allExpensesForMonth.expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
     totalExpensesArs = total.toFixed(2);
