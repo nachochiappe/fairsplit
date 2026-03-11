@@ -81,9 +81,10 @@ function getFirstSeriesRow(rows: ExpenseRow[]): ExpenseRow | null {
   return [...rows].sort((a, b) => a.month.localeCompare(b.month) || a.id.localeCompare(b.id))[0];
 }
 
-export async function ensureInstallmentsForMonth(month: string): Promise<void> {
+export async function ensureInstallmentsForMonth(month: string, householdId: string): Promise<void> {
   const rows = await prisma.expense.findMany({
     where: {
+      householdId,
       month: { lte: month },
       isInstallment: true,
       installmentSeriesId: { not: null },

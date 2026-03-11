@@ -1481,9 +1481,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         const monthlyRates = requestedCurrencies.length
           ? await tx.monthlyExchangeRate.findMany({
               where: {
+                householdId: auth.householdId,
                 month: parsed.data.month,
                 currencyCode: { in: requestedCurrencies },
-                OR: [{ householdId: auth.householdId }, { householdId: null }],
               },
             })
           : [];
@@ -1510,9 +1510,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
               const normalizedFxRate = new Decimal(entry.fxRate).toFixed(6);
               const existingRate = await tx.monthlyExchangeRate.findFirst({
                 where: {
+                  householdId: auth.householdId,
                   month: parsed.data.month,
                   currencyCode,
-                  OR: [{ householdId: auth.householdId }, { householdId: null }],
                 },
                 select: { id: true },
               });
@@ -1597,8 +1597,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     const shouldIncludeCount = parsed.data.includeCount ?? true;
     const generationWarnings: string[] = [];
     if (shouldHydrate) {
-      generationWarnings.push(...(await ensureFixedExpensesForMonth(parsed.data.month)));
-      await ensureInstallmentsForMonth(parsed.data.month);
+      generationWarnings.push(...(await ensureFixedExpensesForMonth(parsed.data.month, auth.householdId)));
+      await ensureInstallmentsForMonth(parsed.data.month, auth.householdId);
     }
 
     const baseWhere: Record<string, unknown> = { month: parsed.data.month, householdId: auth.householdId };
@@ -1744,6 +1744,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     const fxRateUsed = await resolveFxRateForMonth({
       month: parsed.data.month,
       currencyCode,
+      householdId: auth.householdId,
       explicitFxRate: parsed.data.fxRate,
     });
     if (!fxRateUsed) {
@@ -1844,6 +1845,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       const resolvedFxRate = await resolveFxRateForMonth({
         month: existing.month,
         currencyCode: resolvedCurrencyCode,
+        householdId: auth.householdId,
         explicitFxRate: parsedBody.data.fxRate,
       });
       if (!resolvedFxRate) {
@@ -1940,8 +1942,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     const shouldHydrate = parsed.data.hydrate ?? true;
 
     if (shouldHydrate) {
-      await ensureFixedExpensesForMonth(month);
-      await ensureInstallmentsForMonth(month);
+      await ensureFixedExpensesForMonth(month, auth.householdId);
+      await ensureInstallmentsForMonth(month, auth.householdId);
     }
 
     const [users, incomes, expenses] = await Promise.all([

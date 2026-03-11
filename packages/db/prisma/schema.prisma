@@ -175,7 +175,7 @@ model MonthlyExchangeRate {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([month, currencyCode])
+  @@unique([householdId, month, currencyCode])
   @@index([month])
   @@index([householdId])
 }

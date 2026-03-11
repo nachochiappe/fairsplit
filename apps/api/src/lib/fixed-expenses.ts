@@ -9,6 +9,7 @@ function toArsAmount(amountOriginal: string, fxRate: string): string {
 export async function resolveFxRateForMonth(options: {
   month: string;
   currencyCode: string;
+  householdId: string;
   explicitFxRate?: number;
 }): Promise<string | null> {
   const currencyCode = options.currencyCode.toUpperCase();
@@ -17,12 +18,11 @@ export async function resolveFxRateForMonth(options: {
   }
 
   if (currencyCode === 'USD' || currencyCode === 'EUR') {
-    const monthlyRate = await prisma.monthlyExchangeRate.findUnique({
+    const monthlyRate = await prisma.monthlyExchangeRate.findFirst({
       where: {
-        month_currencyCode: {
-          month: options.month,
-          currencyCode,
-        },
+        householdId: options.householdId,
+        month: options.month,
+        currencyCode,
       },
     });
     if (monthlyRate) {
@@ -33,10 +33,10 @@ export async function resolveFxRateForMonth(options: {
   return options.explicitFxRate !== undefined ? new Decimal(options.explicitFxRate).toFixed(6) : null;
 }
 
-export async function ensureFixedExpensesForMonth(month: string): Promise<string[]> {
+export async function ensureFixedExpensesForMonth(month: string, householdId: string): Promise<string[]> {
   const warnings: string[] = [];
   const templates = await prisma.expenseTemplate.findMany({
-    where: { isActive: true },
+    where: { isActive: true, householdId },
     include: { category: true, paidByUser: { select: { householdId: true } } },
     orderBy: { createdAt: 'asc' },
   });
@@ -45,7 +45,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
   const templateExpenseRows =
     templateIds.length > 0
       ? await prisma.expense.findMany({
-          where: { templateId: { in: templateIds } },
+          where: { templateId: { in: templateIds }, householdId },
           select: { templateId: true, month: true },
         })
       : [];
@@ -89,6 +89,7 @@ export async function ensureFixedExpensesForMonth(month: string): Promise<string
           (
             await prisma.monthlyExchangeRate.findMany({
               where: {
+                householdId,
                 month,
                 currencyCode: { in: currencies },
               },
