@@ -1873,6 +1873,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       const fxRateUsed = updated.fxRateUsed.toFixed(6);
       await applyTemplateValuesToFutureMonths({
         templateId: updated.templateId,
+        householdId: auth.householdId,
         fromMonth: updated.month,
         description: updated.description,
         categoryId: updated.categoryId,

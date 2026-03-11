@@ -47,7 +47,7 @@ describe('PUT /api/incomes', () => {
     if (userId) {
       await prisma.expense.deleteMany({ where: { paidByUserId: userId } });
       await prisma.monthlyIncome.deleteMany({ where: { userId } });
-      await prisma.monthlyExchangeRate.deleteMany({ where: { month } });
+      await prisma.monthlyExchangeRate.deleteMany({ where: { month, householdId } });
       await prisma.user.delete({ where: { id: userId } });
     }
     if (categoryId) {
@@ -104,13 +104,14 @@ describe('PUT /api/incomes', () => {
   it('uses existing month-start FX for incomes when available', async () => {
     await prisma.monthlyExchangeRate.upsert({
       where: {
-        month_currencyCode: {
+        householdId_month_currencyCode: {
+          householdId,
           month,
           currencyCode: 'USD',
         },
       },
       update: { rateToArs: '1000.000000' },
-      create: { month, currencyCode: 'USD', rateToArs: '1000.000000' },
+      create: { householdId, month, currencyCode: 'USD', rateToArs: '1000.000000' },
     });
 
     const response = await request(app).put('/api/incomes').set('x-fairsplit-session', sessionToken).send({
@@ -129,7 +130,8 @@ describe('PUT /api/incomes', () => {
 
     const persistedRate = await prisma.monthlyExchangeRate.findUniqueOrThrow({
       where: {
-        month_currencyCode: {
+        householdId_month_currencyCode: {
+          householdId,
           month,
           currencyCode: 'USD',
         },
@@ -141,6 +143,7 @@ describe('PUT /api/incomes', () => {
   it('persists missing month-start FX from incomes and expenses reuse it', async () => {
     await prisma.monthlyExchangeRate.deleteMany({
       where: {
+        householdId,
         month,
         currencyCode: 'EUR',
       },
@@ -162,7 +165,8 @@ describe('PUT /api/incomes', () => {
 
     const createdRate = await prisma.monthlyExchangeRate.findUniqueOrThrow({
       where: {
-        month_currencyCode: {
+        householdId_month_currencyCode: {
+          householdId,
           month,
           currencyCode: 'EUR',
         },
@@ -188,13 +192,14 @@ describe('PUT /api/incomes', () => {
   it('uses existing month-start FX for USD expenses even when an explicit fxRate is provided', async () => {
     await prisma.monthlyExchangeRate.upsert({
       where: {
-        month_currencyCode: {
+        householdId_month_currencyCode: {
+          householdId,
           month,
           currencyCode: 'USD',
         },
       },
       update: { rateToArs: '1100.000000' },
-      create: { month, currencyCode: 'USD', rateToArs: '1100.000000' },
+      create: { householdId, month, currencyCode: 'USD', rateToArs: '1100.000000' },
     });
 
     const expenseResponse = await request(app).post('/api/expenses').set('x-fairsplit-session', sessionToken).send({

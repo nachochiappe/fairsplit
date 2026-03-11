@@ -224,6 +224,7 @@ export function resolveCreateExpenseAmount(input: CreateExpenseInput): {
 }
 
 export async function propagateInstallmentUpdate(existing: ExpenseRow, payload: UpdateExpenseInput): Promise<ExpenseWithPaidBy> {
+  const householdId = existing.householdId;
   const applyScope = getEffectiveApplyScope(existing, payload.applyScope);
 
   if (!existing.isInstallment || !existing.installmentSeriesId || applyScope === 'single') {
@@ -253,6 +254,7 @@ export async function propagateInstallmentUpdate(existing: ExpenseRow, payload: 
 
   const seriesRows = await prisma.expense.findMany({
     where: {
+      householdId,
       installmentSeriesId: existing.installmentSeriesId,
       ...scopeFilter,
     },
@@ -343,12 +345,15 @@ export async function propagateInstallmentDelete(existing: ExpenseRow, applyScop
   }
 
   if (resolvedScope === 'all') {
-    await prisma.expense.deleteMany({ where: { installmentSeriesId: existing.installmentSeriesId } });
+    await prisma.expense.deleteMany({
+      where: { householdId: existing.householdId, installmentSeriesId: existing.installmentSeriesId },
+    });
     return;
   }
 
   await prisma.expense.deleteMany({
     where: {
+      householdId: existing.householdId,
       installmentSeriesId: existing.installmentSeriesId,
       month: { gte: existing.month },
     },
