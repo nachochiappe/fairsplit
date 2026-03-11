@@ -3,6 +3,8 @@
   Fairsplit
 </h1>
 
+<img width="1477" height="889" alt="image" src="https://github.com/user-attachments/assets/09891b57-30e4-42c4-99d2-5c486e53e3e5" />
+
 Fairsplit helps couples and households split shared expenses based on income, not a flat 50/50 rule.
 
 Track what each person earns, record what the household spends, and end the month with one clear settlement.
