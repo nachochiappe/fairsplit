@@ -5,6 +5,7 @@ import { formatMoney, formatPercent } from '../../lib/currency';
 import { type Income, type SettlementResponse, type User } from '../../lib/api';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { MonthNavigationPendingProvider, useMonthNavigationPending } from '../../components/MonthNavigationPending';
 import { MonthSelector } from '../../components/MonthSelector';
 import { TitleMark } from '../../components/TitleMark';
 
@@ -23,7 +24,30 @@ interface DashboardClientProps {
 }
 
 export function DashboardClient({ month, users, incomes, settlement, expenseCategorySlices = [], warning }: DashboardClientProps) {
+  return (
+    <MonthNavigationPendingProvider>
+      <DashboardClientContent
+        month={month}
+        users={users}
+        incomes={incomes}
+        settlement={settlement}
+        expenseCategorySlices={expenseCategorySlices}
+        warning={warning}
+      />
+    </MonthNavigationPendingProvider>
+  );
+}
+
+function DashboardClientContent({
+  month,
+  users,
+  incomes,
+  settlement,
+  expenseCategorySlices = [],
+  warning,
+}: DashboardClientProps) {
   const [isCategoryChartExpanded, setIsCategoryChartExpanded] = useState(false);
+  const { isPending } = useMonthNavigationPending();
   const usersById = Object.fromEntries(users.map((user) => [user.id, user]));
   const incomeByUser: Record<string, number> = {};
   for (const income of incomes) {
@@ -66,7 +90,12 @@ export function DashboardClient({ month, users, incomes, settlement, expenseCate
         </form>
       </nav>
 
-      <div className="space-y-8">
+      <div
+        aria-busy={isPending}
+        className={`space-y-8 transition duration-200 ${
+          isPending ? 'pointer-events-none select-none blur-[3px] opacity-70' : 'opacity-100'
+        }`}
+      >
         {warning ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
             <p>{warning}</p>

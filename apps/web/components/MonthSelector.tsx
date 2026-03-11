@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useMonthNavigationPending } from './MonthNavigationPending';
 import { addMonths } from '../lib/month';
 
 interface MonthSelectorProps {
@@ -14,15 +15,18 @@ export function MonthSelector({ month }: MonthSelectorProps) {
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [pendingMonth, setPendingMonth] = useState<string | null>(null);
+  const { setIsPending: setNavigationPending } = useMonthNavigationPending();
 
   useEffect(() => {
     setPendingMonth(null);
-  }, [month]);
+    setNavigationPending(false);
+  }, [month, setNavigationPending]);
 
   const onMonthChange = (nextMonth: string) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set('month', nextMonth);
     setPendingMonth(nextMonth);
+    setNavigationPending(true);
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`);
     });

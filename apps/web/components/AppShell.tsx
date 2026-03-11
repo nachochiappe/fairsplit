@@ -1,4 +1,7 @@
+'use client';
+
 import { ReactNode } from 'react';
+import { MonthNavigationPendingProvider, useMonthNavigationPending } from './MonthNavigationPending';
 import { Nav } from './Nav';
 import { TitleMark } from './TitleMark';
 
@@ -12,6 +15,18 @@ interface AppShellProps {
 }
 
 export function AppShell({ month, title, subtitle, rightSlot, containerClassName, children }: AppShellProps) {
+  return (
+    <MonthNavigationPendingProvider>
+      <AppShellContent month={month} title={title} subtitle={subtitle} rightSlot={rightSlot} containerClassName={containerClassName}>
+        {children}
+      </AppShellContent>
+    </MonthNavigationPendingProvider>
+  );
+}
+
+function AppShellContent({ month, title, subtitle, rightSlot, containerClassName, children }: AppShellProps) {
+  const { isPending } = useMonthNavigationPending();
+
   return (
     <main
       id="main-content"
@@ -29,8 +44,13 @@ export function AppShell({ month, title, subtitle, rightSlot, containerClassName
         {rightSlot}
       </header>
       <Nav month={month} />
-      <section className="rounded-3xl border border-slate-200/80 bg-white/75 p-4 shadow-sm backdrop-blur md:p-6">
-        {children}
+      <section className="relative rounded-3xl border border-slate-200/80 bg-white/75 p-4 shadow-sm backdrop-blur md:p-6">
+        <div
+          aria-busy={isPending}
+          className={`transition duration-200 ${isPending ? 'pointer-events-none select-none blur-[3px] opacity-70' : 'opacity-100'}`}
+        >
+          {children}
+        </div>
       </section>
     </main>
   );
