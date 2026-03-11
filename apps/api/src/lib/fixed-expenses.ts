@@ -181,9 +181,13 @@ export async function deleteFixedExpense(existing: ExpenseRow, applyScope?: Appl
 
   if (scope === 'future') {
     await prisma.$transaction(async (tx) => {
-      await tx.expenseTemplate.update({ where: { id: existing.templateId! }, data: { isActive: false } });
+      await tx.expenseTemplate.updateMany({
+        where: { id: existing.templateId!, householdId: existing.householdId },
+        data: { isActive: false },
+      });
       await tx.expense.deleteMany({
         where: {
+          householdId: existing.householdId,
           templateId: existing.templateId!,
           month: { gte: existing.month },
         },
@@ -193,13 +197,17 @@ export async function deleteFixedExpense(existing: ExpenseRow, applyScope?: Appl
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.expenseTemplate.update({ where: { id: existing.templateId! }, data: { isActive: false } });
-    await tx.expense.deleteMany({ where: { templateId: existing.templateId! } });
+    await tx.expenseTemplate.updateMany({
+      where: { id: existing.templateId!, householdId: existing.householdId },
+      data: { isActive: false },
+    });
+    await tx.expense.deleteMany({ where: { householdId: existing.householdId, templateId: existing.templateId! } });
   });
 }
 
 export async function applyTemplateValuesToFutureMonths(options: {
   templateId: string;
+  householdId: string;
   fromMonth: string;
   description: string;
   categoryId: string;
@@ -211,8 +219,8 @@ export async function applyTemplateValuesToFutureMonths(options: {
   dayOfMonth: number;
 }): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await tx.expenseTemplate.update({
-      where: { id: options.templateId },
+    await tx.expenseTemplate.updateMany({
+      where: { id: options.templateId, householdId: options.householdId },
       data: {
         description: options.description,
         categoryId: options.categoryId,
@@ -227,6 +235,7 @@ export async function applyTemplateValuesToFutureMonths(options: {
 
     const futureExpenses = await tx.expense.findMany({
       where: {
+        householdId: options.householdId,
         templateId: options.templateId,
         month: { gt: options.fromMonth },
       },
