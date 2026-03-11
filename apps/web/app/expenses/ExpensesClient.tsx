@@ -541,6 +541,7 @@ export function ExpensesClient({
     [debouncedSearchQuery, selectedCategoryId],
   );
   const filterQueryRef = useRef(filterQuery);
+  const hasMountedFilterTotalsEffectRef = useRef(false);
   useEffect(() => {
     filterQueryRef.current = filterQuery;
   }, [filterQuery]);
@@ -816,27 +817,6 @@ export function ExpensesClient({
   ]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const refreshLatestMonthData = async () => {
-      try {
-        await fetchMonthData({ includeRates: true, includeSettlement: true });
-      } catch (refreshError) {
-        if (cancelled) {
-          return;
-        }
-        setError(refreshError instanceof Error ? refreshError.message : 'Failed to refresh month data');
-      }
-    };
-
-    void refreshLatestMonthData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [month, fetchMonthData]);
-
-  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, SEARCH_DEBOUNCE_MS);
@@ -845,6 +825,11 @@ export function ExpensesClient({
   }, [searchQuery]);
 
   useEffect(() => {
+    if (!hasMountedFilterTotalsEffectRef.current) {
+      hasMountedFilterTotalsEffectRef.current = true;
+      return;
+    }
+
     let cancelled = false;
 
     const refreshTotalsForFilters = async () => {
