@@ -1,0 +1,17 @@
+{
+  "name": "@fairsplit/logging",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "dev": "echo 'No dev server for @fairsplit/logging'",
+    "build": "tsc -p tsconfig.json",
+    "test": "echo 'No tests for @fairsplit/logging'",
+    "lint": "echo 'No lint step for @fairsplit/logging'"
+  },
+  "dependencies": {
+    "pino": "^10.1.0",
+    "pino-pretty": "^13.1.1"
+  }
+}

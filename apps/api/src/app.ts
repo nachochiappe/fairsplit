@@ -1,9 +1,11 @@
 import 'dotenv/config';
+import 'express-async-errors';
 import { randomBytes } from 'node:crypto';
 import cors from 'cors';
 import Decimal from 'decimal.js';
-import express, { Express, Request, Response } from 'express';
+import express, { type ErrorRequestHandler, Express, Request, Response } from 'express';
 import { prisma } from '@fairsplit/db';
+import type { Logger } from '@fairsplit/logging';
 import {
   applyScopeSchema,
   calculateSettlement,
@@ -29,6 +31,7 @@ import {
   ensureFixedExpensesForMonth,
   resolveFxRateForMonth,
 } from './lib/fixed-expenses';
+import { createApiHttpLogger, createApiLogger } from './lib/logger';
 import { getSessionSecret, issueSessionToken, verifySessionToken } from './lib/session';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
 
@@ -255,11 +258,44 @@ interface RequestUserContext {
   onboardingHouseholdDecisionAt: Date | null;
 }
 
+interface CreateAppOptions {
+  configureApp?: (app: Express) => void;
+  logger?: Logger;
+}
+
+function disableAutoRequestLog(res: Response): void {
+  res.locals.disableAutoRequestLog = true;
+}
+
+function logWarnAndDisableAutoLog(req: Request, res: Response, message: string, extra?: Record<string, unknown>): void {
+  disableAutoRequestLog(res);
+  req.log.warn(
+    {
+      statusCode: res.statusCode,
+      ...(extra ?? {}),
+    },
+    message,
+  );
+}
+
+function logErrorAndDisableAutoLog(req: Request, res: Response, error: unknown, message: string): void {
+  disableAutoRequestLog(res);
+  req.log.error(
+    {
+      err: error,
+      statusCode: res.statusCode,
+    },
+    message,
+  );
+}
+
 async function requireUserContext(req: Request, res: Response): Promise<RequestUserContext | null> {
   let sessionSecret: string;
   try {
     sessionSecret = getSessionSecret();
   } catch (error) {
+    res.status(500);
+    logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid');
     res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     return null;
   }
@@ -272,6 +308,8 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
 
   const session = verifySessionToken(rawSessionToken, sessionSecret);
   if (!session) {
+    res.status(401);
+    logWarnAndDisableAutoLog(req, res, 'Rejected API request with invalid session token');
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
@@ -286,11 +324,15 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
     },
   });
   if (!user) {
+    res.status(401);
+    logWarnAndDisableAutoLog(req, res, 'Rejected API request for missing user');
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
   const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
   if (revokedAt !== null && session.iat <= revokedAt) {
+    res.status(401);
+    logWarnAndDisableAutoLog(req, res, 'Rejected API request for revoked session');
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
@@ -334,13 +376,15 @@ function generateInviteCode(length = 8): string {
   return code;
 }
 
-export const createApp = (): Express => {
+export const createApp = (options: CreateAppOptions = {}): Express => {
   const app = express();
+  const logger = options.logger ?? createApiLogger();
   const normalizeCurrencyCode = (value: string) => {
     const parsed = currencyCodeSchema.safeParse(value);
     return parsed.success ? parsed.data : 'ARS';
   };
 
+  app.use(createApiHttpLogger(logger));
   app.use(cors());
   app.use(express.json());
 
@@ -356,6 +400,8 @@ export const createApp = (): Express => {
 
     const identity = await verifySupabaseAccessToken(parsed.data.accessToken).catch(() => null);
     if (!identity) {
+      res.status(401);
+      logWarnAndDisableAutoLog(req, res, 'Rejected auth link request with invalid access token');
       return res.status(401).json({ error: 'Invalid access token.' });
     }
 
@@ -366,6 +412,8 @@ export const createApp = (): Express => {
     try {
       sessionSecret = getSessionSecret();
     } catch (error) {
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during auth link');
       return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     }
 
@@ -488,6 +536,8 @@ export const createApp = (): Express => {
         }
       }
 
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to link auth identity');
       return res.status(500).json({
         error: error instanceof Error ? error.message : 'Failed to link auth identity.',
       });
@@ -546,11 +596,15 @@ export const createApp = (): Express => {
         });
       } catch (error) {
         if (getPrismaErrorCode(error) !== 'P2002') {
+          res.status(500);
+          logErrorAndDisableAutoLog(req, res, error, 'Failed to create household invite code');
           return res.status(500).json({ error: 'Failed to create invite code.' });
         }
       }
     }
 
+    res.status(500);
+    logErrorAndDisableAutoLog(req, res, null, 'Failed to create household invite code after repeated collisions');
     return res.status(500).json({ error: 'Failed to create invite code. Please retry.' });
   });
 
@@ -637,6 +691,8 @@ export const createApp = (): Express => {
     try {
       sessionSecret = getSessionSecret();
     } catch (error) {
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during household join');
       return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     }
 
@@ -721,6 +777,8 @@ export const createApp = (): Express => {
     try {
       sessionSecret = getSessionSecret();
     } catch (error) {
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during household setup skip');
       return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     }
 
@@ -949,7 +1007,8 @@ export const createApp = (): Express => {
       if (code === 'P2002') {
         return res.status(409).json({ error: 'Category name already exists.' });
       }
-      console.error('Failed to create category', error);
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to create category');
       return res.status(500).json({ error: 'Failed to create category.' });
     }
   });
@@ -998,7 +1057,8 @@ export const createApp = (): Express => {
       if (code === 'P2002') {
         return res.status(409).json({ error: 'Category name already exists.' });
       }
-      console.error('Failed to rename category', error);
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to rename category');
       return res.status(500).json({ error: 'Failed to rename category.' });
     }
   });
@@ -1180,7 +1240,8 @@ export const createApp = (): Express => {
       if (code === 'P2002') {
         return res.status(409).json({ error: 'Super category name already exists.' });
       }
-      console.error('Failed to create super category', error);
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to create super category');
       return res.status(500).json({ error: 'Failed to create super category.' });
     }
   });
@@ -1231,7 +1292,8 @@ export const createApp = (): Express => {
       if (code === 'P2002') {
         return res.status(409).json({ error: 'Super category name already exists.' });
       }
-      console.error('Failed to update super category', error);
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to update super category');
       return res.status(500).json({ error: 'Failed to update super category.' });
     }
   });
@@ -1500,6 +1562,8 @@ export const createApp = (): Express => {
       if (error instanceof Error && error.message.startsWith('Missing FX rate')) {
         return res.status(400).json({ error: error.message });
       }
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to save incomes');
       return res.status(500).json({ error: 'Failed to save incomes.' });
     }
 
@@ -1926,6 +1990,21 @@ export const createApp = (): Express => {
       });
     }
   });
+
+  options.configureApp?.(app);
+
+  const errorHandler: ErrorRequestHandler = (error, req, res, _next) => {
+    if (res.headersSent) {
+      req.log.error({ err: error }, 'Unhandled API error after headers were sent');
+      return;
+    }
+
+    res.status(500);
+    logErrorAndDisableAutoLog(req, res, error, 'Unhandled API request failure');
+    res.status(500).json({ error: 'Internal server error.' });
+  };
+
+  app.use(errorHandler);
 
   return app;
 };

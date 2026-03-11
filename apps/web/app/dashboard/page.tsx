@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { DashboardClient } from './DashboardClient';
+import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SESSION_COOKIE } from '../../lib/session';
 import {
   getExpenses,
@@ -29,28 +30,36 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
-  const serverReadInit = sessionToken
-    ? ({ ...SERVER_READ_CACHE, headers: { 'x-fairsplit-session': sessionToken } } as const)
-    : SERVER_READ_CACHE;
+  const requestId = await getServerRequestId();
+  const serverReadInit = buildServerApiInit(
+    requestId,
+    SERVER_READ_CACHE,
+    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
+  );
   let users: User[] = [];
   let incomes: Income[] = [];
   let settlementResult: SettlementResponse | null = null;
   let expensesResult: Expense[] = [];
 
   try {
-    [users, incomes, settlementResult, expensesResult] = await Promise.all([
-      getUsers(serverReadInit),
-      getIncomes(month, serverReadInit),
-      getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : 'Failed to load settlement';
-        if (message.includes('Cannot calculate settlement when total income is non-positive')) {
-          return null;
-        }
+    [users, incomes, settlementResult, expensesResult] = await withServerApiLogging(
+      requestId,
+      { month, route: '/dashboard' },
+      async () =>
+        Promise.all([
+          getUsers(serverReadInit),
+          getIncomes(month, serverReadInit),
+          getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : 'Failed to load settlement';
+            if (message.includes('Cannot calculate settlement when total income is non-positive')) {
+              return null;
+            }
 
-        throw error;
-      }),
-      getExpenses(month, undefined, serverReadInit).then((result) => result.expenses),
-    ]);
+            throw error;
+          }),
+          getExpenses(month, undefined, serverReadInit).then((result) => result.expenses),
+        ]),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to connect to API';
     const settlement = buildNoIncomeSettlement(month, [], [], []);
