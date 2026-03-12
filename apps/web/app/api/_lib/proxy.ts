@@ -16,6 +16,8 @@ interface ProxyMutationOptions {
   revalidatePaths?: string[];
 }
 
+const BODYLESS_STATUS_CODES = new Set([204, 205, 304]);
+
 function secureCookies(): boolean {
   return process.env.NODE_ENV === 'production';
 }
@@ -128,10 +130,12 @@ export async function proxyMutation(request: Request, options: ProxyMutationOpti
   }
   const isJsonResponse = contentTypeHeader.includes('application/json');
   const safeBody = isJsonResponse ? sanitizeJsonBody(responseBody) : responseBody;
-  const response = new NextResponse(safeBody, {
-    status: upstreamResponse.status,
-    headers: { 'Content-Type': contentTypeHeader },
-  });
+  const response = BODYLESS_STATUS_CODES.has(upstreamResponse.status)
+    ? new NextResponse(null, { status: upstreamResponse.status })
+    : new NextResponse(safeBody, {
+        status: upstreamResponse.status,
+        headers: { 'Content-Type': contentTypeHeader },
+      });
 
   if (upstreamResponse.ok && isJsonResponse) {
     try {
@@ -161,7 +165,9 @@ export async function proxyMutation(request: Request, options: ProxyMutationOpti
     }
   }
 
-  response.headers.set('Content-Type', contentTypeHeader);
+  if (!BODYLESS_STATUS_CODES.has(upstreamResponse.status)) {
+    response.headers.set('Content-Type', contentTypeHeader);
+  }
   response.headers.set('Cache-Control', 'no-store');
   return appendRequestId(response, upstreamRequestId);
 }

@@ -99,6 +99,9 @@ export function SettingsClient({
     setSuperCategories(nextSuperCategories);
   };
 
+  const formatPostMutationRefreshError = (fallbackMessage: string, error: unknown): string =>
+    error instanceof Error ? `${fallbackMessage} ${error.message}` : fallbackMessage;
+
   const onUpdateDisplayName = async () => {
     if (!currentUserId) {
       setProfileError('No active user found in session.');
@@ -174,9 +177,15 @@ export function SettingsClient({
       });
       setCategoryName('');
       setCategorySuperCategoryId('unassigned');
-      await loadSettings();
     } catch (categoryError) {
       setCategoryError(categoryError instanceof Error ? categoryError.message : 'Failed to create category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setCategoryError(formatPostMutationRefreshError('Category created, but settings could not refresh automatically.', refreshError));
     } finally {
       setSaving(false);
     }
@@ -196,9 +205,15 @@ export function SettingsClient({
       setSaving(true);
       setCategoryError(null);
       await renameCategory(category.id, { name: nextName });
-      await loadSettings();
     } catch (renameError) {
       setCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setCategoryError(formatPostMutationRefreshError('Category renamed, but settings could not refresh automatically.', refreshError));
     } finally {
       setSaving(false);
     }
@@ -211,9 +226,17 @@ export function SettingsClient({
       await assignCategorySuperCategory(category.id, {
         superCategoryId: nextSuperCategoryId === 'unassigned' ? null : nextSuperCategoryId,
       });
-      await loadSettings();
     } catch (assignError) {
       setCategoryError(assignError instanceof Error ? assignError.message : 'Failed to assign category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setCategoryError(
+        formatPostMutationRefreshError('Category updated, but settings could not refresh automatically.', refreshError),
+      );
     } finally {
       setSaving(false);
     }
@@ -228,9 +251,17 @@ export function SettingsClient({
       setSaving(true);
       setCategoryError(null);
       await archiveCategory(category.id);
-      await loadSettings();
     } catch (archiveError) {
       setCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setCategoryError(
+        formatPostMutationRefreshError('Category archived, but settings could not refresh automatically.', refreshError),
+      );
     } finally {
       setSaving(false);
     }
@@ -245,9 +276,17 @@ export function SettingsClient({
       setSaving(true);
       setCategoryError(null);
       await unarchiveCategory(category.id);
-      await loadSettings();
     } catch (unarchiveError) {
       setCategoryError(unarchiveError instanceof Error ? unarchiveError.message : 'Failed to unarchive category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setCategoryError(
+        formatPostMutationRefreshError('Category restored, but settings could not refresh automatically.', refreshError),
+      );
     } finally {
       setSaving(false);
     }
@@ -270,9 +309,17 @@ export function SettingsClient({
         sortOrder: nextSortOrder,
       });
       setSuperCategoryName('');
-      await loadSettings();
     } catch (superCategoryError) {
       setSuperCategoryError(superCategoryError instanceof Error ? superCategoryError.message : 'Failed to create super category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setSuperCategoryError(
+        formatPostMutationRefreshError('Group created, but settings could not refresh automatically.', refreshError),
+      );
     } finally {
       setSaving(false);
     }
@@ -288,9 +335,17 @@ export function SettingsClient({
       setSaving(true);
       setSuperCategoryError(null);
       await updateSuperCategory(superCategory.id, { name: nextName });
-      await loadSettings();
     } catch (renameError) {
       setSuperCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename super category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setSuperCategoryError(
+        formatPostMutationRefreshError('Group renamed, but settings could not refresh automatically.', refreshError),
+      );
     } finally {
       setSaving(false);
     }
@@ -325,9 +380,17 @@ export function SettingsClient({
       await archiveSuperCategory(superCategory.id, {
         replacementSuperCategoryId: replacement?.id,
       });
-      await loadSettings();
     } catch (archiveError) {
       setSuperCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive super category');
+      return;
+    }
+
+    try {
+      await loadSettings();
+    } catch (refreshError) {
+      setSuperCategoryError(
+        formatPostMutationRefreshError('Group archived, but settings could not refresh automatically.', refreshError),
+      );
     } finally {
       setSaving(false);
     }

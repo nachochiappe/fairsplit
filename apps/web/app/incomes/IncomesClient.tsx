@@ -407,9 +407,19 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
         ),
       );
       setMessage('Incomes saved');
-      await load();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Failed to save incomes');
+      return;
+    }
+
+    try {
+      await load();
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? `Incomes were saved, but the page could not refresh automatically. ${refreshError.message}`
+          : 'Incomes were saved, but the page could not refresh automatically.',
+      );
     } finally {
       setSaving(false);
     }
