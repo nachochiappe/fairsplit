@@ -1192,9 +1192,19 @@ export function ExpensesClient({
       setSaving(true);
       setError(null);
       await deleteExpense(expense.id, 'single');
-      await reloadFirstPage();
     } catch (removeError) {
       setError(removeError instanceof Error ? removeError.message : 'Failed to delete expense');
+      return;
+    }
+
+    try {
+      await reloadFirstPage();
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? `Expense deleted, but the page could not refresh automatically. ${refreshError.message}`
+          : 'Expense deleted, but the page could not refresh automatically.',
+      );
     } finally {
       setSaving(false);
     }
@@ -1234,9 +1244,19 @@ export function ExpensesClient({
       setScopeDialog(null);
       setEditingExpenseId(null);
       resetForm(sortedActiveCategories[0]?.id ?? '');
-      await reloadFirstPage();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'Failed to apply action');
+      return;
+    }
+
+    try {
+      await reloadFirstPage();
+    } catch (refreshError) {
+      const fallbackMessage =
+        scopeDialog.action === 'delete'
+          ? 'Expense deleted, but the page could not refresh automatically.'
+          : 'Changes were saved, but the page could not refresh automatically.';
+      setError(refreshError instanceof Error ? `${fallbackMessage} ${refreshError.message}` : fallbackMessage);
     } finally {
       setSaving(false);
     }
