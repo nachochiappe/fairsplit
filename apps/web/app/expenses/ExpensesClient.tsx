@@ -32,7 +32,6 @@ import {
 } from '../../lib/api';
 
 type ApplyScope = 'single' | 'future' | 'all';
-type ScopeAction = 'update' | 'delete';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
 type ExpenseSectionKey = 'fixed' | 'oneTime' | 'installment';
@@ -148,9 +147,7 @@ const expenseSchema = z
 type ExpenseForm = z.infer<typeof expenseSchema>;
 
 interface ScopeDialogState {
-  action: ScopeAction;
   expense: Expense;
-  values?: ExpenseForm;
 }
 
 type ConfirmationAction = 'clone' | 'delete';
@@ -614,6 +611,7 @@ export function ExpensesClient({
   const watchedCurrencyCode = form.watch('currencyCode');
   const watchedFxRate = form.watch('fxRate');
   const watchedApplyToFuture = form.watch('applyToFuture');
+  const watchedFixedEnabled = form.watch('fixedEnabled');
   const previousCurrencyRef = useRef<SupportedCurrencyCode>(DEFAULT_CURRENCY_CODE);
 
   const monthlyRateForCurrency = useMemo(() => {
@@ -998,6 +996,7 @@ export function ExpensesClient({
       return;
     }
 
+    const applyToFuture = values.fixedEnabled && !values.installmentEnabled ? values.applyToFuture : false;
     const payload: Parameters<typeof updateExpense>[1] = {
       month: values.nextMonthExpense ? addMonths(month, 1) : month,
       date: values.date,
@@ -1007,7 +1006,7 @@ export function ExpensesClient({
       fxRate: values.fxRate,
       paidByUserId: values.paidByUserId,
       applyScope: scope,
-      applyToFuture: values.applyToFuture,
+      applyToFuture,
     };
 
     if (!values.installmentEnabled) {
@@ -1059,21 +1058,19 @@ export function ExpensesClient({
 
       if (editingExpenseId) {
         const current = expenses.find((expense) => expense.id === editingExpenseId);
-        if (current?.installment) {
-          setScopeDialog({ action: 'update', expense: current, values });
-          return;
-        }
-
-        if (current?.fixed.enabled && !values.applyToFuture && !window.confirm('Update only this month?')) {
-          return;
-        }
-
         setSubmissionToast({
           id: loadingToastId,
           kind: 'loading',
           title: 'Updating expense...',
         });
-        await executeUpdate(values, 'single');
+
+        if (current?.installment) {
+          await executeUpdate(values, 'all');
+        } else if (current?.fixed.enabled) {
+          await executeUpdate(values, values.applyToFuture ? 'future' : 'single');
+        } else {
+          await executeUpdate(values, 'single');
+        }
       } else {
         setSubmissionToast({
           id: loadingToastId,
@@ -1184,7 +1181,7 @@ export function ExpensesClient({
 
   const confirmDeleteExpense = async (expense: Expense) => {
     if (expense.installment || expense.fixed.enabled) {
-      setScopeDialog({ action: 'delete', expense });
+      setScopeDialog({ expense });
       return;
     }
 
@@ -1234,12 +1231,7 @@ export function ExpensesClient({
     try {
       setSaving(true);
       setError(null);
-
-      if (scopeDialog.action === 'delete') {
-        await deleteExpense(scopeDialog.expense.id, scope);
-      } else if (scopeDialog.values) {
-        await executeUpdate(scopeDialog.values, scope);
-      }
+      await deleteExpense(scopeDialog.expense.id, scope);
 
       setScopeDialog(null);
       setEditingExpenseId(null);
@@ -1252,10 +1244,7 @@ export function ExpensesClient({
     try {
       await reloadFirstPage();
     } catch (refreshError) {
-      const fallbackMessage =
-        scopeDialog.action === 'delete'
-          ? 'Expense deleted, but the page could not refresh automatically.'
-          : 'Changes were saved, but the page could not refresh automatically.';
+      const fallbackMessage = 'Expense deleted, but the page could not refresh automatically.';
       setError(refreshError instanceof Error ? `${fallbackMessage} ${refreshError.message}` : fallbackMessage);
     } finally {
       setSaving(false);
@@ -1391,13 +1380,7 @@ export function ExpensesClient({
           busy={saving}
           onCancel={() => setScopeDialog(null)}
           onConfirm={(scope) => void confirmScopedAction(scope)}
-          title={
-            scopeDialog.action === 'delete'
-              ? scopeDialog.expense.installment
-                ? 'Delete installment expense'
-                : 'Delete recurring expense'
-              : 'Update installment expense'
-          }
+          title={scopeDialog.expense.installment ? 'Delete installment expense' : 'Delete recurring expense'}
         />
       ) : null}
       {confirmationDialog ? (
@@ -1548,7 +1531,7 @@ export function ExpensesClient({
                       <span aria-hidden="true" className={pillToggleThumbClass} />
                     </span>
                   </label>
-                  {editingExpenseId ? (
+                  {editingExpenseId && watchedFixedEnabled && !watchedInstallmentEnabled ? (
                     <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
                       <span>Apply changes to future months</span>
                       <span className="relative inline-flex items-center">
