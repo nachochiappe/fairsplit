@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { AppShell } from '../../components/AppShell';
 import { ActionButton } from '../../components/ActionButton';
 import { MonthSelector } from '../../components/MonthSelector';
+import { ViewportModal } from '../../components/ViewportModal';
 import { formatMoney } from '../../lib/currency';
 import { addMonths } from '../../lib/month';
 import {
@@ -183,7 +184,7 @@ function ScopeDialog({
   const [scope, setScope] = useState<ApplyScope>('future');
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+    <ViewportModal>
       <div
         aria-labelledby="scope-dialog-title"
         aria-modal="true"
@@ -227,7 +228,7 @@ function ScopeDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ViewportModal>
   );
 }
 
@@ -247,7 +248,7 @@ function ConfirmationDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+    <ViewportModal>
       <div
         aria-labelledby="confirmation-dialog-title"
         aria-modal="true"
@@ -277,7 +278,7 @@ function ConfirmationDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ViewportModal>
   );
 }
 

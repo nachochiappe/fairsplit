@@ -4,6 +4,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react
 import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
 import { MonthSelector } from '../../components/MonthSelector';
+import { ViewportModal } from '../../components/ViewportModal';
 import {
   getExchangeRates,
   getIncomes,
@@ -156,7 +157,7 @@ function ConfirmationDialog({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+    <ViewportModal>
       <div
         aria-labelledby="income-confirmation-dialog-title"
         aria-modal="true"
@@ -176,7 +177,7 @@ function ConfirmationDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ViewportModal>
   );
 }
 
