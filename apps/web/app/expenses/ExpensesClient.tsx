@@ -416,6 +416,7 @@ export function ExpensesClient({
   const hasSearchQuery = searchQuery.trim().length > 0;
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
+  const [openMobileActionMenuId, setOpenMobileActionMenuId] = useState<string | null>(null);
   const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
   const expensesRef = useRef(expenses);
   const submissionToastTimeoutRef = useRef<number | null>(null);
@@ -436,6 +437,30 @@ export function ExpensesClient({
   useEffect(() => {
     fetchBatchSizeRef.current = fetchBatchSize;
   }, [fetchBatchSize]);
+
+  useEffect(() => {
+    if (!openMobileActionMenuId) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target.closest('[data-mobile-expense-menu]')) {
+        return;
+      }
+
+      setOpenMobileActionMenuId(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [openMobileActionMenuId]);
 
   useEffect(() => {
     if (!submissionToast || submissionToast.kind === 'loading') {
@@ -2087,7 +2112,69 @@ export function ExpensesClient({
                                   {expense.description}
                                 </p>
                               </div>
-                              <p className="whitespace-nowrap text-sm font-medium text-slate-600">{expense.date}</p>
+                              <div className="flex items-start gap-2">
+                                <p className="whitespace-nowrap pt-1 text-sm font-medium text-slate-600">{expense.date}</p>
+                                <div className="relative" data-mobile-expense-menu>
+                                  <button
+                                    aria-expanded={openMobileActionMenuId === expense.id}
+                                    aria-haspopup="menu"
+                                    aria-label={`More actions for ${expense.description}`}
+                                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                                    onClick={() =>
+                                      setOpenMobileActionMenuId((current) => (current === expense.id ? null : expense.id))
+                                    }
+                                    type="button"
+                                  >
+                                    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                      <circle cx="5" cy="12" fill="currentColor" r="1.75" />
+                                      <circle cx="12" cy="12" fill="currentColor" r="1.75" />
+                                      <circle cx="19" cy="12" fill="currentColor" r="1.75" />
+                                    </svg>
+                                  </button>
+                                  {openMobileActionMenuId === expense.id ? (
+                                    <div
+                                      className="absolute right-0 top-12 z-20 min-w-[10rem] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg shadow-slate-900/10"
+                                      role="menu"
+                                    >
+                                      <div className="flex flex-col gap-1">
+                                        <ActionButton
+                                          action="edit"
+                                          aria-label="Edit expense"
+                                          className="justify-start"
+                                          onClick={() => {
+                                            setOpenMobileActionMenuId(null);
+                                            startEdit(expense);
+                                          }}
+                                        >
+                                          Edit
+                                        </ActionButton>
+                                        <ActionButton
+                                          action="clone"
+                                          aria-label="Clone expense"
+                                          className="justify-start"
+                                          onClick={() => {
+                                            setOpenMobileActionMenuId(null);
+                                            void cloneExpense(expense);
+                                          }}
+                                        >
+                                          Clone
+                                        </ActionButton>
+                                        <ActionButton
+                                          action="delete"
+                                          aria-label="Delete expense"
+                                          className="justify-start"
+                                          onClick={() => {
+                                            setOpenMobileActionMenuId(null);
+                                            void removeExpense(expense);
+                                          }}
+                                        >
+                                          Delete
+                                        </ActionButton>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -2102,7 +2189,7 @@ export function ExpensesClient({
                             </div>
                             <div className="mt-4">
                               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Amount</p>
-                              <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+                              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
                                 ARS {formatMoney(expense.amountArs)}
                               </p>
                               {expense.currencyCode !== 'ARS' ? (
@@ -2110,17 +2197,6 @@ export function ExpensesClient({
                                   Original: {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
                                 </p>
                               ) : null}
-                            </div>
-                            <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-                              <ActionButton action="edit" aria-label="Edit expense" onClick={() => startEdit(expense)}>
-                                Edit
-                              </ActionButton>
-                              <ActionButton action="clone" aria-label="Clone expense" onClick={() => void cloneExpense(expense)}>
-                                Clone
-                              </ActionButton>
-                              <ActionButton action="delete" aria-label="Delete expense" onClick={() => void removeExpense(expense)}>
-                                Delete
-                              </ActionButton>
                             </div>
                           </article>
                         ))}
