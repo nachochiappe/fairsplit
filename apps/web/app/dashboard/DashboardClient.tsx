@@ -143,6 +143,7 @@ function DashboardClientContent({
             {users.map((user) => {
               const difference = Number(settlement.differenceByUser[user.id] ?? 0);
               const isPositiveDifference = difference >= 0;
+              const absoluteDifference = Math.abs(difference);
 
               return (
                 <article key={user.id} className="space-y-4 px-5 py-5">
@@ -156,15 +157,28 @@ function DashboardClientContent({
                       {isPositiveDifference ? 'Overpaid' : 'Needs to send'}
                     </span>
                   </div>
-                  <dl className="grid grid-cols-2 gap-3 text-sm">
-                    <SummaryCell label="Income" value={formatMoney(incomeByUser[user.id] ?? 0)} />
-                    <SummaryCell label="Paid" value={formatMoney(settlement.paidByUser[user.id] ?? 0)} />
-                    <SummaryCell label="Fair share" value={formatMoney(settlement.fairShareByUser[user.id] ?? 0)} />
-                    <SummaryCell
-                      label="Difference"
-                      value={formatMoney(settlement.differenceByUser[user.id] ?? 0)}
-                      valueClassName={isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}
-                    />
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Difference</p>
+                    <p className={`mt-2 text-3xl font-semibold tabular-nums ${isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      {formatMoney(absoluteDifference)}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {isPositiveDifference ? 'Covered more than fair share this month.' : 'Needs to send this month.'}
+                    </p>
+                  </div>
+                  <dl className="space-y-3 border-t border-slate-100 pt-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-slate-600">Income</dt>
+                      <dd className="font-medium tabular-nums text-slate-900">{formatMoney(incomeByUser[user.id] ?? 0)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-slate-600">Paid</dt>
+                      <dd className="font-medium tabular-nums text-slate-900">{formatMoney(settlement.paidByUser[user.id] ?? 0)}</dd>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <dt className="text-slate-600">Fair share</dt>
+                      <dd className="font-medium tabular-nums text-slate-900">{formatMoney(settlement.fairShareByUser[user.id] ?? 0)}</dd>
+                    </div>
                   </dl>
                 </article>
               );
@@ -249,23 +263,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-soft">{label}</p>
       <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function SummaryCell({
-  label,
-  value,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt>
-      <dd className={`mt-2 text-base font-semibold tabular-nums text-slate-900 ${valueClassName ?? ''}`}>{value}</dd>
     </div>
   );
 }
