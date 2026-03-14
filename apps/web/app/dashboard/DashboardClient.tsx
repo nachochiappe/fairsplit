@@ -340,14 +340,46 @@ function CategoryPieChart({
       percentage: total === 0 ? 0 : (slice.totalArs / total) * 100,
     };
   });
+  const topSegments = [...segments].sort((left, right) => right.totalArs - left.totalArs).slice(0, 3);
+  const leadSegment = topSegments[0];
+  const chartSummary = leadSegment
+    ? `${leadSegment.categoryName} is the largest group at ${leadSegment.percentage.toFixed(1)}% of spending.`
+    : 'Expense groups are summarized below.';
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Text summary</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{chartSummary}</p>
+          <ol className="mt-4 space-y-2">
+            {topSegments.map((segment, index) => (
+              <li key={segment.categoryName} className="flex items-start justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {index + 1}. {segment.categoryName}
+                  </p>
+                  <p className="text-slate-600">{formatMoney(segment.totalArs)} spent</p>
+                </div>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-900">{segment.percentage.toFixed(1)}%</span>
+              </li>
+            ))}
+          </ol>
+        </div>
         <div className="relative mx-auto w-fit">
-          <svg aria-label="Pie chart showing expenses by category" className="mx-auto" height={chartSize} role="img" viewBox={`0 0 ${chartSize} ${chartSize}`} width={chartSize}>
+          <svg
+            aria-describedby="expense-category-chart-summary"
+            aria-label="Pie chart showing expense groups"
+            className="mx-auto"
+            height={chartSize}
+            role="img"
+            viewBox={`0 0 ${chartSize} ${chartSize}`}
+            width={chartSize}
+          >
             {segments.map((segment) => (
-              <path key={segment.categoryName} d={segment.path} fill={segment.color} />
+              <path key={segment.categoryName} d={segment.path} fill={segment.color}>
+                <title>{`${segment.categoryName}: ${segment.percentage.toFixed(1)}%`}</title>
+              </path>
             ))}
             <circle cx={center} cy={center} fill="white" r={innerRadius} />
           </svg>
@@ -356,6 +388,9 @@ function CategoryPieChart({
             <p className="mt-1 text-5xl font-bold leading-none text-slate-900">{formatCompactMoney(total)}</p>
           </div>
         </div>
+        <p className="sr-only" id="expense-category-chart-summary">
+          {segments.map((segment) => `${segment.categoryName}: ${segment.percentage.toFixed(1)}%`).join('. ')}
+        </p>
         <ul className="mx-auto mt-5 max-w-sm space-y-2">
           {segments.map((segment) => (
             <li key={segment.categoryName} className="flex items-center justify-between gap-3 text-sm">
