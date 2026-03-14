@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import { MonthNavigationPendingProvider, useMonthNavigationPending } from '../../components/MonthNavigationPending';
 import { MonthSelector } from '../../components/MonthSelector';
 import { TitleMark } from '../../components/TitleMark';
+import { getSuperCategoryAccentColor } from '../../lib/theme';
 
 interface DashboardClientProps {
   month: string;
@@ -56,7 +57,7 @@ function DashboardClientContent({
 
   return (
     <main id="main-content" className="mx-auto min-h-screen w-full max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
-      <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:p-9">
+      <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-6">
             <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
@@ -74,7 +75,7 @@ function DashboardClientContent({
 
       <nav
         aria-label="Primary"
-        className="mb-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-sm backdrop-blur md:grid-cols-5"
+        className="mb-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm md:grid-cols-5"
       >
         <NavItem href="/dashboard" label="Dashboard" month={month} />
         <NavItem href="/incomes" label="Incomes" month={month} />
@@ -137,8 +138,40 @@ function DashboardClientContent({
           ) : null}
         </section>
 
-        <section className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <table className="w-full min-w-[760px] text-left text-sm">
+        <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className="divide-y divide-slate-100 md:hidden">
+            {users.map((user) => {
+              const difference = Number(settlement.differenceByUser[user.id] ?? 0);
+              const isPositiveDifference = difference >= 0;
+
+              return (
+                <article key={user.id} className="space-y-4 px-5 py-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-lg font-semibold text-slate-900">{user.name}</h3>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        isPositiveDifference ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      {isPositiveDifference ? 'Overpaid' : 'Needs to send'}
+                    </span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 text-sm">
+                    <SummaryCell label="Income" value={formatMoney(incomeByUser[user.id] ?? 0)} />
+                    <SummaryCell label="Paid" value={formatMoney(settlement.paidByUser[user.id] ?? 0)} />
+                    <SummaryCell label="Fair share" value={formatMoney(settlement.fairShareByUser[user.id] ?? 0)} />
+                    <SummaryCell
+                      label="Difference"
+                      value={formatMoney(settlement.differenceByUser[user.id] ?? 0)}
+                      valueClassName={isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}
+                    />
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] text-left text-sm">
             <caption className="sr-only">Monthly settlement by partner</caption>
             <thead className="bg-slate-50/85 text-slate-500">
               <tr>
@@ -182,41 +215,29 @@ function DashboardClientContent({
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </section>
 
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-[#3f75de] px-6 py-8 text-white shadow-xl shadow-brand-900/15 md:px-9">
-          <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
-          <div className="relative z-10">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100">Settlement</h2>
-            {settlement.transfer ? (
-              <div className="mt-3 flex items-start gap-4">
-                <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20">
-                  <svg
-                    aria-hidden="true"
-                    className="h-6 w-6"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M7 7h10M7 7l3-3M7 7l3 3M17 17H7M17 17l-3-3M17 17l-3 3" />
-                  </svg>
-                </div>
-                <p className="text-2xl leading-snug md:text-4xl">
-                  <span className="font-normal text-blue-50/90">
-                    {usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId} sends
-                  </span>{' '}
-                  <span className="font-semibold">{formatMoney(settlement.transfer.amount)}</span>{' '}
-                  <span className="font-normal text-blue-50/90">
-                    to {usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId}
-                  </span>
-                </p>
-              </div>
-            ) : (
-              <p className="mt-3 text-2xl font-semibold md:text-3xl">No transfer needed</p>
-            )}
-          </div>
+        <section className="rounded-3xl border border-brand-200 bg-brand-50 px-6 py-7 shadow-sm md:px-9">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">Settlement</h2>
+          {settlement.transfer ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-2xl font-semibold leading-snug text-slate-900 md:text-3xl">
+                {usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId}
+                {' sends '}
+                {formatMoney(settlement.transfer.amount)}
+                {' to '}
+                {usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId}
+              </p>
+              <p className="text-sm text-slate-600">One transfer balances this month.</p>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <p className="text-2xl font-semibold text-slate-900 md:text-3xl">No transfer needed</p>
+              <p className="text-sm text-slate-600">This month is already balanced.</p>
+            </div>
+          )}
         </section>
       </div>
     </main>
@@ -226,8 +247,25 @@ function DashboardClientContent({
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-soft">{label}</p>
       <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function SummaryCell({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt>
+      <dd className={`mt-2 text-base font-semibold tabular-nums text-slate-900 ${valueClassName ?? ''}`}>{value}</dd>
     </div>
   );
 }
@@ -302,22 +340,57 @@ function CategoryPieChart({
       percentage: total === 0 ? 0 : (slice.totalArs / total) * 100,
     };
   });
+  const topSegments = [...segments].sort((left, right) => right.totalArs - left.totalArs).slice(0, 3);
+  const leadSegment = topSegments[0];
+  const chartSummary = leadSegment
+    ? `${leadSegment.categoryName} is the largest group at ${leadSegment.percentage.toFixed(1)}% of spending.`
+    : 'Expense groups are summarized below.';
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Text summary</p>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{chartSummary}</p>
+          <ol className="mt-4 space-y-2">
+            {topSegments.map((segment, index) => (
+              <li key={segment.categoryName} className="flex items-start justify-between gap-3 text-sm">
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    {index + 1}. {segment.categoryName}
+                  </p>
+                  <p className="text-slate-600">{formatMoney(segment.totalArs)} spent</p>
+                </div>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-900">{segment.percentage.toFixed(1)}%</span>
+              </li>
+            ))}
+          </ol>
+        </div>
         <div className="relative mx-auto w-fit">
-          <svg aria-label="Pie chart showing expenses by category" className="mx-auto" height={chartSize} role="img" viewBox={`0 0 ${chartSize} ${chartSize}`} width={chartSize}>
+          <svg
+            aria-describedby="expense-category-chart-summary"
+            aria-label="Pie chart showing expense groups"
+            className="mx-auto"
+            height={chartSize}
+            role="img"
+            viewBox={`0 0 ${chartSize} ${chartSize}`}
+            width={chartSize}
+          >
             {segments.map((segment) => (
-              <path key={segment.categoryName} d={segment.path} fill={segment.color} />
+              <path key={segment.categoryName} d={segment.path} fill={segment.color}>
+                <title>{`${segment.categoryName}: ${segment.percentage.toFixed(1)}%`}</title>
+              </path>
             ))}
             <circle cx={center} cy={center} fill="white" r={innerRadius} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Total spent</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-muted">Total spent</p>
             <p className="mt-1 text-5xl font-bold leading-none text-slate-900">{formatCompactMoney(total)}</p>
           </div>
         </div>
+        <p className="sr-only" id="expense-category-chart-summary">
+          {segments.map((segment) => `${segment.categoryName}: ${segment.percentage.toFixed(1)}%`).join('. ')}
+        </p>
         <ul className="mx-auto mt-5 max-w-sm space-y-2">
           {segments.map((segment) => (
             <li key={segment.categoryName} className="flex items-center justify-between gap-3 text-sm">
@@ -351,14 +424,14 @@ function CategoryPieChart({
                 </span>
                 <div>
                   <p className="text-xl font-semibold leading-tight text-slate-900">{group.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-ink-muted">
                     {formatCountLabel(group.categories.length, 'category', 'categories')} • {formatMoney(group.totalArs)}
                   </p>
                 </div>
               </div>
               <svg
                 aria-hidden="true"
-                className={`h-5 w-5 text-slate-500 transition-transform ${
+                className={`h-5 w-5 text-ink-muted transition-transform ${
                   expandedGroupName === group.name ? 'rotate-180' : 'rotate-0'
                 }`}
                 viewBox="0 0 20 20"
@@ -387,7 +460,7 @@ function CategoryPieChart({
                           style={{ backgroundColor: group.color, width: `${Math.max((category.totalArs / total) * 100, 2)}%` }}
                         />
                       </div>
-                      <p className="mt-1 text-right text-xs font-medium text-slate-500">
+                      <p className="mt-1 text-right text-xs font-medium text-ink-muted">
                         {((category.totalArs / total) * 100).toFixed(1)}% of total
                       </p>
                     </li>
@@ -398,11 +471,11 @@ function CategoryPieChart({
           </li>
         ))}
       </ul>
-      <p className="text-sm text-slate-500 lg:col-span-2">
+      <p className="text-sm text-ink-muted lg:col-span-2">
         Showing data from{' '}
-        <span className="font-semibold text-slate-700">{formatCountLabel(slices.length, 'category', 'categories')}</span>{' '}
+        <span className="font-semibold text-ink-base">{formatCountLabel(slices.length, 'category', 'categories')}</span>{' '}
         across{' '}
-        <span className="font-semibold text-slate-700">{groups.length}</span> groups.
+        <span className="font-semibold text-ink-base">{groups.length}</span> groups.
       </p>
     </div>
   );
@@ -421,15 +494,6 @@ function buildSuperCategoryGroups(
   totalArs: number;
   categories: Array<{ categoryName: string; totalArs: number }>;
 }> {
-  const colorBySuperCategory: Record<string, string> = {
-    Housing: '#4f46e5',
-    Lifestyle: '#10b981',
-    Essentials: '#f59e0b',
-    Mobility: '#0891b2',
-    Finance: '#7c3aed',
-    Other: '#64748b',
-  };
-
   const grouped = new Map<
     string,
     {
@@ -444,7 +508,7 @@ function buildSuperCategoryGroups(
     const superCategory = slice.superCategoryName ?? 'Unassigned';
     const existing = grouped.get(superCategory) ?? {
       name: superCategory,
-      color: slice.superCategoryColor ?? colorBySuperCategory[superCategory] ?? colorBySuperCategory.Other,
+      color: getSuperCategoryAccentColor(superCategory, slice.superCategoryColor),
       totalArs: 0,
       categories: [],
     };

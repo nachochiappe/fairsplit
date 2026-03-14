@@ -181,7 +181,7 @@ function ScopeDialog({
   const [scope, setScope] = useState<ApplyScope>('future');
 
   return (
-    <ViewportModal>
+    <ViewportModal onDismiss={onCancel}>
       <div
         aria-labelledby="scope-dialog-title"
         aria-modal="true"
@@ -245,7 +245,7 @@ function ConfirmationDialog({
   onConfirm: () => void;
 }) {
   return (
-    <ViewportModal>
+    <ViewportModal onDismiss={onCancel}>
       <div
         aria-labelledby="confirmation-dialog-title"
         aria-modal="true"
@@ -336,6 +336,18 @@ function makeSectionLoadingMap(value: boolean): Record<ExpenseSectionKey, boolea
     oneTime: value,
     installment: value,
   };
+}
+
+function getExpenseKindLabel(expense: Expense): string {
+  if (expense.fixed.enabled) {
+    return 'Recurring';
+  }
+
+  if (expense.installment) {
+    return `Installment ${expense.installment.number}/${expense.installment.total}`;
+  }
+
+  return 'One-time';
 }
 
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
@@ -2049,7 +2061,7 @@ export function ExpensesClient({
                         Subtotal: <span className="text-sm normal-case text-slate-900">ARS {formatMoney(section.subtotalArs)}</span>
                       </p>
                     </div>
-                    <div className="relative w-full max-w-full overflow-x-auto">
+                    <div className="relative">
                       {sectionLoading[section.key] ? (
                         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
                           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
@@ -2066,107 +2078,149 @@ export function ExpensesClient({
                           </div>
                         </div>
                       ) : null}
-                      <table
-                        className={`w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm transition-opacity ${
-                          sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'
-                        }`}
-                      >
-                        <caption className="sr-only">{section.title}</caption>
-                        <colgroup>
-                          <col className="w-[15%]" />
-                          <col className="w-[22%]" />
-                          <col className="w-[14%]" />
-                          <col className="w-[19%]" />
-                          <col className="w-[12%]" />
-                          <col className="w-[18%]" />
-                        </colgroup>
-                        <thead className="bg-white text-left text-slate-600">
-                          <tr>
-                            <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                              Date
-                            </th>
-                            <th className="px-4 py-3 font-medium" scope="col">
-                              Description
-                            </th>
-                            <th className="px-4 py-3 font-medium" scope="col">
-                              Category
-                            </th>
-                            <th className="px-4 py-3 font-medium" scope="col">
-                              Amount
-                            </th>
-                            <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                              Paid by
-                            </th>
-                            <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {section.rows.map((expense) => (
-                            <tr key={expense.id} className="hover:bg-slate-50/80">
-                              <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
-                              <td className="px-4 py-3">
-                                <div className="truncate font-medium text-slate-900" title={expense.description}>
+                      <div className={`space-y-3 p-3 md:hidden ${sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'}`}>
+                        {section.rows.map((expense) => (
+                          <article key={expense.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-base font-semibold text-slate-900" title={expense.description}>
                                   {expense.description}
-                                </div>
-                                <div className="truncate text-xs text-slate-500">
-                                  {expense.fixed.enabled
-                                    ? 'Recurring'
-                                    : expense.installment
-                                      ? `Installment ${expense.installment.number}/${expense.installment.total}`
-                                      : 'One-time'}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">{expense.categoryName}</td>
-                              <td className="px-4 py-3 tabular-nums">
-                                <div>ARS {formatMoney(expense.amountArs)}</div>
-                                {expense.currencyCode !== 'ARS' ? (
-                                  <div className="text-xs text-slate-500">
-                                    {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
-                                  </div>
-                                ) : null}
-                              </td>
-                              <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
-                              <td className="whitespace-nowrap px-4 py-3">
-                                <div className="flex gap-2">
-                                  <ActionButton action="edit" aria-label="Edit expense" onClick={() => startEdit(expense)} size="icon">
-                                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                      <path d="M12 20h9" />
-                                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-                                    </svg>
-                                  </ActionButton>
-                                  <ActionButton action="clone" aria-label="Clone expense" onClick={() => void cloneExpense(expense)} size="icon">
-                                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                      <rect height="13" rx="2" width="13" x="9" y="9" />
-                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                    </svg>
-                                  </ActionButton>
-                                  <ActionButton action="delete" aria-label="Delete expense" onClick={() => void removeExpense(expense)} size="icon">
-                                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                      <path d="M3 6h18" />
-                                      <path d="M8 6V4h8v2" />
-                                      <path d="M19 6l-1 14H6L5 6" />
-                                      <path d="M10 11v6" />
-                                      <path d="M14 11v6" />
-                                    </svg>
-                                  </ActionButton>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                          {section.rows.length === 0 ? (
+                                </p>
+                                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                                  {getExpenseKindLabel(expense)}
+                                </p>
+                              </div>
+                              <p className="whitespace-nowrap text-sm font-medium text-slate-600">{expense.date}</p>
+                            </div>
+                            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                              <ExpenseSummaryCell label="Category" value={expense.categoryName} />
+                              <ExpenseSummaryCell label="Paid by" value={expense.paidByUserName} />
+                              <ExpenseSummaryCell label="Amount" value={`ARS ${formatMoney(expense.amountArs)}`} valueClassName="text-slate-900" />
+                              <ExpenseSummaryCell
+                                label="Original"
+                                value={
+                                  expense.currencyCode === 'ARS'
+                                    ? 'ARS'
+                                    : `${expense.currencyCode} ${formatMoney(expense.amountOriginal)} @ ${formatFxRate(expense.fxRateUsed)}`
+                                }
+                              />
+                            </dl>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <ActionButton action="edit" aria-label="Edit expense" onClick={() => startEdit(expense)}>
+                                Edit
+                              </ActionButton>
+                              <ActionButton action="clone" aria-label="Clone expense" onClick={() => void cloneExpense(expense)}>
+                                Clone
+                              </ActionButton>
+                              <ActionButton action="delete" aria-label="Delete expense" onClick={() => void removeExpense(expense)}>
+                                Delete
+                              </ActionButton>
+                            </div>
+                          </article>
+                        ))}
+                        {section.rows.length === 0 ? (
+                          <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                            {section.emptyMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="hidden w-full max-w-full overflow-x-auto md:block">
+                        <table
+                          className={`w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm transition-opacity ${
+                            sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'
+                          }`}
+                        >
+                          <caption className="sr-only">{section.title}</caption>
+                          <colgroup>
+                            <col className="w-[15%]" />
+                            <col className="w-[22%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[19%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[18%]" />
+                          </colgroup>
+                          <thead className="bg-white text-left text-slate-600">
                             <tr>
-                              <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
-                                {section.emptyMessage}
-                              </td>
+                              <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                                Date
+                              </th>
+                              <th className="px-4 py-3 font-medium" scope="col">
+                                Description
+                              </th>
+                              <th className="px-4 py-3 font-medium" scope="col">
+                                Category
+                              </th>
+                              <th className="px-4 py-3 font-medium" scope="col">
+                                Amount
+                              </th>
+                              <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                                Paid by
+                              </th>
+                              <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
+                                Actions
+                              </th>
                             </tr>
-                          ) : null}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {section.rows.map((expense) => (
+                              <tr key={expense.id} className="hover:bg-slate-50/80">
+                                <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
+                                <td className="px-4 py-3">
+                                  <div className="truncate font-medium text-slate-900" title={expense.description}>
+                                    {expense.description}
+                                  </div>
+                                  <div className="truncate text-xs text-slate-500">{getExpenseKindLabel(expense)}</div>
+                                </td>
+                                <td className="px-4 py-3">{expense.categoryName}</td>
+                                <td className="px-4 py-3 tabular-nums">
+                                  <div>ARS {formatMoney(expense.amountArs)}</div>
+                                  {expense.currencyCode !== 'ARS' ? (
+                                    <div className="text-xs text-slate-500">
+                                      {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
+                                    </div>
+                                  ) : null}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
+                                <td className="whitespace-nowrap px-4 py-3">
+                                  <div className="flex gap-2">
+                                    <ActionButton action="edit" aria-label="Edit expense" onClick={() => startEdit(expense)} size="icon">
+                                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path d="M12 20h9" />
+                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                                      </svg>
+                                    </ActionButton>
+                                    <ActionButton action="clone" aria-label="Clone expense" onClick={() => void cloneExpense(expense)} size="icon">
+                                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                        <rect height="13" rx="2" width="13" x="9" y="9" />
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                      </svg>
+                                    </ActionButton>
+                                    <ActionButton action="delete" aria-label="Delete expense" onClick={() => void removeExpense(expense)} size="icon">
+                                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                                        <path d="M3 6h18" />
+                                        <path d="M8 6V4h8v2" />
+                                        <path d="M19 6l-1 14H6L5 6" />
+                                        <path d="M10 11v6" />
+                                        <path d="M14 11v6" />
+                                      </svg>
+                                    </ActionButton>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                            {section.rows.length === 0 ? (
+                              <tr>
+                                <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
+                                  {section.emptyMessage}
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                     {section.showSectionPager ? (
-                      <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3">
+                      <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm font-medium text-slate-600">
                           Showing {section.pageStart}-{section.pageEnd} of {section.totalRows}
                           {section.hasMore ? '+' : ''} results
@@ -2217,5 +2271,22 @@ export function ExpensesClient({
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function ExpenseSummaryCell({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className={`mt-1 break-words text-sm font-medium text-slate-700 ${valueClassName ?? ''}`}>{value}</dd>
+    </div>
   );
 }

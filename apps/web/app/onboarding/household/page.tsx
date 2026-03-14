@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { joinHouseholdWithCode, skipHouseholdSetup } from '../../../lib/api';
 import { TitleMark } from '../../../components/TitleMark';
+import { ViewportModal } from '../../../components/ViewportModal';
 
 export default function HouseholdOnboardingPage() {
   const router = useRouter();
@@ -11,6 +12,7 @@ export default function HouseholdOnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
+  const [isSkipDialogOpen, setIsSkipDialogOpen] = useState(false);
 
   const handleJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -33,14 +35,11 @@ export default function HouseholdOnboardingPage() {
   };
 
   const handleSkip = async () => {
-    if (!window.confirm('Skipping is permanent. You will not be able to join another household later. Continue?')) {
-      return;
-    }
-
     try {
       setError(null);
       setIsSkipping(true);
       await skipHouseholdSetup();
+      setIsSkipDialogOpen(false);
       router.replace('/dashboard');
     } catch (skipError) {
       setError(skipError instanceof Error ? skipError.message : 'Failed to complete setup.');
@@ -51,6 +50,42 @@ export default function HouseholdOnboardingPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-xl items-center px-4 py-10">
+      {isSkipDialogOpen ? (
+        <ViewportModal onDismiss={() => (isSkipping ? undefined : setIsSkipDialogOpen(false))}>
+          <div
+            aria-labelledby="skip-household-dialog-title"
+            aria-modal="true"
+            className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/10"
+            role="dialog"
+          >
+            <h2 className="text-xl font-semibold text-slate-900" id="skip-household-dialog-title">
+              Skip household setup
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              This will create a solo household for your account. You will not be able to join another household later.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isSkipping}
+                onClick={() => setIsSkipDialogOpen(false)}
+                type="button"
+              >
+                Keep setup open
+              </button>
+              <button
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isSkipping}
+                onClick={() => void handleSkip()}
+                type="button"
+              >
+                {isSkipping ? 'Finalizing...' : 'Skip and continue'}
+              </button>
+            </div>
+          </div>
+        </ViewportModal>
+      ) : null}
+
       <section className="w-full rounded-3xl border border-slate-200/80 bg-white p-7 shadow-sm md:p-9">
         <div className="flex items-center gap-5">
           <TitleMark className="h-10 w-10 shrink-0 rounded-xl" />
@@ -93,7 +128,7 @@ export default function HouseholdOnboardingPage() {
           <button
             className="w-full rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting || isSkipping}
-            onClick={() => void handleSkip()}
+            onClick={() => setIsSkipDialogOpen(true)}
             type="button"
           >
             {isSkipping ? 'Finalizing...' : 'Skip for now'}

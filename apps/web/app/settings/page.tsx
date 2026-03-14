@@ -37,7 +37,7 @@ export default async function SettingsPage() {
 
   return (
     <SettingsClient
-      currentUserEmail={null}
+      currentUserEmail={currentUser?.email ?? null}
       currentUserId={currentUser?.id ?? null}
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}
