@@ -524,7 +524,7 @@ export function SettingsClient({
           <h3 className="text-base font-semibold text-slate-900">Invite Someone</h3>
           <p className="mt-1 text-xs text-slate-600">Generate a one-time code so another person can join your household.</p>
           <button
-            className="mt-3 inline-flex h-9 w-full items-center justify-center rounded-md bg-brand-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={inviteLoading}
             onClick={() => void onCreateInviteCode()}
             type="button"
@@ -537,7 +537,7 @@ export function SettingsClient({
               <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-bold tracking-[0.15em] text-slate-900">{inviteCode}</p>
                 <button
-                  className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onClick={() => void onCopyInviteCode()}
                   type="button"
                 >

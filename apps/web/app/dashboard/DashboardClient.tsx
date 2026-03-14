@@ -137,8 +137,40 @@ function DashboardClientContent({
           ) : null}
         </section>
 
-        <section className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <table className="w-full min-w-[760px] text-left text-sm">
+        <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <div className="divide-y divide-slate-100 md:hidden">
+            {users.map((user) => {
+              const difference = Number(settlement.differenceByUser[user.id] ?? 0);
+              const isPositiveDifference = difference >= 0;
+
+              return (
+                <article key={user.id} className="space-y-4 px-5 py-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-lg font-semibold text-slate-900">{user.name}</h3>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        isPositiveDifference ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                      }`}
+                    >
+                      {isPositiveDifference ? 'Overpaid' : 'Needs to send'}
+                    </span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 text-sm">
+                    <SummaryCell label="Income" value={formatMoney(incomeByUser[user.id] ?? 0)} />
+                    <SummaryCell label="Paid" value={formatMoney(settlement.paidByUser[user.id] ?? 0)} />
+                    <SummaryCell label="Fair share" value={formatMoney(settlement.fairShareByUser[user.id] ?? 0)} />
+                    <SummaryCell
+                      label="Difference"
+                      value={formatMoney(settlement.differenceByUser[user.id] ?? 0)}
+                      valueClassName={isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}
+                    />
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] text-left text-sm">
             <caption className="sr-only">Monthly settlement by partner</caption>
             <thead className="bg-slate-50/85 text-slate-500">
               <tr>
@@ -182,7 +214,8 @@ function DashboardClientContent({
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </section>
 
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-[#3f75de] px-6 py-8 text-white shadow-xl shadow-brand-900/15 md:px-9">
@@ -228,6 +261,23 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{label}</p>
       <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function SummaryCell({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</dt>
+      <dd className={`mt-2 text-base font-semibold tabular-nums text-slate-900 ${valueClassName ?? ''}`}>{value}</dd>
     </div>
   );
 }
