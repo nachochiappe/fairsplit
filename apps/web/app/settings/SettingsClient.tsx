@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
+import { ViewportModal } from '../../components/ViewportModal';
 import {
   archiveCategory,
   archiveSuperCategory,
@@ -27,6 +28,79 @@ interface SettingsClientProps {
   currentUserId: string | null;
   currentUserName: string | null;
   currentUserEmail: string | null;
+}
+
+type CategoryRenameDialogState = {
+  category: Category;
+  nextName: string;
+};
+
+type SuperCategoryRenameDialogState = {
+  superCategory: SuperCategory;
+  nextName: string;
+};
+
+type SuperCategoryArchiveDialogState = {
+  superCategory: SuperCategory;
+  replacementSuperCategoryId: string;
+};
+
+type CategoryArchiveDialogState = {
+  category: Category;
+};
+
+function DialogFrame({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <div
+      aria-labelledby="settings-dialog-title"
+      aria-modal="true"
+      className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/10"
+      role="dialog"
+    >
+      <h2 className="text-xl font-semibold text-slate-900" id="settings-dialog-title">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
+}
+
+function DialogActions({
+  busy,
+  cancelLabel = 'Cancel',
+  confirmLabel,
+  onCancel,
+}: {
+  busy: boolean;
+  cancelLabel?: string;
+  confirmLabel: string;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+      <button
+        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={busy}
+        onClick={onCancel}
+        type="button"
+      >
+        {cancelLabel}
+      </button>
+      <button
+        className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={busy}
+        type="submit"
+      >
+        {confirmLabel}
+      </button>
+    </div>
+  );
 }
 
 function formatCountLabel(count: number, singular: string, plural: string): string {
@@ -59,6 +133,10 @@ export function SettingsClient({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [categoryRenameDialog, setCategoryRenameDialog] = useState<CategoryRenameDialogState | null>(null);
+  const [superCategoryRenameDialog, setSuperCategoryRenameDialog] = useState<SuperCategoryRenameDialogState | null>(null);
+  const [superCategoryArchiveDialog, setSuperCategoryArchiveDialog] = useState<SuperCategoryArchiveDialogState | null>(null);
+  const [categoryArchiveDialog, setCategoryArchiveDialog] = useState<CategoryArchiveDialogState | null>(null);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -192,19 +270,28 @@ export function SettingsClient({
   };
 
   const onRenameCategory = async (category: Category) => {
-    const nextName = window.prompt(`Rename category "${category.name}"`, category.name)?.trim();
-    if (!nextName || nextName === category.name) {
+    setCategoryRenameDialog({
+      category,
+      nextName: category.name,
+    });
+  };
+
+  const submitRenameCategory = async () => {
+    if (!categoryRenameDialog) {
       return;
     }
 
-    if (!window.confirm('Renaming will affect all historical records. Continue?')) {
+    const nextName = categoryRenameDialog.nextName.trim();
+    if (!nextName || nextName === categoryRenameDialog.category.name) {
+      setCategoryRenameDialog(null);
       return;
     }
 
     try {
       setSaving(true);
       setCategoryError(null);
-      await renameCategory(category.id, { name: nextName });
+      await renameCategory(categoryRenameDialog.category.id, { name: nextName });
+      setCategoryRenameDialog(null);
     } catch (renameError) {
       setCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename category');
       return;
@@ -246,11 +333,19 @@ export function SettingsClient({
     if (category.archivedAt) {
       return;
     }
+    setCategoryArchiveDialog({ category });
+  };
+
+  const submitArchiveCategory = async () => {
+    if (!categoryArchiveDialog) {
+      return;
+    }
 
     try {
       setSaving(true);
       setCategoryError(null);
-      await archiveCategory(category.id);
+      await archiveCategory(categoryArchiveDialog.category.id);
+      setCategoryArchiveDialog(null);
     } catch (archiveError) {
       setCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
       return;
@@ -326,15 +421,28 @@ export function SettingsClient({
   };
 
   const onRenameSuperCategory = async (superCategory: SuperCategory) => {
-    const nextName = window.prompt(`Rename group "${superCategory.name}"`, superCategory.name)?.trim();
-    if (!nextName || nextName === superCategory.name) {
+    setSuperCategoryRenameDialog({
+      superCategory,
+      nextName: superCategory.name,
+    });
+  };
+
+  const submitRenameSuperCategory = async () => {
+    if (!superCategoryRenameDialog) {
+      return;
+    }
+
+    const nextName = superCategoryRenameDialog.nextName.trim();
+    if (!nextName || nextName === superCategoryRenameDialog.superCategory.name) {
+      setSuperCategoryRenameDialog(null);
       return;
     }
 
     try {
       setSaving(true);
       setSuperCategoryError(null);
-      await updateSuperCategory(superCategory.id, { name: nextName });
+      await updateSuperCategory(superCategoryRenameDialog.superCategory.id, { name: nextName });
+      setSuperCategoryRenameDialog(null);
     } catch (renameError) {
       setSuperCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename super category');
       return;
@@ -355,31 +463,27 @@ export function SettingsClient({
     if (superCategory.archivedAt || superCategory.isSystem) {
       return;
     }
+    setSuperCategoryArchiveDialog({
+      superCategory,
+      replacementSuperCategoryId: 'unassigned',
+    });
+  };
 
-    const replacements = sortedActiveSuperCategories.filter((entry) => entry.id !== superCategory.id);
-    const replacementName = window
-      .prompt(
-        `Optional: type replacement group name. Leave empty to move categories to Unassigned. Available: ${replacements
-          .map((entry) => entry.name)
-          .join(', ')}`,
-      )
-      ?.trim();
-
-    const replacement = replacementName
-      ? replacements.find((entry) => entry.name.toLowerCase() === replacementName.toLowerCase())
-      : undefined;
-
-    if (replacementName && !replacement) {
-      setSuperCategoryError('Replacement super category not found.');
+  const submitArchiveSuperCategory = async () => {
+    if (!superCategoryArchiveDialog) {
       return;
     }
 
     try {
       setSaving(true);
       setSuperCategoryError(null);
-      await archiveSuperCategory(superCategory.id, {
-        replacementSuperCategoryId: replacement?.id,
+      await archiveSuperCategory(superCategoryArchiveDialog.superCategory.id, {
+        replacementSuperCategoryId:
+          superCategoryArchiveDialog.replacementSuperCategoryId === 'unassigned'
+            ? undefined
+            : superCategoryArchiveDialog.replacementSuperCategoryId,
       });
+      setSuperCategoryArchiveDialog(null);
     } catch (archiveError) {
       setSuperCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive super category');
       return;
@@ -516,6 +620,127 @@ export function SettingsClient({
 
   return (
     <AppShell month={month} title="Settings" subtitle="Manage categories and super categories used for monthly expenses">
+      {categoryRenameDialog ? (
+        <ViewportModal onDismiss={() => (saving ? undefined : setCategoryRenameDialog(null))}>
+          <DialogFrame title="Rename category">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitRenameCategory();
+              }}
+            >
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Update the label for <span className="font-semibold text-slate-900">{categoryRenameDialog.category.name}</span>.
+                The new name will apply to historical records too.
+              </p>
+              <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="rename-category-input">
+                Category name
+              </label>
+              <input
+                autoFocus
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                id="rename-category-input"
+                onChange={(event) =>
+                  setCategoryRenameDialog((current) => (current ? { ...current, nextName: event.target.value } : current))
+                }
+                value={categoryRenameDialog.nextName}
+              />
+              <DialogActions busy={saving} confirmLabel={saving ? 'Saving...' : 'Save category'} onCancel={() => setCategoryRenameDialog(null)} />
+            </form>
+          </DialogFrame>
+        </ViewportModal>
+      ) : null}
+
+      {superCategoryRenameDialog ? (
+        <ViewportModal onDismiss={() => (saving ? undefined : setSuperCategoryRenameDialog(null))}>
+          <DialogFrame title="Rename group">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitRenameSuperCategory();
+              }}
+            >
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Rename <span className="font-semibold text-slate-900">{superCategoryRenameDialog.superCategory.name}</span> to match how you organize spending.
+              </p>
+              <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="rename-super-category-input">
+                Group name
+              </label>
+              <input
+                autoFocus
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                id="rename-super-category-input"
+                onChange={(event) =>
+                  setSuperCategoryRenameDialog((current) => (current ? { ...current, nextName: event.target.value } : current))
+                }
+                value={superCategoryRenameDialog.nextName}
+              />
+              <DialogActions busy={saving} confirmLabel={saving ? 'Saving...' : 'Save group'} onCancel={() => setSuperCategoryRenameDialog(null)} />
+            </form>
+          </DialogFrame>
+        </ViewportModal>
+      ) : null}
+
+      {superCategoryArchiveDialog ? (
+        <ViewportModal onDismiss={() => (saving ? undefined : setSuperCategoryArchiveDialog(null))}>
+          <DialogFrame title="Archive group">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitArchiveSuperCategory();
+              }}
+            >
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Archive <span className="font-semibold text-slate-900">{superCategoryArchiveDialog.superCategory.name}</span>.
+                Existing categories can move to another group or become unassigned.
+              </p>
+              <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="archive-super-category-replacement">
+                Move categories to
+              </label>
+              <select
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                id="archive-super-category-replacement"
+                onChange={(event) =>
+                  setSuperCategoryArchiveDialog((current) =>
+                    current ? { ...current, replacementSuperCategoryId: event.target.value } : current,
+                  )
+                }
+                value={superCategoryArchiveDialog.replacementSuperCategoryId}
+              >
+                <option value="unassigned">Unassigned</option>
+                {sortedActiveSuperCategories
+                  .filter((entry) => entry.id !== superCategoryArchiveDialog.superCategory.id)
+                  .map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+              </select>
+              <DialogActions busy={saving} confirmLabel={saving ? 'Archiving...' : 'Archive group'} onCancel={() => setSuperCategoryArchiveDialog(null)} />
+            </form>
+          </DialogFrame>
+        </ViewportModal>
+      ) : null}
+
+      {categoryArchiveDialog ? (
+        <ViewportModal onDismiss={() => (saving ? undefined : setCategoryArchiveDialog(null))}>
+          <DialogFrame title="Archive category">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitArchiveCategory();
+              }}
+            >
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Archive <span className="font-semibold text-slate-900">{categoryArchiveDialog.category.name}</span>.
+                It will disappear from active lists but remain available in historical records.
+              </p>
+              <DialogActions busy={saving} confirmLabel={saving ? 'Archiving...' : 'Archive category'} onCancel={() => setCategoryArchiveDialog(null)} />
+            </form>
+          </DialogFrame>
+        </ViewportModal>
+      ) : null}
+
       <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Personal Information</h2>
         <p className="mt-2 text-base text-slate-500">Your identity across the Fairsplit platform.</p>
