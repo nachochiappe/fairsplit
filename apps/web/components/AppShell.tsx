@@ -32,7 +32,7 @@ function AppShellContent({ month, title, subtitle, rightSlot, containerClassName
       id="main-content"
       className={`mx-auto min-h-screen w-full px-4 py-8 md:px-6 md:py-10 ${containerClassName ?? 'max-w-[1400px]'}`}
     >
-      <header className="mb-7 flex flex-col gap-5 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:flex-row md:items-center md:justify-between md:p-9">
+      <header className="mb-7 flex flex-col gap-5 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between md:p-9">
         <div className="flex items-center gap-6">
           <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
           <div>
@@ -44,7 +44,7 @@ function AppShellContent({ month, title, subtitle, rightSlot, containerClassName
         {rightSlot}
       </header>
       <Nav month={month} />
-      <section className="relative rounded-3xl border border-slate-200/80 bg-white/75 p-4 shadow-sm backdrop-blur md:p-6">
+      <section className="relative rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm md:p-6">
         <div
           aria-busy={isPending}
           className={`transition duration-200 ${isPending ? 'pointer-events-none select-none blur-[3px] opacity-70' : 'opacity-100'}`}

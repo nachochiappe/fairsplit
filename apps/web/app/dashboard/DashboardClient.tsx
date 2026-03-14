@@ -57,7 +57,7 @@ function DashboardClientContent({
 
   return (
     <main id="main-content" className="mx-auto min-h-screen w-full max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
-      <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white/75 p-6 shadow-sm backdrop-blur-md md:p-9">
+      <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-6">
             <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
@@ -75,7 +75,7 @@ function DashboardClientContent({
 
       <nav
         aria-label="Primary"
-        className="mb-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-2 shadow-sm backdrop-blur md:grid-cols-5"
+        className="mb-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm md:grid-cols-5"
       >
         <NavItem href="/dashboard" label="Dashboard" month={month} />
         <NavItem href="/incomes" label="Incomes" month={month} />
