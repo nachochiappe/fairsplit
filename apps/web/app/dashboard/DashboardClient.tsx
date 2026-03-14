@@ -219,38 +219,25 @@ function DashboardClientContent({
           </div>
         </section>
 
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 px-6 py-8 text-white shadow-xl shadow-brand-900/15 md:px-9">
-          <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
-          <div className="relative z-10">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100">Settlement</h2>
-            {settlement.transfer ? (
-              <div className="mt-3 flex items-start gap-4">
-                <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20">
-                  <svg
-                    aria-hidden="true"
-                    className="h-6 w-6"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M7 7h10M7 7l3-3M7 7l3 3M17 17H7M17 17l-3-3M17 17l-3 3" />
-                  </svg>
-                </div>
-                <p className="text-2xl leading-snug md:text-4xl">
-                  <span className="font-normal text-blue-50/90">
-                    {usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId} sends
-                  </span>{' '}
-                  <span className="font-semibold">{formatMoney(settlement.transfer.amount)}</span>{' '}
-                  <span className="font-normal text-blue-50/90">
-                    to {usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId}
-                  </span>
-                </p>
-              </div>
-            ) : (
-              <p className="mt-3 text-2xl font-semibold md:text-3xl">No transfer needed</p>
-            )}
-          </div>
+        <section className="rounded-3xl border border-brand-200 bg-brand-50 px-6 py-7 shadow-sm md:px-9">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">Settlement</h2>
+          {settlement.transfer ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-2xl font-semibold leading-snug text-slate-900 md:text-3xl">
+                {usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId}
+                {' sends '}
+                {formatMoney(settlement.transfer.amount)}
+                {' to '}
+                {usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId}
+              </p>
+              <p className="text-sm text-slate-600">One transfer balances this month.</p>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <p className="text-2xl font-semibold text-slate-900 md:text-3xl">No transfer needed</p>
+              <p className="text-sm text-slate-600">This month is already balanced.</p>
+            </div>
+          )}
         </section>
       </div>
     </main>
