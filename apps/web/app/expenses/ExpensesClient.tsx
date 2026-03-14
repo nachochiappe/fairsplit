@@ -181,7 +181,7 @@ function ScopeDialog({
   const [scope, setScope] = useState<ApplyScope>('future');
 
   return (
-    <ViewportModal>
+    <ViewportModal onDismiss={onCancel}>
       <div
         aria-labelledby="scope-dialog-title"
         aria-modal="true"
@@ -245,7 +245,7 @@ function ConfirmationDialog({
   onConfirm: () => void;
 }) {
   return (
-    <ViewportModal>
+    <ViewportModal onDismiss={onCancel}>
       <div
         aria-labelledby="confirmation-dialog-title"
         aria-modal="true"

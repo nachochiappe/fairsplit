@@ -841,6 +841,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       users.map((user) => ({
         id: user.id,
         name: user.name,
+        email: user.id === auth.userId ? user.email : null,
         createdAt: user.createdAt.toISOString(),
       })),
     );
@@ -903,6 +904,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.json({
       id: updated.id,
       name: updated.name,
+      email: updated.email,
       createdAt: updated.createdAt.toISOString(),
     });
   });

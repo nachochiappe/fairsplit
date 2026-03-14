@@ -157,7 +157,7 @@ function ConfirmationDialog({
   onConfirm: () => void;
 }) {
   return (
-    <ViewportModal>
+    <ViewportModal onDismiss={onCancel}>
       <div
         aria-labelledby="income-confirmation-dialog-title"
         aria-modal="true"
