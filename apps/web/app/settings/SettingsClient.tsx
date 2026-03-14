@@ -398,7 +398,7 @@ export function SettingsClient({
 
   const renderSuperCategoryIcon = (name: string) => {
     const normalizedName = name.toLowerCase();
-    const iconClassName = 'h-5 w-5 text-slate-400';
+    const iconClassName = 'h-5 w-5 text-ink-soft';
 
     if (normalizedName.includes('hous') || normalizedName.includes('rent') || normalizedName.includes('home')) {
       return (
@@ -592,7 +592,7 @@ export function SettingsClient({
                 <span className="min-w-0 truncate text-base font-medium text-slate-500">
                   {currentUserEmail ?? 'No email available in this session'}
                 </span>
-                <svg aria-hidden="true" className="ml-3 h-6 w-6 shrink-0 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+                <svg aria-hidden="true" className="ml-3 h-6 w-6 shrink-0 text-ink-soft" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M5.5 8V6a4.5 4.5 0 1 1 9 0v2h.25A2.25 2.25 0 0 1 17 10.25v5.5A2.25 2.25 0 0 1 14.75 18h-9.5A2.25 2.25 0 0 1 3 15.75v-5.5A2.25 2.25 0 0 1 5.25 8h.25Zm7.5 0V6a3 3 0 1 0-6 0v2h6Z" />
                 </svg>
               </div>
@@ -663,7 +663,7 @@ export function SettingsClient({
                     <p className="min-w-0 text-base font-semibold text-slate-800 sm:text-lg">
                       {superCategory.name}
                     </p>
-                    <p className="text-sm font-medium text-slate-400 sm:text-base">
+                    <p className="text-sm font-medium text-ink-soft sm:text-base">
                       {formatCountLabel(superCategory.categoryCount, 'category', 'categories')} •{' '}
                       {superCategory.isSystem ? 'System' : 'Custom'}
                     </p>
@@ -815,7 +815,7 @@ export function SettingsClient({
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-400">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-medium text-ink-soft">
                         <span className="inline-flex items-center gap-1">
                           <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M5 2.5A2.5 2.5 0 0 0 2.5 5v10A2.5 2.5 0 0 0 5 17.5h10a2.5 2.5 0 0 0 2.5-2.5V5A2.5 2.5 0 0 0 15 2.5H5Zm1 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h6a1 1 0 1 1 0 2H6Z" />

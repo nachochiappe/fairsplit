@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import { MonthNavigationPendingProvider, useMonthNavigationPending } from '../../components/MonthNavigationPending';
 import { MonthSelector } from '../../components/MonthSelector';
 import { TitleMark } from '../../components/TitleMark';
+import { getSuperCategoryAccentColor } from '../../lib/theme';
 
 interface DashboardClientProps {
   month: string;
@@ -218,7 +219,7 @@ function DashboardClientContent({
           </div>
         </section>
 
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-[#3f75de] px-6 py-8 text-white shadow-xl shadow-brand-900/15 md:px-9">
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 px-6 py-8 text-white shadow-xl shadow-brand-900/15 md:px-9">
           <div className="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/15 blur-3xl" />
           <div className="relative z-10">
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100">Settlement</h2>
@@ -259,7 +260,7 @@ function DashboardClientContent({
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{label}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-soft">{label}</p>
       <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900">{value}</p>
     </div>
   );
@@ -364,7 +365,7 @@ function CategoryPieChart({
             <circle cx={center} cy={center} fill="white" r={innerRadius} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Total spent</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-muted">Total spent</p>
             <p className="mt-1 text-5xl font-bold leading-none text-slate-900">{formatCompactMoney(total)}</p>
           </div>
         </div>
@@ -401,14 +402,14 @@ function CategoryPieChart({
                 </span>
                 <div>
                   <p className="text-xl font-semibold leading-tight text-slate-900">{group.name}</p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-ink-muted">
                     {formatCountLabel(group.categories.length, 'category', 'categories')} • {formatMoney(group.totalArs)}
                   </p>
                 </div>
               </div>
               <svg
                 aria-hidden="true"
-                className={`h-5 w-5 text-slate-500 transition-transform ${
+                className={`h-5 w-5 text-ink-muted transition-transform ${
                   expandedGroupName === group.name ? 'rotate-180' : 'rotate-0'
                 }`}
                 viewBox="0 0 20 20"
@@ -437,7 +438,7 @@ function CategoryPieChart({
                           style={{ backgroundColor: group.color, width: `${Math.max((category.totalArs / total) * 100, 2)}%` }}
                         />
                       </div>
-                      <p className="mt-1 text-right text-xs font-medium text-slate-500">
+                      <p className="mt-1 text-right text-xs font-medium text-ink-muted">
                         {((category.totalArs / total) * 100).toFixed(1)}% of total
                       </p>
                     </li>
@@ -448,11 +449,11 @@ function CategoryPieChart({
           </li>
         ))}
       </ul>
-      <p className="text-sm text-slate-500 lg:col-span-2">
+      <p className="text-sm text-ink-muted lg:col-span-2">
         Showing data from{' '}
-        <span className="font-semibold text-slate-700">{formatCountLabel(slices.length, 'category', 'categories')}</span>{' '}
+        <span className="font-semibold text-ink-base">{formatCountLabel(slices.length, 'category', 'categories')}</span>{' '}
         across{' '}
-        <span className="font-semibold text-slate-700">{groups.length}</span> groups.
+        <span className="font-semibold text-ink-base">{groups.length}</span> groups.
       </p>
     </div>
   );
@@ -471,15 +472,6 @@ function buildSuperCategoryGroups(
   totalArs: number;
   categories: Array<{ categoryName: string; totalArs: number }>;
 }> {
-  const colorBySuperCategory: Record<string, string> = {
-    Housing: '#4f46e5',
-    Lifestyle: '#10b981',
-    Essentials: '#f59e0b',
-    Mobility: '#0891b2',
-    Finance: '#7c3aed',
-    Other: '#64748b',
-  };
-
   const grouped = new Map<
     string,
     {
@@ -494,7 +486,7 @@ function buildSuperCategoryGroups(
     const superCategory = slice.superCategoryName ?? 'Unassigned';
     const existing = grouped.get(superCategory) ?? {
       name: superCategory,
-      color: slice.superCategoryColor ?? colorBySuperCategory[superCategory] ?? colorBySuperCategory.Other,
+      color: getSuperCategoryAccentColor(superCategory, slice.superCategoryColor),
       totalArs: 0,
       categories: [],
     };

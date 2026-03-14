@@ -5,18 +5,35 @@
 :root {
   --background: #f8fbff;
   --foreground: #0f1b35;
+  --ink-strong: #0f1b35;
+  --ink-base: #334155;
+  --ink-muted: #475569;
+  --ink-soft: #64748b;
+  --ink-inverse: #f8fbff;
   --surface: #ffffff;
   --surface-soft: #eef4ff;
+  --surface-muted: #f8fafc;
   --stroke: #d9e3f3;
-  --brand-strong: #1d4ed8;
+  --brand-50: #eff6ff;
+  --brand-100: #dbeafe;
+  --brand-500: #3b82f6;
+  --brand-600: #2563eb;
+  --brand-700: #1d4ed8;
+  --brand-strong: var(--brand-700);
+  --accent-housing: #4f46e5;
+  --accent-lifestyle: #10b981;
+  --accent-essentials: #f59e0b;
+  --accent-mobility: #0891b2;
+  --accent-finance: #7c3aed;
+  --accent-other: #64748b;
 }
 
 body {
   background:
-    radial-gradient(circle at 12% 6%, #dbeafe 0%, rgba(219, 234, 254, 0) 42%),
+    radial-gradient(circle at 12% 6%, var(--brand-100) 0%, rgba(219, 234, 254, 0) 42%),
     radial-gradient(circle at 88% 0%, #ffedd5 0%, rgba(255, 237, 213, 0) 33%),
-    linear-gradient(180deg, #f8fbff 0%, #f4f8ff 100%);
-  color: var(--foreground);
+    linear-gradient(180deg, var(--background) 0%, #f4f8ff 100%);
+  color: var(--ink-base);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-tap-highlight-color: rgba(18, 32, 26, 0.15);
   min-height: 100vh;
@@ -72,7 +89,7 @@ input[type='month']::-webkit-datetime-edit {
 }
 
 ::selection {
-  background: #dbeafe;
+  background: var(--brand-100);
   color: #0b1f5f;
 }
 

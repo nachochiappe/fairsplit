@@ -28,7 +28,7 @@ type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
 const surfaceClass = 'rounded-3xl border border-slate-200 bg-white/90 shadow-sm';
 const fieldClass =
-  'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base placeholder:text-slate-400 shadow-sm transition-colors focus-visible:border-brand-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20 focus-visible:ring-offset-1';
+  'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base placeholder:text-ink-soft shadow-sm transition-colors focus-visible:border-brand-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20 focus-visible:ring-offset-1';
 const moneyFieldClass = `${fieldClass} pl-8 text-right`;
 const subtleButtonClass =
   'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
@@ -561,7 +561,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                 </button>
               </div>
 
-              <div className="hidden grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] border-b border-slate-200 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 md:grid">
+              <div className="hidden grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] border-b border-slate-200 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-ink-soft md:grid">
                 <span>Description</span>
                 <span>Amount</span>
                 <span>Currency</span>
@@ -598,7 +598,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                       </div>
 
                       <div className="relative w-full">
-                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
                         <input
                           type="text"
                           name={`income-amount-${user.id}-${index}`}
@@ -614,7 +614,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
 
                       <div className="grid grid-cols-2 gap-2 md:contents">
                         <div>
-                          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:hidden">
+                          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft md:hidden">
                             Currency
                           </span>
                           <select
@@ -635,11 +635,11 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         </div>
 
                         <div>
-                          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400 md:hidden">
+                          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft md:hidden">
                             FX to ARS
                           </span>
                           <div className="relative">
-                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-slate-400">$</span>
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
                             <input
                               type="text"
                               name={`income-fx-${user.id}-${index}`}
@@ -651,7 +651,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                               disabled={row.currencyCode === 'ARS'}
                               className={`${moneyFieldClass} ${
                                 row.currencyCode === 'ARS'
-                                  ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400 shadow-none disabled:opacity-100'
+                                  ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-ink-soft shadow-none disabled:opacity-100'
                                   : ''
                               }`}
                               placeholder="FX to ARS"
