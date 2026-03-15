@@ -2128,7 +2128,7 @@ export function ExpensesClient({
                           <article key={expense.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0 flex-1">
-                                <p className="line-clamp-2 text-[1.05rem] font-semibold leading-tight text-slate-900" title={expense.description}>
+                                <p className="line-clamp-2 text-lg font-semibold leading-snug text-slate-900" title={expense.description}>
                                   {expense.description}
                                 </p>
                                 <p className="mt-1 text-xs font-medium tracking-[0.02em] text-slate-500">{expense.date}</p>
@@ -2139,13 +2139,13 @@ export function ExpensesClient({
                                     aria-expanded={openMobileActionMenuId === expense.id}
                                     aria-haspopup="menu"
                                     aria-label={`More actions for ${expense.description}`}
-                                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 hover:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                                     onClick={() =>
                                       setOpenMobileActionMenuId((current) => (current === expense.id ? null : expense.id))
                                     }
                                     type="button"
                                   >
-                                    <svg aria-hidden="true" className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24">
+                                    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
                                       <circle cx="5" cy="12" fill="currentColor" r="1.75" />
                                       <circle cx="12" cy="12" fill="currentColor" r="1.75" />
                                       <circle cx="19" cy="12" fill="currentColor" r="1.75" />
@@ -2214,7 +2214,7 @@ export function ExpensesClient({
                               </span>
                             </div>
                             <div className="mt-4">
-                              <p className="text-lg font-semibold tabular-nums text-slate-900">
+                              <p className="text-base font-semibold tabular-nums text-slate-800">
                                 ARS {formatMoney(expense.amountArs)}
                               </p>
                               {expense.currencyCode !== 'ARS' ? (
