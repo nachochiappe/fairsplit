@@ -410,7 +410,7 @@ function MobileExpenseCard({
   const startOffsetRef = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
   const translatedOffset = dragOffset !== 0 ? dragOffset : isOpen ? -MOBILE_ACTION_RAIL_WIDTH : 0;
-  const showKindChip = !expense.fixed.enabled;
+  const showKindChip = Boolean(expense.installment);
 
   useEffect(() => {
     if (!isOpen) {
