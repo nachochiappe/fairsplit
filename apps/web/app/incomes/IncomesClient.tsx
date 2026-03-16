@@ -196,6 +196,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingIncomeRemoval, setPendingIncomeRemoval] = useState<PendingIncomeRemoval | null>(null);
+  const [openMobileActionMenuId, setOpenMobileActionMenuId] = useState<string | null>(null);
   const previousMonth = useMemo(() => getPreviousMonth(month), [month]);
 
   const load = useCallback(async () => {
@@ -225,6 +226,30 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
     setLoading(false);
     setError(null);
   }, [initialExchangeRates, initialUsers, initialIncomes]);
+
+  useEffect(() => {
+    if (!openMobileActionMenuId) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target.closest('[data-mobile-income-menu]')) {
+        return;
+      }
+
+      setOpenMobileActionMenuId(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [openMobileActionMenuId]);
 
   const hasUnsavedChanges = useMemo(
     () => !areIncomeDraftMapsEqual(incomeDraftsByUser, baselineIncomeDraftsByUser),
@@ -582,9 +607,131 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                   return (
                     <div
                       key={row.id ?? `${user.id}-${index}`}
-                      className="relative grid grid-cols-1 gap-1 border-b border-slate-100 px-3 py-3 pr-20 last:border-b-0 md:grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] md:gap-2 md:px-6 md:py-2"
+                      className="border-b border-slate-100 px-3 py-3 last:border-b-0 md:grid md:grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] md:gap-2 md:px-6 md:py-2"
                     >
-                      <div className="md:block">
+                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="text"
+                            name={`income-description-${user.id}-${index}`}
+                            aria-label={`${user.name} income description ${index + 1}`}
+                            autoComplete="off"
+                            value={row.description}
+                            onChange={(event) => updateDraftDescription(user.id, index, event.target.value)}
+                            className={`${fieldClass} ${descriptionToneClass}`}
+                            placeholder="Description"
+                          />
+                          <div className="relative shrink-0" data-mobile-income-menu>
+                            <button
+                              aria-expanded={openMobileActionMenuId === `${user.id}-${index}`}
+                              aria-haspopup="menu"
+                              aria-label={`More actions for ${row.description || `income ${index + 1}`}`}
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                              onClick={() =>
+                                setOpenMobileActionMenuId((current) =>
+                                  current === `${user.id}-${index}` ? null : `${user.id}-${index}`,
+                                )
+                              }
+                              type="button"
+                            >
+                              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                <circle cx="5" cy="12" fill="currentColor" r="1.75" />
+                                <circle cx="12" cy="12" fill="currentColor" r="1.75" />
+                                <circle cx="19" cy="12" fill="currentColor" r="1.75" />
+                              </svg>
+                            </button>
+                            {openMobileActionMenuId === `${user.id}-${index}` ? (
+                              <div
+                                className="absolute right-0 top-12 z-20 min-w-[10rem] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg shadow-slate-900/10"
+                                role="menu"
+                              >
+                                <ActionButton
+                                  action="remove"
+                                  aria-label="Remove income row"
+                                  className="w-full justify-start"
+                                  onClick={() => {
+                                    setOpenMobileActionMenuId(null);
+                                    requestRemoveIncomeDraft(user.id, index);
+                                  }}
+                                >
+                                  Remove income
+                                </ActionButton>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">Amount</p>
+                          <div className="relative mt-2">
+                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
+                            <input
+                              type="text"
+                              name={`income-amount-${user.id}-${index}`}
+                              aria-label={`${user.name} income amount ${index + 1}`}
+                              autoComplete="off"
+                              inputMode="decimal"
+                              value={row.amount}
+                              onChange={(event) => updateDraftAmount(user.id, index, event.target.value)}
+                              className={`${moneyFieldClass} py-3 text-lg ${amountToneClass}`}
+                              placeholder="0.00"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <div className="min-w-[120px] flex-1">
+                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">
+                              Currency
+                            </label>
+                            <select
+                              name={`income-currency-${user.id}-${index}`}
+                              aria-label={`${user.name} income currency ${index + 1}`}
+                              value={row.currencyCode}
+                              onChange={(event) =>
+                                updateDraftCurrencyCode(user.id, index, event.target.value as SupportedCurrencyCode)
+                              }
+                              className={fieldClass}
+                            >
+                              {supportedCurrencyCodes.map((currencyCode) => (
+                                <option key={currencyCode} value={currencyCode}>
+                                  {currencyCode}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {row.currencyCode === 'ARS' ? (
+                            <div className="flex min-w-[120px] flex-1 items-end">
+                              <div className="inline-flex min-h-11 w-full items-center rounded-full bg-slate-100 px-3 text-sm font-medium text-slate-600">
+                                FX 1
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="min-w-[140px] flex-1">
+                              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">
+                                FX to ARS
+                              </label>
+                              <div className="relative">
+                                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
+                                <input
+                                  type="text"
+                                  name={`income-fx-${user.id}-${index}`}
+                                  aria-label={`${user.name} income fx rate ${index + 1}`}
+                                  autoComplete="off"
+                                  inputMode="decimal"
+                                  value={row.fxRate}
+                                  onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
+                                  className={moneyFieldClass}
+                                  placeholder="FX to ARS"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="hidden md:block">
                         <input
                           type="text"
                           name={`income-description-${user.id}-${index}`}
@@ -597,7 +744,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         />
                       </div>
 
-                      <div className="relative w-full">
+                      <div className="relative hidden w-full md:block">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
                         <input
                           type="text"
@@ -612,11 +759,8 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 md:contents">
+                      <div className="hidden md:contents">
                         <div>
-                          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft md:hidden">
-                            Currency
-                          </span>
                           <select
                             name={`income-currency-${user.id}-${index}`}
                             aria-label={`${user.name} income currency ${index + 1}`}
@@ -635,9 +779,6 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         </div>
 
                         <div>
-                          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-soft md:hidden">
-                            FX to ARS
-                          </span>
                           <div className="relative">
                             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
                             <input
@@ -660,36 +801,10 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         </div>
                       </div>
 
-                      <ActionButton
-                        action="remove"
-                        aria-label="Remove income row"
-                        onClick={() => requestRemoveIncomeDraft(user.id, index)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 md:hidden"
-                        size="icon"
-                      >
-                        <svg
-                          aria-hidden="true"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          viewBox="0 0 24 24"
-                        >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v6" />
-                          <path d="M14 11v6" />
-                        </svg>
-                      </ActionButton>
-
-                      <div className="flex items-center justify-end md:justify-center">
+                      <div className="hidden items-center justify-end md:flex md:justify-center">
                         <ActionButton
                           action="remove"
                           onClick={() => requestRemoveIncomeDraft(user.id, index)}
-                          className="hidden md:inline-flex"
                         >
                           Remove
                         </ActionButton>

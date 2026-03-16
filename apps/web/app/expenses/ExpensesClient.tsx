@@ -520,6 +520,26 @@ function MobileExpenseCard({
   );
 }
 
+function getExpenseKindPillClasses(expense: Expense): string {
+  if (expense.fixed.enabled) {
+    return 'border-blue-200 bg-blue-100 text-blue-700';
+  }
+
+  if (expense.installment) {
+    return 'border-violet-200 bg-violet-100 text-violet-700';
+  }
+
+  return 'border-orange-200 bg-orange-100 text-orange-700';
+}
+
+function getExpenseCategoryPillClasses(): string {
+  return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+}
+
+function getExpensePayerPillClasses(): string {
+  return 'border-amber-200 bg-amber-50 text-amber-800';
+}
+
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   const dedupedById = new Map<string, Expense>();
   for (const expense of expenses) {
