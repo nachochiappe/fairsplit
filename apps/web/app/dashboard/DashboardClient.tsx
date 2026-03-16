@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/currency';
 import { type Income, type SettlementResponse, type User } from '../../lib/api';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { MonthNavigationPendingProvider, useMonthNavigationPending } from '../../components/MonthNavigationPending';
+import {
+  MonthNavigationPendingProvider,
+  useMonthNavigationPending,
+} from '../../components/MonthNavigationPending';
 import { MonthSelector } from '../../components/MonthSelector';
+import { Nav } from '../../components/Nav';
 import { TitleMark } from '../../components/TitleMark';
 import { getSuperCategoryAccentColor } from '../../lib/theme';
 
@@ -24,7 +27,14 @@ interface DashboardClientProps {
   warning?: string | null;
 }
 
-export function DashboardClient({ month, users, incomes, settlement, expenseCategorySlices = [], warning }: DashboardClientProps) {
+export function DashboardClient({
+  month,
+  users,
+  incomes,
+  settlement,
+  expenseCategorySlices = [],
+  warning,
+}: DashboardClientProps) {
   return (
     <MonthNavigationPendingProvider>
       <DashboardClientContent
@@ -56,14 +66,21 @@ function DashboardClientContent({
   }
 
   return (
-    <main id="main-content" className="mx-auto min-h-screen w-full max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
+    <main
+      id="main-content"
+      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-8 md:px-6 md:pb-10 md:pt-10"
+    >
       <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-6">
             <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">Fairsplit</p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">Settlement Dashboard</h1>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">
+                Fairsplit
+              </p>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">
+                Settlement Dashboard
+              </h1>
               <p className="mt-2 max-w-2xl text-base text-slate-600">
                 See fair monthly contributions and transfer recommendation
               </p>
@@ -73,23 +90,7 @@ function DashboardClientContent({
         </div>
       </header>
 
-      <nav
-        aria-label="Primary"
-        className="mb-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm md:grid-cols-5"
-      >
-        <NavItem href="/dashboard" label="Dashboard" month={month} />
-        <NavItem href="/incomes" label="Incomes" month={month} />
-        <NavItem href="/expenses" label="Expenses" month={month} />
-        <NavItem href="/settings" label="Settings" month={month} monthScoped={false} />
-        <form action="/logout" method="post" className="h-full">
-          <button
-            type="submit"
-            className="h-full w-full rounded-xl px-4 py-3 text-center text-base font-semibold text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-          >
-            Logout
-          </button>
-        </form>
-      </nav>
+      <Nav month={month} />
 
       <div
         aria-busy={isPending}
@@ -101,7 +102,10 @@ function DashboardClientContent({
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
             <p>{warning}</p>
             <p className="mt-2">
-              <Link className="font-semibold underline decoration-2 underline-offset-2" href={`/incomes?month=${month}`}>
+              <Link
+                className="font-semibold underline decoration-2 underline-offset-2"
+                href={`/incomes?month=${month}`}
+              >
                 Open incomes
               </Link>
             </p>
@@ -115,21 +119,23 @@ function DashboardClientContent({
 
         <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="border-b border-slate-100 p-6 md:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900">Expenses by category</h2>
-              <p className="mt-1 text-sm text-slate-600">Monthly distribution of expenses in ARS.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Expenses by category</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Monthly distribution of expenses in ARS.
+                </p>
+              </div>
+              <button
+                aria-controls="expense-category-chart-content"
+                aria-expanded={isCategoryChartExpanded}
+                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                type="button"
+                onClick={() => setIsCategoryChartExpanded((current) => !current)}
+              >
+                {isCategoryChartExpanded ? 'Hide chart' : 'Show chart'}
+              </button>
             </div>
-            <button
-              aria-controls="expense-category-chart-content"
-              aria-expanded={isCategoryChartExpanded}
-              className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-              type="button"
-              onClick={() => setIsCategoryChartExpanded((current) => !current)}
-            >
-              {isCategoryChartExpanded ? 'Hide chart' : 'Show chart'}
-            </button>
-          </div>
           </div>
           {isCategoryChartExpanded ? (
             <div className="p-6 md:p-8" id="expense-category-chart-content">
@@ -151,33 +157,47 @@ function DashboardClientContent({
                     <h3 className="text-lg font-semibold text-slate-900">{user.name}</h3>
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        isPositiveDifference ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        isPositiveDifference
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-rose-50 text-rose-700'
                       }`}
                     >
                       {isPositiveDifference ? 'Overpaid' : 'Needs to send'}
                     </span>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Difference</p>
-                    <p className={`mt-2 text-3xl font-semibold tabular-nums ${isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Difference
+                    </p>
+                    <p
+                      className={`mt-2 text-3xl font-semibold tabular-nums ${isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}`}
+                    >
                       {formatMoney(absoluteDifference)}
                     </p>
                     <p className="mt-1 text-sm text-slate-600">
-                      {isPositiveDifference ? 'Covered more than fair share this month.' : 'Needs to send this month.'}
+                      {isPositiveDifference
+                        ? 'Covered more than fair share this month.'
+                        : 'Needs to send this month.'}
                     </p>
                   </div>
                   <dl className="space-y-3 border-t border-slate-100 pt-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-slate-600">Income</dt>
-                      <dd className="font-medium tabular-nums text-slate-900">{formatMoney(incomeByUser[user.id] ?? 0)}</dd>
+                      <dd className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(incomeByUser[user.id] ?? 0)}
+                      </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-slate-600">Paid</dt>
-                      <dd className="font-medium tabular-nums text-slate-900">{formatMoney(settlement.paidByUser[user.id] ?? 0)}</dd>
+                      <dd className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(settlement.paidByUser[user.id] ?? 0)}
+                      </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <dt className="text-slate-600">Fair share</dt>
-                      <dd className="font-medium tabular-nums text-slate-900">{formatMoney(settlement.fairShareByUser[user.id] ?? 0)}</dd>
+                      <dd className="font-medium tabular-nums text-slate-900">
+                        {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
+                      </dd>
                     </div>
                   </dl>
                 </article>
@@ -186,55 +206,79 @@ function DashboardClientContent({
           </div>
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-left text-sm">
-            <caption className="sr-only">Monthly settlement by partner</caption>
-            <thead className="bg-slate-50/85 text-slate-500">
-              <tr>
-                <th className="px-5 py-4 text-xs font-bold uppercase tracking-[0.14em] md:px-8" scope="col">Partner</th>
-                <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8" scope="col">
-                  Income
-                </th>
-                <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8" scope="col">
-                  Paid
-                </th>
-                <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8" scope="col">
-                  Fair contribution
-                </th>
-                <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8" scope="col">
-                  Difference
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {users.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50/70">
-                  <th className="px-5 py-5 text-left text-lg font-semibold text-slate-900 md:px-8 md:text-xl" scope="row">
-                    {user.name}
-                  </th>
-                  <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
-                    {formatMoney(incomeByUser[user.id] ?? 0)}
-                  </td>
-                  <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
-                    {formatMoney(settlement.paidByUser[user.id] ?? 0)}
-                  </td>
-                  <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
-                    {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
-                  </td>
-                  <td
-                    className={`px-5 py-5 text-right text-lg font-bold tabular-nums md:px-8 ${
-                      Number(settlement.differenceByUser[user.id] ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-500'
-                    }`}
+              <caption className="sr-only">Monthly settlement by partner</caption>
+              <thead className="bg-slate-50/85 text-slate-500">
+                <tr>
+                  <th
+                    className="px-5 py-4 text-xs font-bold uppercase tracking-[0.14em] md:px-8"
+                    scope="col"
                   >
-                    {formatMoney(settlement.differenceByUser[user.id] ?? 0)}
-                  </td>
+                    Partner
+                  </th>
+                  <th
+                    className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
+                    scope="col"
+                  >
+                    Income
+                  </th>
+                  <th
+                    className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
+                    scope="col"
+                  >
+                    Paid
+                  </th>
+                  <th
+                    className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
+                    scope="col"
+                  >
+                    Fair contribution
+                  </th>
+                  <th
+                    className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
+                    scope="col"
+                  >
+                    Difference
+                  </th>
                 </tr>
-              ))}
-            </tbody>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-slate-50/70">
+                    <th
+                      className="px-5 py-5 text-left text-lg font-semibold text-slate-900 md:px-8 md:text-xl"
+                      scope="row"
+                    >
+                      {user.name}
+                    </th>
+                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
+                      {formatMoney(incomeByUser[user.id] ?? 0)}
+                    </td>
+                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
+                      {formatMoney(settlement.paidByUser[user.id] ?? 0)}
+                    </td>
+                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
+                      {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
+                    </td>
+                    <td
+                      className={`px-5 py-5 text-right text-lg font-bold tabular-nums md:px-8 ${
+                        Number(settlement.differenceByUser[user.id] ?? 0) >= 0
+                          ? 'text-emerald-600'
+                          : 'text-rose-500'
+                      }`}
+                    >
+                      {formatMoney(settlement.differenceByUser[user.id] ?? 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </section>
 
         <section className="rounded-3xl border border-brand-200 bg-brand-50 px-6 py-7 shadow-sm md:px-9">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">Settlement</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">
+            Settlement
+          </h2>
           {settlement.transfer ? (
             <div className="mt-3 space-y-2">
               <p className="text-2xl font-semibold leading-snug text-slate-900 md:text-3xl">
@@ -248,7 +292,9 @@ function DashboardClientContent({
             </div>
           ) : (
             <div className="mt-3 space-y-2">
-              <p className="text-2xl font-semibold text-slate-900 md:text-3xl">No transfer needed</p>
+              <p className="text-2xl font-semibold text-slate-900 md:text-3xl">
+                No transfer needed
+              </p>
               <p className="text-sm text-slate-600">This month is already balanced.</p>
             </div>
           )}
@@ -267,25 +313,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NavItem({ href, label, month, monthScoped = true }: { href: string; label: string; month: string; monthScoped?: boolean }) {
-  const pathname = usePathname();
-  const fullHref = monthScoped ? `${href}?month=${month}` : href;
-  const isCurrent = pathname === href;
-
-  return (
-    <Link
-      className={`rounded-xl px-4 py-3 text-center text-base font-semibold ${
-        isCurrent ? 'bg-brand-600 text-white shadow-md shadow-brand-700/25' : 'text-slate-500 hover:text-slate-800'
-      }`}
-      href={fullHref}
-      prefetch={false}
-      aria-current={isCurrent ? 'page' : undefined}
-    >
-      {label}
-    </Link>
-  );
-}
-
 function formatCountLabel(count: number, singular: string, plural: string): string {
   return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
@@ -301,8 +328,14 @@ function CategoryPieChart({
   }>;
 }) {
   const groups = buildSuperCategoryGroups(slices);
-  const [expandedGroupName, setExpandedGroupName] = useState<string | null>(groups[0]?.name ?? null);
-  const groupedTotals = groups.map((group) => ({ categoryName: group.name, totalArs: group.totalArs, color: group.color }));
+  const [expandedGroupName, setExpandedGroupName] = useState<string | null>(
+    groups[0]?.name ?? null,
+  );
+  const groupedTotals = groups.map((group) => ({
+    categoryName: group.name,
+    totalArs: group.totalArs,
+    color: group.color,
+  }));
   const chartSize = 320;
   const radius = 125;
   const innerRadius = 92;
@@ -316,7 +349,11 @@ function CategoryPieChart({
   }, [expandedGroupName, groups]);
 
   if (slices.length === 0) {
-    return <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">No expenses available for this month.</p>;
+    return (
+      <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        No expenses available for this month.
+      </p>
+    );
   }
 
   let startAngle = -Math.PI / 2;
@@ -337,7 +374,9 @@ function CategoryPieChart({
       percentage: total === 0 ? 0 : (slice.totalArs / total) * 100,
     };
   });
-  const topSegments = [...segments].sort((left, right) => right.totalArs - left.totalArs).slice(0, 3);
+  const topSegments = [...segments]
+    .sort((left, right) => right.totalArs - left.totalArs)
+    .slice(0, 3);
   const leadSegment = topSegments[0];
   const chartSummary = leadSegment
     ? `${leadSegment.categoryName} is the largest group at ${leadSegment.percentage.toFixed(1)}% of spending.`
@@ -347,18 +386,25 @@ function CategoryPieChart({
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
         <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Text summary</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
+            Text summary
+          </p>
           <p className="mt-2 text-sm leading-6 text-slate-700">{chartSummary}</p>
           <ol className="mt-4 space-y-2">
             {topSegments.map((segment, index) => (
-              <li key={segment.categoryName} className="flex items-start justify-between gap-3 text-sm">
+              <li
+                key={segment.categoryName}
+                className="flex items-start justify-between gap-3 text-sm"
+              >
                 <div>
                   <p className="font-semibold text-slate-900">
                     {index + 1}. {segment.categoryName}
                   </p>
                   <p className="text-slate-600">{formatMoney(segment.totalArs)} spent</p>
                 </div>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-900">{segment.percentage.toFixed(1)}%</span>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-900">
+                  {segment.percentage.toFixed(1)}%
+                </span>
               </li>
             ))}
           </ol>
@@ -381,21 +427,36 @@ function CategoryPieChart({
             <circle cx={center} cy={center} fill="white" r={innerRadius} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-muted">Total spent</p>
-            <p className="mt-1 text-5xl font-bold leading-none text-slate-900">{formatCompactMoney(total)}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-muted">
+              Total spent
+            </p>
+            <p className="mt-1 text-5xl font-bold leading-none text-slate-900">
+              {formatCompactMoney(total)}
+            </p>
           </div>
         </div>
         <p className="sr-only" id="expense-category-chart-summary">
-          {segments.map((segment) => `${segment.categoryName}: ${segment.percentage.toFixed(1)}%`).join('. ')}
+          {segments
+            .map((segment) => `${segment.categoryName}: ${segment.percentage.toFixed(1)}%`)
+            .join('. ')}
         </p>
         <ul className="mx-auto mt-5 max-w-sm space-y-2">
           {segments.map((segment) => (
-            <li key={segment.categoryName} className="flex items-center justify-between gap-3 text-sm">
+            <li
+              key={segment.categoryName}
+              className="flex items-center justify-between gap-3 text-sm"
+            >
               <div className="flex items-center gap-2 text-slate-700">
-                <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ backgroundColor: segment.color }} />
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-full"
+                  style={{ backgroundColor: segment.color }}
+                />
                 <span className="font-medium">{segment.categoryName}</span>
               </div>
-              <span className="font-semibold tabular-nums text-slate-900">{segment.percentage.toFixed(1)}%</span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {segment.percentage.toFixed(1)}%
+              </span>
             </li>
           ))}
         </ul>
@@ -409,7 +470,9 @@ function CategoryPieChart({
               aria-expanded={expandedGroupName === group.name}
               className="flex w-full items-center justify-between gap-3 rounded-xl px-1 text-left"
               type="button"
-              onClick={() => setExpandedGroupName((current) => (current === group.name ? null : group.name))}
+              onClick={() =>
+                setExpandedGroupName((current) => (current === group.name ? null : group.name))
+              }
             >
               <div className="flex items-center gap-3">
                 <span
@@ -422,7 +485,8 @@ function CategoryPieChart({
                 <div>
                   <p className="text-xl font-semibold leading-tight text-slate-900">{group.name}</p>
                   <p className="mt-1 text-sm text-ink-muted">
-                    {formatCountLabel(group.categories.length, 'category', 'categories')} • {formatMoney(group.totalArs)}
+                    {formatCountLabel(group.categories.length, 'category', 'categories')} •{' '}
+                    {formatMoney(group.totalArs)}
                   </p>
                 </div>
               </div>
@@ -440,21 +504,35 @@ function CategoryPieChart({
               </svg>
             </button>
             {expandedGroupName === group.name ? (
-              <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4" id={`super-category-panel-${group.name}`}>
+              <div
+                className="mt-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4"
+                id={`super-category-panel-${group.name}`}
+              >
                 <ul className="space-y-3">
                   {group.categories.map((category) => (
                     <li key={category.categoryName}>
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
-                          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color }} />
-                          <span className="font-medium text-slate-700">{category.categoryName}</span>
+                          <span
+                            aria-hidden="true"
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: group.color }}
+                          />
+                          <span className="font-medium text-slate-700">
+                            {category.categoryName}
+                          </span>
                         </div>
-                        <span className="font-semibold tabular-nums text-slate-900">{formatMoney(category.totalArs)}</span>
+                        <span className="font-semibold tabular-nums text-slate-900">
+                          {formatMoney(category.totalArs)}
+                        </span>
                       </div>
                       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
                         <div
                           className="h-full rounded-full"
-                          style={{ backgroundColor: group.color, width: `${Math.max((category.totalArs / total) * 100, 2)}%` }}
+                          style={{
+                            backgroundColor: group.color,
+                            width: `${Math.max((category.totalArs / total) * 100, 2)}%`,
+                          }}
                         />
                       </div>
                       <p className="mt-1 text-right text-xs font-medium text-ink-muted">
@@ -470,9 +548,10 @@ function CategoryPieChart({
       </ul>
       <p className="text-sm text-ink-muted lg:col-span-2">
         Showing data from{' '}
-        <span className="font-semibold text-ink-base">{formatCountLabel(slices.length, 'category', 'categories')}</span>{' '}
-        across{' '}
-        <span className="font-semibold text-ink-base">{groups.length}</span> groups.
+        <span className="font-semibold text-ink-base">
+          {formatCountLabel(slices.length, 'category', 'categories')}
+        </span>{' '}
+        across <span className="font-semibold text-ink-base">{groups.length}</span> groups.
       </p>
     </div>
   );
@@ -553,7 +632,10 @@ function SuperCategoryIcon({ name, color }: { name: string; color: string }) {
   if (name === 'Lifestyle') {
     return (
       <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <path {...commonProps} d="M10 16.5s-4.8-2.7-6.2-6.4c-.8-2 1-4.1 3.1-4.1 1.3 0 2.5.7 3.1 1.8.6-1.1 1.8-1.8 3.1-1.8 2.1 0 3.9 2.1 3.1 4.1-1.4 3.7-6.2 6.4-6.2 6.4z" />
+        <path
+          {...commonProps}
+          d="M10 16.5s-4.8-2.7-6.2-6.4c-.8-2 1-4.1 3.1-4.1 1.3 0 2.5.7 3.1 1.8.6-1.1 1.8-1.8 3.1-1.8 2.1 0 3.9 2.1 3.1 4.1-1.4 3.7-6.2 6.4-6.2 6.4z"
+        />
       </svg>
     );
   }
@@ -569,7 +651,10 @@ function SuperCategoryIcon({ name, color }: { name: string; color: string }) {
   if (name === 'Mobility') {
     return (
       <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <path {...commonProps} d="M4 11.5h12l-1.2-4.2a1.2 1.2 0 00-1.1-.8H6.3a1.2 1.2 0 00-1.1.8L4 11.5z" />
+        <path
+          {...commonProps}
+          d="M4 11.5h12l-1.2-4.2a1.2 1.2 0 00-1.1-.8H6.3a1.2 1.2 0 00-1.1.8L4 11.5z"
+        />
         <path {...commonProps} d="M4 11.5V14m12-2.5V14" />
         <circle cx="6.8" cy="14.3" r="1.3" fill={color} />
         <circle cx="13.2" cy="14.3" r="1.3" fill={color} />
@@ -588,7 +673,10 @@ function SuperCategoryIcon({ name, color }: { name: string; color: string }) {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
       <circle cx="10" cy="10" fill={color} r="3.5" />
-      <path {...commonProps} d="M10 3.5v2.2M10 14.3v2.2M3.5 10h2.2M14.3 10h2.2M5.3 5.3l1.6 1.6M13.1 13.1l1.6 1.6M14.7 5.3l-1.6 1.6M6.9 13.1l-1.6 1.6" />
+      <path
+        {...commonProps}
+        d="M10 3.5v2.2M10 14.3v2.2M3.5 10h2.2M14.3 10h2.2M5.3 5.3l1.6 1.6M13.1 13.1l1.6 1.6M14.7 5.3l-1.6 1.6M6.9 13.1l-1.6 1.6"
+      />
     </svg>
   );
 }

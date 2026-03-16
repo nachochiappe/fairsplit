@@ -49,13 +49,7 @@ type CategoryArchiveDialogState = {
   category: Category;
 };
 
-function DialogFrame({
-  children,
-  title,
-}: {
-  children: ReactNode;
-  title: string;
-}) {
+function DialogFrame({ children, title }: { children: ReactNode; title: string }) {
   return (
     <div
       aria-labelledby="settings-dialog-title"
@@ -133,10 +127,14 @@ export function SettingsClient({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
-  const [categoryRenameDialog, setCategoryRenameDialog] = useState<CategoryRenameDialogState | null>(null);
-  const [superCategoryRenameDialog, setSuperCategoryRenameDialog] = useState<SuperCategoryRenameDialogState | null>(null);
-  const [superCategoryArchiveDialog, setSuperCategoryArchiveDialog] = useState<SuperCategoryArchiveDialogState | null>(null);
-  const [categoryArchiveDialog, setCategoryArchiveDialog] = useState<CategoryArchiveDialogState | null>(null);
+  const [categoryRenameDialog, setCategoryRenameDialog] =
+    useState<CategoryRenameDialogState | null>(null);
+  const [superCategoryRenameDialog, setSuperCategoryRenameDialog] =
+    useState<SuperCategoryRenameDialogState | null>(null);
+  const [superCategoryArchiveDialog, setSuperCategoryArchiveDialog] =
+    useState<SuperCategoryArchiveDialogState | null>(null);
+  const [categoryArchiveDialog, setCategoryArchiveDialog] =
+    useState<CategoryArchiveDialogState | null>(null);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -162,7 +160,10 @@ export function SettingsClient({
   );
 
   const sortedActiveSuperCategories = useMemo(
-    () => [...activeSuperCategories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    () =>
+      [...activeSuperCategories].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+      ),
     [activeSuperCategories],
   );
 
@@ -172,7 +173,10 @@ export function SettingsClient({
   );
 
   const loadSettings = async () => {
-    const [nextCategories, nextSuperCategories] = await Promise.all([getCategories(), getSuperCategories()]);
+    const [nextCategories, nextSuperCategories] = await Promise.all([
+      getCategories(),
+      getSuperCategories(),
+    ]);
     setCategories(nextCategories);
     setSuperCategories(nextSuperCategories);
   };
@@ -207,7 +211,11 @@ export function SettingsClient({
       setDisplayNameDraft(updated.name);
       setProfileSuccess('Display name updated.');
     } catch (profileUpdateError) {
-      setProfileError(profileUpdateError instanceof Error ? profileUpdateError.message : 'Failed to update display name');
+      setProfileError(
+        profileUpdateError instanceof Error
+          ? profileUpdateError.message
+          : 'Failed to update display name',
+      );
     } finally {
       setProfileSaving(false);
     }
@@ -223,7 +231,11 @@ export function SettingsClient({
       setInviteExpiresAt(invite.expiresAt);
       setInviteSuccess('Invite code generated. Share it with your partner.');
     } catch (inviteCreateError) {
-      setInviteError(inviteCreateError instanceof Error ? inviteCreateError.message : 'Failed to create invite code');
+      setInviteError(
+        inviteCreateError instanceof Error
+          ? inviteCreateError.message
+          : 'Failed to create invite code',
+      );
     } finally {
       setInviteLoading(false);
     }
@@ -256,14 +268,21 @@ export function SettingsClient({
       setCategoryName('');
       setCategorySuperCategoryId('unassigned');
     } catch (categoryError) {
-      setCategoryError(categoryError instanceof Error ? categoryError.message : 'Failed to create category');
+      setCategoryError(
+        categoryError instanceof Error ? categoryError.message : 'Failed to create category',
+      );
       return;
     }
 
     try {
       await loadSettings();
     } catch (refreshError) {
-      setCategoryError(formatPostMutationRefreshError('Category created, but settings could not refresh automatically.', refreshError));
+      setCategoryError(
+        formatPostMutationRefreshError(
+          'Category created, but settings could not refresh automatically.',
+          refreshError,
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -293,14 +312,21 @@ export function SettingsClient({
       await renameCategory(categoryRenameDialog.category.id, { name: nextName });
       setCategoryRenameDialog(null);
     } catch (renameError) {
-      setCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename category');
+      setCategoryError(
+        renameError instanceof Error ? renameError.message : 'Failed to rename category',
+      );
       return;
     }
 
     try {
       await loadSettings();
     } catch (refreshError) {
-      setCategoryError(formatPostMutationRefreshError('Category renamed, but settings could not refresh automatically.', refreshError));
+      setCategoryError(
+        formatPostMutationRefreshError(
+          'Category renamed, but settings could not refresh automatically.',
+          refreshError,
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -314,7 +340,9 @@ export function SettingsClient({
         superCategoryId: nextSuperCategoryId === 'unassigned' ? null : nextSuperCategoryId,
       });
     } catch (assignError) {
-      setCategoryError(assignError instanceof Error ? assignError.message : 'Failed to assign category');
+      setCategoryError(
+        assignError instanceof Error ? assignError.message : 'Failed to assign category',
+      );
       return;
     }
 
@@ -322,7 +350,10 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError('Category updated, but settings could not refresh automatically.', refreshError),
+        formatPostMutationRefreshError(
+          'Category updated, but settings could not refresh automatically.',
+          refreshError,
+        ),
       );
     } finally {
       setSaving(false);
@@ -347,7 +378,9 @@ export function SettingsClient({
       await archiveCategory(categoryArchiveDialog.category.id);
       setCategoryArchiveDialog(null);
     } catch (archiveError) {
-      setCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive category');
+      setCategoryError(
+        archiveError instanceof Error ? archiveError.message : 'Failed to archive category',
+      );
       return;
     }
 
@@ -355,7 +388,10 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError('Category archived, but settings could not refresh automatically.', refreshError),
+        formatPostMutationRefreshError(
+          'Category archived, but settings could not refresh automatically.',
+          refreshError,
+        ),
       );
     } finally {
       setSaving(false);
@@ -372,7 +408,9 @@ export function SettingsClient({
       setCategoryError(null);
       await unarchiveCategory(category.id);
     } catch (unarchiveError) {
-      setCategoryError(unarchiveError instanceof Error ? unarchiveError.message : 'Failed to unarchive category');
+      setCategoryError(
+        unarchiveError instanceof Error ? unarchiveError.message : 'Failed to unarchive category',
+      );
       return;
     }
 
@@ -380,7 +418,10 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError('Category restored, but settings could not refresh automatically.', refreshError),
+        formatPostMutationRefreshError(
+          'Category restored, but settings could not refresh automatically.',
+          refreshError,
+        ),
       );
     } finally {
       setSaving(false);
@@ -405,7 +446,11 @@ export function SettingsClient({
       });
       setSuperCategoryName('');
     } catch (superCategoryError) {
-      setSuperCategoryError(superCategoryError instanceof Error ? superCategoryError.message : 'Failed to create super category');
+      setSuperCategoryError(
+        superCategoryError instanceof Error
+          ? superCategoryError.message
+          : 'Failed to create super category',
+      );
       return;
     }
 
@@ -413,7 +458,10 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setSuperCategoryError(
-        formatPostMutationRefreshError('Group created, but settings could not refresh automatically.', refreshError),
+        formatPostMutationRefreshError(
+          'Group created, but settings could not refresh automatically.',
+          refreshError,
+        ),
       );
     } finally {
       setSaving(false);
@@ -444,7 +492,9 @@ export function SettingsClient({
       await updateSuperCategory(superCategoryRenameDialog.superCategory.id, { name: nextName });
       setSuperCategoryRenameDialog(null);
     } catch (renameError) {
-      setSuperCategoryError(renameError instanceof Error ? renameError.message : 'Failed to rename super category');
+      setSuperCategoryError(
+        renameError instanceof Error ? renameError.message : 'Failed to rename super category',
+      );
       return;
     }
 
@@ -452,7 +502,10 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setSuperCategoryError(
-        formatPostMutationRefreshError('Group renamed, but settings could not refresh automatically.', refreshError),
+        formatPostMutationRefreshError(
+          'Group renamed, but settings could not refresh automatically.',
+          refreshError,
+        ),
       );
     } finally {
       setSaving(false);
@@ -485,7 +538,9 @@ export function SettingsClient({
       });
       setSuperCategoryArchiveDialog(null);
     } catch (archiveError) {
-      setSuperCategoryError(archiveError instanceof Error ? archiveError.message : 'Failed to archive super category');
+      setSuperCategoryError(
+        archiveError instanceof Error ? archiveError.message : 'Failed to archive super category',
+      );
       return;
     }
 
@@ -493,7 +548,10 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setSuperCategoryError(
-        formatPostMutationRefreshError('Group archived, but settings could not refresh automatically.', refreshError),
+        formatPostMutationRefreshError(
+          'Group archived, but settings could not refresh automatically.',
+          refreshError,
+        ),
       );
     } finally {
       setSaving(false);
@@ -504,7 +562,11 @@ export function SettingsClient({
     const normalizedName = name.toLowerCase();
     const iconClassName = 'h-5 w-5 text-ink-soft';
 
-    if (normalizedName.includes('hous') || normalizedName.includes('rent') || normalizedName.includes('home')) {
+    if (
+      normalizedName.includes('hous') ||
+      normalizedName.includes('rent') ||
+      normalizedName.includes('home')
+    ) {
       return (
         <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
           <path d="M10.75 2.9a1.2 1.2 0 0 0-1.5 0l-6 5A1.2 1.2 0 0 0 4 10h1v5.25A1.75 1.75 0 0 0 6.75 17h1.5A1.75 1.75 0 0 0 10 15.25V13h0v2.25A1.75 1.75 0 0 0 11.75 17h1.5A1.75 1.75 0 0 0 15 15.25V10h1a1.2 1.2 0 0 0 .75-2.1l-6-5Z" />
@@ -512,7 +574,11 @@ export function SettingsClient({
       );
     }
 
-    if (normalizedName.includes('essent') || normalizedName.includes('grocer') || normalizedName.includes('shop')) {
+    if (
+      normalizedName.includes('essent') ||
+      normalizedName.includes('grocer') ||
+      normalizedName.includes('shop')
+    ) {
       return (
         <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
           <path d="M3.5 4.5a1 1 0 1 1 0-2h1.2c.46 0 .87.31.97.77l.4 1.73h9.18a1 1 0 0 1 .97 1.24l-1.13 4.8a1 1 0 0 1-.97.76H7.14l.23 1h7.13a1 1 0 1 1 0 2H6.56a1 1 0 0 1-.97-.77L4.14 6.5H3.5Zm3 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
@@ -520,7 +586,11 @@ export function SettingsClient({
       );
     }
 
-    if (normalizedName.includes('mobil') || normalizedName.includes('car') || normalizedName.includes('transport')) {
+    if (
+      normalizedName.includes('mobil') ||
+      normalizedName.includes('car') ||
+      normalizedName.includes('transport')
+    ) {
       return (
         <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
           <path d="M4.8 5.5A2 2 0 0 1 6.72 4h6.56a2 2 0 0 1 1.92 1.5l1.15 4.6a2.5 2.5 0 0 1 .15.9V14a1 1 0 0 1-1 1h-1a2 2 0 1 1-4 0h-1a2 2 0 1 1-4 0h-1a1 1 0 0 1-1-1v-3a2.5 2.5 0 0 1 .15-.9L4.8 5.5ZM5.9 9h8.2l-.75-3h-6.7l-.75 3Z" />
@@ -528,7 +598,11 @@ export function SettingsClient({
       );
     }
 
-    if (normalizedName.includes('lifest') || normalizedName.includes('fun') || normalizedName.includes('entertain')) {
+    if (
+      normalizedName.includes('lifest') ||
+      normalizedName.includes('fun') ||
+      normalizedName.includes('entertain')
+    ) {
       return (
         <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
           <path d="m10 2.3 1.91 3.87 4.27.62-3.09 3.01.73 4.26L10 12.05l-3.82 2.01.73-4.26-3.09-3.01 4.27-.62L10 2.3Z" />
@@ -557,7 +631,11 @@ export function SettingsClient({
     if (normalizedGroup.includes('mobil') || normalizedGroup.includes('transport')) {
       return 'bg-violet-100 text-violet-600';
     }
-    if (normalizedGroup.includes('lifest') || normalizedGroup.includes('fun') || normalizedGroup.includes('entertain')) {
+    if (
+      normalizedGroup.includes('lifest') ||
+      normalizedGroup.includes('fun') ||
+      normalizedGroup.includes('entertain')
+    ) {
       return 'bg-amber-100 text-amber-600';
     }
     return 'bg-slate-100 text-slate-600';
@@ -574,7 +652,11 @@ export function SettingsClient({
       );
     }
 
-    if (normalizedName.includes('hous') || normalizedName.includes('home') || normalizedName.includes('rent')) {
+    if (
+      normalizedName.includes('hous') ||
+      normalizedName.includes('home') ||
+      normalizedName.includes('rent')
+    ) {
       return (
         <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
           <path d="M10.75 2.9a1.2 1.2 0 0 0-1.5 0l-6 5A1.2 1.2 0 0 0 4 10h1v5.25A1.75 1.75 0 0 0 6.75 17h1.5A1.75 1.75 0 0 0 10 15.25V13h0v2.25A1.75 1.75 0 0 0 11.75 17h1.5A1.75 1.75 0 0 0 15 15.25V10h1a1.2 1.2 0 0 0 .75-2.1l-6-5Z" />
@@ -595,7 +677,11 @@ export function SettingsClient({
       );
     }
 
-    if (normalizedName.includes('mobil') || normalizedName.includes('transport') || normalizedName.includes('car')) {
+    if (
+      normalizedName.includes('mobil') ||
+      normalizedName.includes('transport') ||
+      normalizedName.includes('car')
+    ) {
       return (
         <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
           <path d="M4.8 5.5A2 2 0 0 1 6.72 4h6.56a2 2 0 0 1 1.92 1.5l1.15 4.6a2.5 2.5 0 0 1 .15.9V14a1 1 0 0 1-1 1h-1a2 2 0 1 1-4 0h-1a2 2 0 1 1-4 0h-1a1 1 0 0 1-1-1v-3a2.5 2.5 0 0 1 .15-.9L4.8 5.5ZM5.9 9h8.2l-.75-3h-6.7l-.75 3Z" />
@@ -603,7 +689,11 @@ export function SettingsClient({
       );
     }
 
-    if (normalizedName.includes('lifest') || normalizedName.includes('fun') || normalizedName.includes('entertain')) {
+    if (
+      normalizedName.includes('lifest') ||
+      normalizedName.includes('fun') ||
+      normalizedName.includes('entertain')
+    ) {
       return (
         <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
           <path d="m10 2.3 1.91 3.87 4.27.62-3.09 3.01.73 4.26L10 12.05l-3.82 2.01.73-4.26-3.09-3.01 4.27-.62L10 2.3Z" />
@@ -619,7 +709,11 @@ export function SettingsClient({
   };
 
   return (
-    <AppShell month={month} title="Settings" subtitle="Manage categories and super categories used for monthly expenses">
+    <AppShell
+      month={month}
+      title="Settings"
+      subtitle="Manage categories and super categories used for monthly expenses"
+    >
       {categoryRenameDialog ? (
         <ViewportModal onDismiss={() => (saving ? undefined : setCategoryRenameDialog(null))}>
           <DialogFrame title="Rename category">
@@ -630,10 +724,16 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                Update the label for <span className="font-semibold text-slate-900">{categoryRenameDialog.category.name}</span>.
-                The new name will apply to historical records too.
+                Update the label for{' '}
+                <span className="font-semibold text-slate-900">
+                  {categoryRenameDialog.category.name}
+                </span>
+                . The new name will apply to historical records too.
               </p>
-              <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="rename-category-input">
+              <label
+                className="mt-4 block text-sm font-medium text-slate-700"
+                htmlFor="rename-category-input"
+              >
                 Category name
               </label>
               <input
@@ -641,11 +741,17 @@ export function SettingsClient({
                 className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 id="rename-category-input"
                 onChange={(event) =>
-                  setCategoryRenameDialog((current) => (current ? { ...current, nextName: event.target.value } : current))
+                  setCategoryRenameDialog((current) =>
+                    current ? { ...current, nextName: event.target.value } : current,
+                  )
                 }
                 value={categoryRenameDialog.nextName}
               />
-              <DialogActions busy={saving} confirmLabel={saving ? 'Saving...' : 'Save category'} onCancel={() => setCategoryRenameDialog(null)} />
+              <DialogActions
+                busy={saving}
+                confirmLabel={saving ? 'Saving...' : 'Save category'}
+                onCancel={() => setCategoryRenameDialog(null)}
+              />
             </form>
           </DialogFrame>
         </ViewportModal>
@@ -661,9 +767,16 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                Rename <span className="font-semibold text-slate-900">{superCategoryRenameDialog.superCategory.name}</span> to match how you organize spending.
+                Rename{' '}
+                <span className="font-semibold text-slate-900">
+                  {superCategoryRenameDialog.superCategory.name}
+                </span>{' '}
+                to match how you organize spending.
               </p>
-              <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="rename-super-category-input">
+              <label
+                className="mt-4 block text-sm font-medium text-slate-700"
+                htmlFor="rename-super-category-input"
+              >
                 Group name
               </label>
               <input
@@ -671,11 +784,17 @@ export function SettingsClient({
                 className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 id="rename-super-category-input"
                 onChange={(event) =>
-                  setSuperCategoryRenameDialog((current) => (current ? { ...current, nextName: event.target.value } : current))
+                  setSuperCategoryRenameDialog((current) =>
+                    current ? { ...current, nextName: event.target.value } : current,
+                  )
                 }
                 value={superCategoryRenameDialog.nextName}
               />
-              <DialogActions busy={saving} confirmLabel={saving ? 'Saving...' : 'Save group'} onCancel={() => setSuperCategoryRenameDialog(null)} />
+              <DialogActions
+                busy={saving}
+                confirmLabel={saving ? 'Saving...' : 'Save group'}
+                onCancel={() => setSuperCategoryRenameDialog(null)}
+              />
             </form>
           </DialogFrame>
         </ViewportModal>
@@ -691,10 +810,16 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                Archive <span className="font-semibold text-slate-900">{superCategoryArchiveDialog.superCategory.name}</span>.
-                Existing categories can move to another group or become unassigned.
+                Archive{' '}
+                <span className="font-semibold text-slate-900">
+                  {superCategoryArchiveDialog.superCategory.name}
+                </span>
+                . Existing categories can move to another group or become unassigned.
               </p>
-              <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="archive-super-category-replacement">
+              <label
+                className="mt-4 block text-sm font-medium text-slate-700"
+                htmlFor="archive-super-category-replacement"
+              >
                 Move categories to
               </label>
               <select
@@ -702,7 +827,9 @@ export function SettingsClient({
                 id="archive-super-category-replacement"
                 onChange={(event) =>
                   setSuperCategoryArchiveDialog((current) =>
-                    current ? { ...current, replacementSuperCategoryId: event.target.value } : current,
+                    current
+                      ? { ...current, replacementSuperCategoryId: event.target.value }
+                      : current,
                   )
                 }
                 value={superCategoryArchiveDialog.replacementSuperCategoryId}
@@ -716,7 +843,11 @@ export function SettingsClient({
                     </option>
                   ))}
               </select>
-              <DialogActions busy={saving} confirmLabel={saving ? 'Archiving...' : 'Archive group'} onCancel={() => setSuperCategoryArchiveDialog(null)} />
+              <DialogActions
+                busy={saving}
+                confirmLabel={saving ? 'Archiving...' : 'Archive group'}
+                onCancel={() => setSuperCategoryArchiveDialog(null)}
+              />
             </form>
           </DialogFrame>
         </ViewportModal>
@@ -732,10 +863,17 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                Archive <span className="font-semibold text-slate-900">{categoryArchiveDialog.category.name}</span>.
-                It will disappear from active lists but remain available in historical records.
+                Archive{' '}
+                <span className="font-semibold text-slate-900">
+                  {categoryArchiveDialog.category.name}
+                </span>
+                . It will disappear from active lists but remain available in historical records.
               </p>
-              <DialogActions busy={saving} confirmLabel={saving ? 'Archiving...' : 'Archive category'} onCancel={() => setCategoryArchiveDialog(null)} />
+              <DialogActions
+                busy={saving}
+                confirmLabel={saving ? 'Archiving...' : 'Archive category'}
+                onCancel={() => setCategoryArchiveDialog(null)}
+              />
             </form>
           </DialogFrame>
         </ViewportModal>
@@ -743,11 +881,15 @@ export function SettingsClient({
 
       <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Personal Information</h2>
-        <p className="mt-2 text-base text-slate-500">Your identity across the Fairsplit platform.</p>
+        <p className="mt-2 text-base text-slate-500">
+          Your identity across the Fairsplit platform.
+        </p>
 
         <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
           <h3 className="text-base font-semibold text-slate-900">Invite Someone</h3>
-          <p className="mt-1 text-xs text-slate-600">Generate a one-time code so another person can join your household.</p>
+          <p className="mt-1 text-xs text-slate-600">
+            Generate a one-time code so another person can join your household.
+          </p>
           <button
             className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={inviteLoading}
@@ -758,7 +900,9 @@ export function SettingsClient({
           </button>
           {inviteCode ? (
             <div className="mt-3 rounded-lg border border-slate-300 bg-white/90 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Invite code</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Invite code
+              </p>
               <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-bold tracking-[0.15em] text-slate-900">{inviteCode}</p>
                 <button
@@ -770,19 +914,27 @@ export function SettingsClient({
                 </button>
               </div>
               {inviteExpiresAt ? (
-                <p className="mt-1 text-xs text-slate-500">Expires: {new Date(inviteExpiresAt).toLocaleString()}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Expires: {new Date(inviteExpiresAt).toLocaleString()}
+                </p>
               ) : null}
             </div>
           ) : null}
         </div>
 
         {inviteError ? (
-          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            aria-live="assertive"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             {inviteError}
           </div>
         ) : null}
         {inviteSuccess ? (
-          <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          <div
+            aria-live="polite"
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          >
             {inviteSuccess}
           </div>
         ) : null}
@@ -808,7 +960,9 @@ export function SettingsClient({
                   {profileSaving ? 'Updating...' : 'Update'}
                 </button>
               </div>
-              <p className="mt-3 text-sm text-slate-500">This is how your partner will see you in shared expenses.</p>
+              <p className="mt-3 text-sm text-slate-500">
+                This is how your partner will see you in shared expenses.
+              </p>
             </div>
 
             <div className="min-w-0">
@@ -817,7 +971,12 @@ export function SettingsClient({
                 <span className="min-w-0 truncate text-base font-medium text-slate-500">
                   {currentUserEmail ?? 'No email available in this session'}
                 </span>
-                <svg aria-hidden="true" className="ml-3 h-6 w-6 shrink-0 text-ink-soft" fill="currentColor" viewBox="0 0 20 20">
+                <svg
+                  aria-hidden="true"
+                  className="ml-3 h-6 w-6 shrink-0 text-ink-soft"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
                   <path d="M5.5 8V6a4.5 4.5 0 1 1 9 0v2h.25A2.25 2.25 0 0 1 17 10.25v5.5A2.25 2.25 0 0 1 14.75 18h-9.5A2.25 2.25 0 0 1 3 15.75v-5.5A2.25 2.25 0 0 1 5.25 8h.25Zm7.5 0V6a3 3 0 1 0-6 0v2h6Z" />
                 </svg>
               </div>
@@ -825,13 +984,38 @@ export function SettingsClient({
           </div>
         </div>
 
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900">Session</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Sign out from this device when you are done.
+              </p>
+            </div>
+            <form action="/logout" className="w-full sm:w-auto" method="post">
+              <button
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+                type="submit"
+              >
+                Log out
+              </button>
+            </form>
+          </div>
+        </div>
+
         {profileError ? (
-          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            aria-live="assertive"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             {profileError}
           </div>
         ) : null}
         {profileSuccess ? (
-          <div aria-live="polite" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          <div
+            aria-live="polite"
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          >
             {profileSuccess}
           </div>
         ) : null}
@@ -839,10 +1023,15 @@ export function SettingsClient({
 
       <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Super Categories</h2>
-        <p className="mt-2 text-base text-slate-500">Default system groups for high-level tracking.</p>
+        <p className="mt-2 text-base text-slate-500">
+          Default system groups for high-level tracking.
+        </p>
 
         {superCategoryError ? (
-          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            aria-live="assertive"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             {superCategoryError}
           </div>
         ) : null}
@@ -904,7 +1093,16 @@ export function SettingsClient({
                     onClick={() => void onRenameSuperCategory(superCategory)}
                     size="icon"
                   >
-                    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                    <svg
+                      aria-hidden="true"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
                       <path d="M12 20h9" />
                       <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
                     </svg>
@@ -926,7 +1124,16 @@ export function SettingsClient({
                       onClick={() => void onArchiveSuperCategory(superCategory)}
                       size="icon"
                     >
-                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M3 7h18" />
                         <path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7" />
                         <path d="M9 11h6" />
@@ -955,7 +1162,9 @@ export function SettingsClient({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-slate-900">Detailed Categories</h2>
-            <p className="mt-2 text-base text-slate-500">Map specific spending labels to your super categories.</p>
+            <p className="mt-2 text-base text-slate-500">
+              Map specific spending labels to your super categories.
+            </p>
           </div>
           <span className="inline-flex w-fit items-center rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">
             {unassignedCategoryCount} UNASSIGNED
@@ -1006,7 +1215,10 @@ export function SettingsClient({
         </div>
 
         {categoryError ? (
-          <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            aria-live="assertive"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             {categoryError}
           </div>
         ) : null}
@@ -1028,7 +1240,10 @@ export function SettingsClient({
                       aria-hidden="true"
                       className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${getCategoryIconClasses(category)}`}
                     >
-                      {renderMappedCategoryIcon(category.superCategoryName, Boolean(category.archivedAt))}
+                      {renderMappedCategoryIcon(
+                        category.superCategoryName,
+                        Boolean(category.archivedAt),
+                      )}
                     </span>
 
                     <div className="min-w-0">
@@ -1042,14 +1257,24 @@ export function SettingsClient({
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-medium text-ink-soft">
                         <span className="inline-flex items-center gap-1">
-                          <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                          <svg
+                            aria-hidden="true"
+                            className="h-4 w-4"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
                             <path d="M5 2.5A2.5 2.5 0 0 0 2.5 5v10A2.5 2.5 0 0 0 5 17.5h10a2.5 2.5 0 0 0 2.5-2.5V5A2.5 2.5 0 0 0 15 2.5H5Zm1 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h6a1 1 0 1 1 0 2H6Z" />
                           </svg>
                           {formatCountLabel(category.expenseCount, 'expense', 'expenses')}
                         </span>
                         <span aria-hidden="true" className="h-1 w-1 rounded-full bg-slate-300" />
                         <span className="inline-flex items-center gap-1">
-                          <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                          <svg
+                            aria-hidden="true"
+                            className="h-4 w-4"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
                             <path d="M7 2.5a1 1 0 0 0 0 2h.5v4.07L4.56 12.4a1 1 0 0 0 .74 1.75H9v3.35a1 1 0 1 0 2 0V14.15h3.7a1 1 0 0 0 .74-1.75L12.5 8.57V4.5h.5a1 1 0 1 0 0-2H7Z" />
                           </svg>
                           {category.fixedExpenseCount} fixed
@@ -1059,7 +1284,10 @@ export function SettingsClient({
                   </div>
                   {!category.archivedAt ? (
                     <div className="mt-3 flex items-center gap-2 text-sm">
-                      <label className="font-medium text-slate-500" htmlFor={`group-${category.id}`}>
+                      <label
+                        className="font-medium text-slate-500"
+                        htmlFor={`group-${category.id}`}
+                      >
                         Map to:
                       </label>
                       <select
@@ -1079,7 +1307,9 @@ export function SettingsClient({
                       </select>
                     </div>
                   ) : (
-                    <p className="mt-2 text-sm text-slate-500">Group: {category.superCategoryName ?? 'Unassigned'}</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      Group: {category.superCategoryName ?? 'Unassigned'}
+                    </p>
                   )}
                 </div>
 
@@ -1092,7 +1322,16 @@ export function SettingsClient({
                       onClick={() => void onRenameCategory(category)}
                       size="icon"
                     >
-                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M12 20h9" />
                         <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
                       </svg>
@@ -1111,7 +1350,16 @@ export function SettingsClient({
                       onClick={() => void onArchiveCategory(category)}
                       size="icon"
                     >
-                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M3 7h18" />
                         <path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7" />
                         <path d="M9 11h6" />
@@ -1135,7 +1383,16 @@ export function SettingsClient({
                       onClick={() => void onUnarchiveCategory(category)}
                       size="icon"
                     >
-                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <path d="M7 10l5-5 5 5" />
                         <path d="M12 5v12" />
