@@ -51,9 +51,11 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 export function ViewportModal({
   children,
   onDismiss,
+  presentation = 'dialog',
 }: {
   children: ReactNode;
   onDismiss?: () => void;
+  presentation?: 'dialog' | 'page';
 }) {
   const [isMounted, setIsMounted] = useState(false);
   const [bounds, setBounds] = useState<ViewportBounds>(() => readViewportBounds());
@@ -155,6 +157,8 @@ export function ViewportModal({
     return null;
   }
 
+  const isPagePresentation = presentation === 'page';
+
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const dialogRoot = dialogRootRef.current;
     if (!dialogRoot) {
@@ -200,7 +204,9 @@ export function ViewportModal({
 
   return createPortal(
     <div
-      className="fixed z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className={`fixed z-50 flex ${
+        isPagePresentation ? 'items-stretch justify-stretch bg-transparent p-0' : 'items-center justify-center bg-slate-900/40 p-4'
+      }`}
       onClick={onDismiss}
       onKeyDown={handleKeyDown}
       style={{
@@ -211,6 +217,7 @@ export function ViewportModal({
       }}
     >
       <div
+        className={isPagePresentation ? 'h-full w-full' : undefined}
         ref={dialogRootRef}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
