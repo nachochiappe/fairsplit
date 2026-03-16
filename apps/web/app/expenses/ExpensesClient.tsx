@@ -377,6 +377,40 @@ function formatMobileExpenseAmount(value: string): string {
   }).format(amount);
 }
 
+function formatOrdinalDayFromDateInput(value: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return 'scheduled day';
+  }
+
+  const day = date.getDate();
+  const mod10 = day % 10;
+  const mod100 = day % 100;
+
+  if (mod10 === 1 && mod100 !== 11) {
+    return `${day}st`;
+  }
+  if (mod10 === 2 && mod100 !== 12) {
+    return `${day}nd`;
+  }
+  if (mod10 === 3 && mod100 !== 13) {
+    return `${day}rd`;
+  }
+  return `${day}th`;
+}
+
+function formatMonthHeading(value: string): string {
+  const date = new Date(`${value}-01T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 function getSortFieldLabel(sortField: ExpenseSortField): string {
   if (sortField === 'amountArs') {
     return 'Amount';
@@ -852,6 +886,8 @@ export function ExpensesClient({
   const watchedApplyToFuture = useWatch({ control: form.control, name: 'applyToFuture' });
   const watchedFixedEnabled = useWatch({ control: form.control, name: 'fixedEnabled' });
   const watchedNextMonthExpense = useWatch({ control: form.control, name: 'nextMonthExpense' });
+  const watchedDate = useWatch({ control: form.control, name: 'date' });
+  const watchedPaidByUserId = useWatch({ control: form.control, name: 'paidByUserId' });
 
   useEffect(() => {
     if (watchedInstallmentEnabled) {
@@ -1892,6 +1928,302 @@ export function ExpensesClient({
     </>
   );
 
+  void expenseFormFields;
+
+  const mobileSectionClass =
+    'space-y-3.5 rounded-[24px] border border-slate-300/20 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]';
+  const mobileFieldLabelClass =
+    'mb-1 block text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-500';
+  const mobileInputClass =
+    'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+  const mobileToggleRowClass =
+    'flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3 text-sm text-slate-800';
+
+  const mobileExpenseFormFields = (
+    <>
+      <section className={mobileSectionClass}>
+        <h3 className="text-[18px] font-semibold text-slate-900">Expense details</h3>
+
+        <label className="block text-sm">
+          <span className={mobileFieldLabelClass}>Date</span>
+          <input
+            className={`${mobileInputClass} [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
+            lang="en"
+            type="date"
+            {...form.register('date')}
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className={mobileFieldLabelClass}>Description</span>
+          <input className={mobileInputClass} {...form.register('description')} />
+        </label>
+
+        <label className="block text-sm">
+          <span className={mobileFieldLabelClass}>Category</span>
+          <select className={mobileInputClass} {...form.register('categoryId')}>
+            {sortedActiveCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid grid-cols-[8.75rem_minmax(0,1fr)] gap-3">
+          <label className="block text-sm">
+            <span className={mobileFieldLabelClass}>Currency</span>
+            <select className={mobileInputClass} {...form.register('currencyCode')}>
+              {supportedCurrencyCodes.map((currencyCode) => (
+                <option key={currencyCode} value={currencyCode}>
+                  {currencyCode}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm">
+            <span className={mobileFieldLabelClass}>Amount</span>
+            <div className="relative">
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
+                $
+              </span>
+              <Controller
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <input
+                    className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={field.value ?? ''}
+                    onBlur={field.onBlur}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      field.onChange(nextValue === '' ? undefined : Number(nextValue));
+                    }}
+                    name={field.name}
+                    ref={field.ref}
+                  />
+                )}
+              />
+            </div>
+          </label>
+        </div>
+
+        {watchedCurrencyCode !== 'ARS' ? (
+          <label className="block text-sm">
+            <span className={mobileFieldLabelClass}>FX to ARS</span>
+            <div className="relative">
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
+                $
+              </span>
+              <input
+                className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                min="0"
+                step="0.000001"
+                type="number"
+                {...form.register('fxRate')}
+              />
+            </div>
+          </label>
+        ) : null}
+
+        {watchedCurrencyCode !== 'ARS' && projectedArsAmount !== null ? (
+          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            Estimated ARS amount: {formatMoney(projectedArsAmount.toFixed(2))}
+          </div>
+        ) : null}
+
+        <label className="block text-sm">
+          <div className="flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3">
+            <div className="min-w-0">
+              <span className="block font-semibold text-slate-900">Paid by</span>
+              <span className="block text-[13px] leading-4 text-slate-500">Who covered this expense</span>
+            </div>
+            <div className="relative shrink-0">
+              <select
+                className="rounded-full border border-slate-300/50 bg-white px-4 py-2 pr-8 text-[13px] font-bold text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                {...form.register('paidByUserId')}
+              >
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center text-slate-400">
+                ⌄
+              </span>
+            </div>
+          </div>
+        </label>
+      </section>
+
+      <section className={mobileSectionClass}>
+        <h3 className="text-[18px] font-semibold text-slate-900">Behavior</h3>
+        <div className="space-y-2.5">
+          <label className={mobileToggleRowClass}>
+            <span className="font-medium">Recurring expense</span>
+            <span className="relative inline-flex items-center">
+              <input
+                checked={watchedFixedEnabled}
+                className="peer sr-only"
+                onChange={(event) => {
+                  form.setValue('fixedEnabled', event.target.checked, { shouldDirty: true, shouldTouch: true });
+                }}
+                type="checkbox"
+              />
+              <span aria-hidden="true" className={pillToggleTrackClass} />
+              <span aria-hidden="true" className={pillToggleThumbClass} />
+            </span>
+          </label>
+
+          <label className={mobileToggleRowClass}>
+            <span className="font-medium">Next-month expense</span>
+            <span className="relative inline-flex items-center">
+              <input
+                checked={watchedNextMonthExpense}
+                className="peer sr-only"
+                onChange={(event) => {
+                  form.setValue('nextMonthExpense', event.target.checked, { shouldDirty: true, shouldTouch: true });
+                }}
+                type="checkbox"
+              />
+              <span aria-hidden="true" className={pillToggleTrackClass} />
+              <span aria-hidden="true" className={pillToggleThumbClass} />
+            </span>
+          </label>
+
+          <label className={mobileToggleRowClass}>
+            <span className="min-w-0">
+              <span className="block font-medium">Installments</span>
+              <span className="block text-[13px] leading-4 text-slate-500">Split into multiple monthly charges</span>
+            </span>
+            <span className="relative inline-flex items-center">
+              <input
+                checked={watchedInstallmentEnabled}
+                className="peer sr-only"
+                onChange={(event) => {
+                  form.setValue('installmentEnabled', event.target.checked, { shouldDirty: true, shouldTouch: true });
+                }}
+                type="checkbox"
+              />
+              <span aria-hidden="true" className={pillToggleTrackClass} />
+              <span aria-hidden="true" className={pillToggleThumbClass} />
+            </span>
+          </label>
+        </div>
+      </section>
+
+      {watchedInstallmentEnabled ? (
+        <section className={mobileSectionClass}>
+          <h3 className="text-[18px] font-semibold text-slate-900">Installment setup</h3>
+          <label className="block text-sm">
+            <span className={mobileFieldLabelClass}>Installment count</span>
+            <input className={mobileInputClass} min="2" type="number" {...form.register('installmentCount')} />
+          </label>
+          <label className="block text-sm">
+            <span className={mobileFieldLabelClass}>Entry mode</span>
+            <select className={mobileInputClass} {...form.register('installmentEntryMode')}>
+              <option value="perInstallment">Per installment amount</option>
+              <option value="total">Total amount</option>
+            </select>
+          </label>
+          {watchedInstallmentEntryMode === 'total' ? (
+            <label className="block text-sm">
+              <span className={mobileFieldLabelClass}>Total amount</span>
+              <div className="relative">
+                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
+                  $
+                </span>
+                <Controller
+                  control={form.control}
+                  name="totalAmount"
+                  render={({ field }) => (
+                    <input
+                      className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={field.value ?? ''}
+                      onBlur={field.onBlur}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        field.onChange(nextValue === '' ? undefined : Number(nextValue));
+                      }}
+                      name={field.name}
+                      ref={field.ref}
+                    />
+                  )}
+                />
+              </div>
+            </label>
+          ) : null}
+          {installmentPreview ? (
+            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              {installmentPreview.count} installments: first {formatMoney(installmentPreview.first)} and last {formatMoney(installmentPreview.last)} (total {formatMoney(installmentPreview.total)})
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {watchedFixedEnabled ? (
+        <section className="space-y-3 rounded-[24px] border border-indigo-200/30 bg-gradient-to-br from-slate-50 to-indigo-50/50 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-[18px] font-semibold text-slate-900">Recurring schedule</h3>
+              <p className="text-[14px] leading-5 text-slate-600">
+                This will repeat every month on the {formatOrdinalDayFromDateInput(watchedDate ?? getTodayDateInputValue())}.
+              </p>
+            </div>
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm">↺</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">Starts this month</span>
+            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">Editable later</span>
+          </div>
+        </section>
+      ) : null}
+
+      {!editingExpenseId && submissionToast ? (
+        <div
+          aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
+          className={`relative inline-flex min-h-[44px] w-full items-center gap-2 overflow-hidden rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm ${
+            submissionToast.kind === 'loading'
+              ? 'border-slate-300 bg-white text-slate-800'
+              : submissionToast.kind === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-rose-200 bg-rose-50 text-rose-800'
+          }`}
+          role={submissionToast.kind === 'error' ? 'alert' : 'status'}
+        >
+          <span className="truncate">{submissionToast.message ?? submissionToast.title}</span>
+        </div>
+      ) : null}
+
+      <div className="space-y-2.5">
+        <button
+          className="inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[18px] bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-3 text-base font-extrabold text-white shadow-[0_14px_28px_rgba(99,102,241,0.25)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={saving}
+          type="submit"
+        >
+          {!editingExpenseId && saving ? (
+            <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white" />
+          ) : null}
+          {editingExpenseId ? 'Save changes' : saving ? 'Saving...' : 'Save expense'}
+        </button>
+        <button
+          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-300/40 bg-white px-4 py-3 text-sm font-bold text-slate-700"
+          onClick={closeMobileComposer}
+          type="button"
+        >
+          Cancel
+        </button>
+      </div>
+    </>
+  );
+
   const sectionSummaries = useMemo(() => {
     const sectionData: Array<{
       key: ExpenseSectionKey;
@@ -2035,16 +2367,14 @@ export function ExpensesClient({
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-lg font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</p>
-                <p className="text-sm text-slate-500">{month}</p>
+                <p className="text-sm text-slate-500">{formatMonthHeading(month)}</p>
               </div>
               </div>
             </div>
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} ref={expenseFormRef}>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
                 <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-4">
-                  <div className="space-y-3 rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_18px_40px_rgba(15,23,42,0.08)]">
-                  {expenseFormFields}
-                  </div>
+                  {mobileExpenseFormFields}
                 </div>
               </div>
             </form>
@@ -2087,17 +2417,17 @@ export function ExpensesClient({
             </div>
 
             <form
-              className="hidden min-w-0 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 shadow-[0_8px_24px_rgba(15,23,42,0.08)] md:block"
+              className="hidden min-w-0 space-y-4 md:block"
               onSubmit={submit}
               ref={expenseFormRef}
             >
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-base font-semibold text-slate-900">
+              <div className="px-1">
+                <h2 className="text-lg font-semibold text-slate-900">
                   {editingExpenseId ? 'Edit expense' : 'Add expense'}
                 </h2>
               </div>
-              <div className="mt-3 space-y-3" id="add-expense-panel">
-                {expenseFormFields}
+              <div className="space-y-4" id="add-expense-panel">
+                {mobileExpenseFormFields}
               </div>
             </form>
 
