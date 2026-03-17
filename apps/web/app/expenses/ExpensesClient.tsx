@@ -483,7 +483,7 @@ function MobileExpenseCard({
   return (
     <div
       className="relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-slate-100/80 touch-pan-y"
-      data-mobile-expense-actions
+      data-expense-actions
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
       onTouchStart={handleTouchStart}
@@ -550,6 +550,105 @@ function MobileExpenseCard({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+interface DesktopExpenseActionMenuProps {
+  expenseId: string;
+  isOpen: boolean;
+  onOpenChange: (nextOpen: boolean) => void;
+  onEdit: () => void;
+  onClone: () => void;
+  onDelete: () => void;
+}
+
+function DesktopExpenseActionMenu({
+  expenseId,
+  isOpen,
+  onOpenChange,
+  onEdit,
+  onClone,
+  onDelete,
+}: DesktopExpenseActionMenuProps) {
+  const menuId = `expense-actions-${expenseId}`;
+  const menuItemClass =
+    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+
+  return (
+    <div className="relative inline-flex justify-end" data-expense-actions>
+      <button
+        aria-controls={menuId}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        aria-label="Open expense actions"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+        onClick={() => onOpenChange(!isOpen)}
+        type="button"
+      >
+        <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="5" r="1.9" />
+          <circle cx="12" cy="12" r="1.9" />
+          <circle cx="12" cy="19" r="1.9" />
+        </svg>
+      </button>
+
+      {isOpen ? (
+        <div
+          className="absolute right-0 top-full z-20 mt-2 min-w-[160px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]"
+          id={menuId}
+          role="menu"
+        >
+          <button
+            className={menuItemClass}
+            onClick={() => {
+              onOpenChange(false);
+              onEdit();
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            Edit
+          </button>
+          <button
+            className={menuItemClass}
+            onClick={() => {
+              onOpenChange(false);
+              onClone();
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <rect height="13" rx="2" width="13" x="9" y="9" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            Clone
+          </button>
+          <button
+            className={`${menuItemClass} text-red-700 hover:bg-red-50 hover:text-red-700`}
+            onClick={() => {
+              onOpenChange(false);
+              onDelete();
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M3 6h18" />
+              <path d="M8 6V4h8v2" />
+              <path d="M19 6l-1 14H6L5 6" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -639,8 +738,9 @@ export function ExpensesClient({
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const hasSearchQuery = searchQuery.trim().length > 0;
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
+  const [isDesktopFxEditing, setIsDesktopFxEditing] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
-  const [openMobileActionMenuId, setOpenMobileActionMenuId] = useState<string | null>(null);
+  const [openExpenseActionMenuId, setOpenExpenseActionMenuId] = useState<string | null>(null);
   const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
   const expensesRef = useRef(expenses);
   const submissionToastTimeoutRef = useRef<number | null>(null);
@@ -663,7 +763,7 @@ export function ExpensesClient({
   }, [fetchBatchSize]);
 
   useEffect(() => {
-    if (!openMobileActionMenuId) {
+    if (!openExpenseActionMenuId) {
       return;
     }
 
@@ -673,18 +773,35 @@ export function ExpensesClient({
         return;
       }
 
-      if (target.closest('[data-mobile-expense-actions]')) {
+      if (target.closest('[data-expense-actions]')) {
         return;
       }
 
-      setOpenMobileActionMenuId(null);
+      setOpenExpenseActionMenuId(null);
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [openMobileActionMenuId]);
+  }, [openExpenseActionMenuId]);
+
+  useEffect(() => {
+    if (!openExpenseActionMenuId) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenExpenseActionMenuId(null);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openExpenseActionMenuId]);
 
   useEffect(() => {
     if (!submissionToast || submissionToast.kind === 'loading') {
@@ -2224,6 +2341,25 @@ export function ExpensesClient({
     </>
   );
 
+  const fxRatePills = (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {exchangeRates.length === 0 ? (
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+          No rates yet
+        </span>
+      ) : (
+        exchangeRates.map((rate) => (
+          <span
+            key={rate.id}
+            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+          >
+            {rate.currencyCode} {formatFxRate(rate.rateToArs)}
+          </span>
+        ))
+      )}
+    </div>
+  );
+
   const sectionSummaries = useMemo(() => {
     const sectionData: Array<{
       key: ExpenseSectionKey;
@@ -2435,35 +2571,32 @@ export function ExpensesClient({
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="text-base font-semibold text-slate-900">Default FX rates</h3>
-                  <div className="mt-2 flex flex-wrap gap-2 md:hidden">
-                    {exchangeRates.length === 0 ? (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                        No rates yet
-                      </span>
-                    ) : (
-                      exchangeRates.map((rate) => (
-                        <span
-                          key={rate.id}
-                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
-                        >
-                          {rate.currencyCode} {formatFxRate(rate.rateToArs)}
-                        </span>
-                      ))
-                    )}
-                  </div>
+                  {fxRatePills}
                 </div>
                 <button
                   aria-controls="fx-defaults-panel"
                   aria-expanded={isMobileFxOpen}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
                   onClick={() => setIsMobileFxOpen((isOpen) => !isOpen)}
                   type="button"
                 >
                   {isMobileFxOpen ? 'Close' : 'Edit'}
                 </button>
+                <button
+                  aria-controls="fx-defaults-panel"
+                  aria-expanded={isDesktopFxEditing}
+                  className="hidden min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:inline-flex"
+                  onClick={() => setIsDesktopFxEditing((isEditing) => !isEditing)}
+                  type="button"
+                >
+                  {isDesktopFxEditing ? 'Close' : 'Edit'}
+                </button>
               </div>
 
-              <div className={`${isMobileFxOpen ? 'mt-3 block' : 'hidden'} md:mt-3 md:block`} id="fx-defaults-panel">
+              <div
+                className={`${isMobileFxOpen || isDesktopFxEditing ? 'mt-3 block' : 'hidden'}`}
+                id="fx-defaults-panel"
+              >
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr_auto]">
                   <select
                     className={fieldClass}
@@ -2493,14 +2626,6 @@ export function ExpensesClient({
                   <button className={primaryButtonClass} onClick={() => void onSaveExchangeRate()} type="button">
                     Save
                   </button>
-                </div>
-                <div className="mt-3 hidden space-y-1 text-sm text-slate-700 md:block">
-                  {exchangeRates.length === 0 ? <p>No FX defaults for this month.</p> : null}
-                  {exchangeRates.map((rate) => (
-                    <p key={rate.id}>
-                      {rate.currencyCode}: {formatFxRate(rate.rateToArs)}
-                    </p>
-                  ))}
                 </div>
               </div>
             </section>
@@ -2840,20 +2965,20 @@ export function ExpensesClient({
                             key={expense.id}
                             expense={expense}
                             formatFxRate={formatFxRate}
-                            isOpen={openMobileActionMenuId === expense.id}
+                            isOpen={openExpenseActionMenuId === expense.id}
                             onClone={() => {
-                              setOpenMobileActionMenuId(null);
+                              setOpenExpenseActionMenuId(null);
                               void cloneExpense(expense);
                             }}
                             onDelete={() => {
-                              setOpenMobileActionMenuId(null);
+                              setOpenExpenseActionMenuId(null);
                               void removeExpense(expense);
                             }}
                             onEdit={() => {
-                              setOpenMobileActionMenuId(null);
+                              setOpenExpenseActionMenuId(null);
                               startEdit(expense);
                             }}
-                            onOpenChange={(nextOpen) => setOpenMobileActionMenuId(nextOpen ? expense.id : null)}
+                            onOpenChange={(nextOpen) => setOpenExpenseActionMenuId(nextOpen ? expense.id : null)}
                           />
                         ))}
                         {section.rows.length === 0 ? (
@@ -2870,12 +2995,12 @@ export function ExpensesClient({
                         >
                           <caption className="sr-only">{section.title}</caption>
                           <colgroup>
-                            <col className="w-[15%]" />
-                            <col className="w-[22%]" />
                             <col className="w-[14%]" />
-                            <col className="w-[19%]" />
-                            <col className="w-[12%]" />
-                            <col className="w-[18%]" />
+                            <col className="w-[24%]" />
+                            <col className="w-[14%]" />
+                            <col className="w-[22%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[10%]" />
                           </colgroup>
                           <thead className="bg-white text-left text-slate-600">
                             <tr>
@@ -2894,8 +3019,8 @@ export function ExpensesClient({
                               <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
                                 Paid by
                               </th>
-                              <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                                Actions
+                              <th className="whitespace-nowrap px-4 py-3 text-right font-medium" scope="col">
+                                <span className="sr-only">Actions</span>
                               </th>
                             </tr>
                           </thead>
@@ -2919,30 +3044,15 @@ export function ExpensesClient({
                                   ) : null}
                                 </td>
                                 <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
-                                <td className="whitespace-nowrap px-4 py-3">
-                                  <div className="flex gap-2">
-                                    <ActionButton action="edit" aria-label="Edit expense" onClick={() => startEdit(expense)} size="icon">
-                                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                        <path d="M12 20h9" />
-                                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-                                      </svg>
-                                    </ActionButton>
-                                    <ActionButton action="clone" aria-label="Clone expense" onClick={() => void cloneExpense(expense)} size="icon">
-                                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                        <rect height="13" rx="2" width="13" x="9" y="9" />
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                      </svg>
-                                    </ActionButton>
-                                    <ActionButton action="delete" aria-label="Delete expense" onClick={() => void removeExpense(expense)} size="icon">
-                                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                                        <path d="M3 6h18" />
-                                        <path d="M8 6V4h8v2" />
-                                        <path d="M19 6l-1 14H6L5 6" />
-                                        <path d="M10 11v6" />
-                                        <path d="M14 11v6" />
-                                      </svg>
-                                    </ActionButton>
-                                  </div>
+                                <td className="whitespace-nowrap px-4 py-3 text-right">
+                                  <DesktopExpenseActionMenu
+                                    expenseId={expense.id}
+                                    isOpen={openExpenseActionMenuId === expense.id}
+                                    onClone={() => void cloneExpense(expense)}
+                                    onDelete={() => void removeExpense(expense)}
+                                    onEdit={() => startEdit(expense)}
+                                    onOpenChange={(nextOpen) => setOpenExpenseActionMenuId(nextOpen ? expense.id : null)}
+                                  />
                                 </td>
                               </tr>
                             ))}
