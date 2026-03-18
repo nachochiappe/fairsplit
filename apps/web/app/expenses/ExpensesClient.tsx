@@ -2160,7 +2160,7 @@ export function ExpensesClient({
             </div>
             <div className="relative shrink-0">
               <select
-                className="rounded-full border border-slate-300/50 bg-white px-4 py-2 pr-8 text-[13px] font-bold text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="rounded-full border border-slate-300/50 bg-white px-4 py-2 text-[13px] font-bold text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 {...form.register('paidByUserId')}
               >
                 {users.map((user) => (
@@ -2169,9 +2169,6 @@ export function ExpensesClient({
                   </option>
                 ))}
               </select>
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center text-slate-400">
-                ⌄
-              </span>
             </div>
           </div>
         </label>
