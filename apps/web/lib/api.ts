@@ -201,6 +201,11 @@ export async function getUsers(init?: NextRequestInit): Promise<User[]> {
   return parseResponse<User[]>(response);
 }
 
+export async function getUser(id: string, init?: NextRequestInit): Promise<User> {
+  const response = await fetchFromApi(`${API_BASE_URL}/users/${encodeURIComponent(id)}`, init ?? { cache: 'no-store' });
+  return parseResponse<User>(response);
+}
+
 export async function updateUser(id: string, payload: { name: string }): Promise<User> {
   const endpoint =
     typeof window === 'undefined' ? `${API_BASE_URL}/users/${encodeURIComponent(id)}` : `/api/users/${encodeURIComponent(id)}`;

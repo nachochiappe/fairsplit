@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { getCategories, getSuperCategories, getUsers } from '../../lib/api';
+import { getCategories, getSuperCategories, getUser } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SettingsClient } from './SettingsClient';
@@ -19,21 +19,18 @@ export default async function SettingsPage() {
     sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
   );
 
-  const [categories, superCategories, users] = await withServerApiLogging(
+  const sessionUserId = session?.userId ?? null;
+
+  const [categories, superCategories, currentUser] = await withServerApiLogging(
     requestId,
     { month, route: '/settings' },
     async () =>
       Promise.all([
         getCategories(serverReadInit),
         getSuperCategories(serverReadInit),
-        getUsers(serverReadInit),
+        sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
       ]),
   );
-
-  const sessionUserId = session?.userId ?? null;
-  const currentUser = sessionUserId
-    ? users.find((user) => user.id === sessionUserId) ?? null
-    : null;
 
   return (
     <SettingsClient

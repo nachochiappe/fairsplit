@@ -163,6 +163,21 @@ describe('tenant isolation', () => {
     expect(response.body.warnings).toEqual([]);
   });
 
+  it('does not allow reading another user profile by id', async () => {
+    const ownProfileResponse = await request(app)
+      .get(`/api/users/${encodeURIComponent(requesterUserId)}`)
+      .set('x-fairsplit-session', requesterSessionToken);
+    expect(ownProfileResponse.status).toBe(200);
+    expect(ownProfileResponse.body.id).toBe(requesterUserId);
+    expect(ownProfileResponse.body.email).toBe(null);
+
+    const otherProfileResponse = await request(app)
+      .get(`/api/users/${encodeURIComponent(otherUserId)}`)
+      .set('x-fairsplit-session', requesterSessionToken);
+    expect(otherProfileResponse.status).toBe(403);
+    expect(otherProfileResponse.body.error).toBe('You can only access your own profile.');
+  });
+
   it('does not generate installment rows for another household on read', async () => {
     const createResponse = await request(app)
       .post('/api/expenses')
