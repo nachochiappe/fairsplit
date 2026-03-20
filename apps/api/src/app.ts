@@ -847,6 +847,36 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     );
   });
 
+  app.get('/api/users/:id', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const rawUserId = req.params.id;
+    const userId = Array.isArray(rawUserId) ? rawUserId[0]?.trim() : rawUserId?.trim();
+    if (!userId) {
+      return res.status(400).json({ error: 'User id is required' });
+    }
+    if (userId !== auth.userId) {
+      return res.status(403).json({ error: 'You can only access your own profile.' });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { id: userId, householdId: auth.householdId },
+    });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      createdAt: user.createdAt.toISOString(),
+    });
+  });
+
   app.post('/api/users', async (req: Request, res: Response) => {
     const auth = await requireAuthContext(req, res);
     if (!auth) {
