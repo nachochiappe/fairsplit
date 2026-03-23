@@ -2045,8 +2045,6 @@ export function ExpensesClient({
     </>
   );
 
-  void expenseFormFields;
-
   const mobileSectionClass =
     'space-y-3.5 rounded-[24px] border border-slate-300/20 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]';
   const mobileFieldLabelClass =
@@ -2549,20 +2547,22 @@ export function ExpensesClient({
               </button>
             </div>
 
-            <form
-              className="hidden min-w-0 space-y-4 md:block"
-              onSubmit={submit}
-              ref={expenseFormRef}
-            >
-              <div className="px-1">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  {editingExpenseId ? 'Edit expense' : 'Add expense'}
-                </h2>
-              </div>
-              <div className="space-y-4" id="add-expense-panel">
-                {mobileExpenseFormFields}
-              </div>
-            </form>
+            {!isMobileAddExpenseOpen ? (
+              <form
+                className="hidden min-w-0 space-y-4 md:block"
+                onSubmit={submit}
+                ref={expenseFormRef}
+              >
+                <div className="px-1">
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    {editingExpenseId ? 'Edit expense' : 'Add expense'}
+                  </h2>
+                </div>
+                <div className="space-y-4" id="add-expense-panel">
+                  {expenseFormFields}
+                </div>
+              </form>
+            ) : null}
 
             <section className={cardClass}>
               <div className="flex items-center justify-between gap-3">
