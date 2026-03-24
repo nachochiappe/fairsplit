@@ -1688,12 +1688,14 @@ export function ExpensesClient({
 
         <label className="block text-sm">
           <span className={mobileFieldLabelClass}>Date</span>
-          <input
-            className={`${mobileInputClass} [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
-            lang="en"
-            type="date"
-            {...form.register('date')}
-          />
+          <div className="w-full overflow-hidden">
+            <input
+              className={`${mobileInputClass} [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
+              lang="en"
+              type="date"
+              {...form.register('date')}
+            />
+          </div>
         </label>
 
         <label className="block text-sm">
