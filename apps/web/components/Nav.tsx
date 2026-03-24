@@ -94,8 +94,8 @@ export function Nav({ month }: { month: string }) {
   return (
     <>
       <nav
-        aria-label="Primary"
-        className="mb-8 hidden grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white p-2 shadow-sm md:grid md:grid-cols-4"
+        aria-label="Primary navigation"
+        className="mb-8 hidden grid-cols-2 gap-2 rounded-2xl border border-stroke/80 bg-surface p-2 shadow-sm md:grid md:grid-cols-4"
       >
         {links.map((link) => {
           const href = month && link.monthScoped ? `${link.href}?month=${month}` : link.href;
@@ -103,16 +103,17 @@ export function Nav({ month }: { month: string }) {
 
           return (
             <Link
-              className={`rounded-xl px-4 py-3 text-center text-base font-semibold ${
+              className={`flex flex-col items-center gap-1.5 rounded-xl px-4 py-3 text-center text-sm font-semibold ${
                 isCurrent
                   ? 'bg-brand-600 text-white shadow-md shadow-brand-700/25'
-                  : 'text-slate-500 hover:text-slate-800'
+                  : 'text-ink-soft hover:text-ink-strong'
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2`}
               key={link.href}
               href={href}
               prefetch={false}
               aria-current={isCurrent ? 'page' : undefined}
             >
+              {link.icon}
               {link.label}
             </Link>
           );
@@ -121,8 +122,8 @@ export function Nav({ month }: { month: string }) {
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:hidden">
         <nav
-          aria-label="Primary"
-          className="pointer-events-auto mx-auto flex max-w-md items-center gap-1 rounded-[26px] border border-slate-200/80 bg-white/95 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur"
+          aria-label="Primary navigation"
+          className="pointer-events-auto mx-auto flex max-w-md items-center gap-1 rounded-[26px] border border-stroke/80 bg-surface/95 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur"
         >
           {links.map((link) => {
             const href = month && link.monthScoped ? `${link.href}?month=${month}` : link.href;
@@ -137,10 +138,10 @@ export function Nav({ month }: { month: string }) {
                 className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-[20px] px-2 py-2 text-center transition ${
                   isCurrent
                     ? 'bg-brand-50 text-brand-700 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.12)]'
-                    : 'text-slate-500'
+                    : 'text-ink-soft'
                 } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2`}
               >
-                <span className={isCurrent ? 'text-brand-700' : 'text-slate-400'}>{link.icon}</span>
+                <span className={isCurrent ? 'text-brand-700' : 'text-ink-soft'}>{link.icon}</span>
                 <span className="text-[11px] font-semibold leading-none">{link.label}</span>
               </Link>
             );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/currency';
 import { type Income, type SettlementResponse, type User } from '../../lib/api';
 import Link from 'next/link';
@@ -70,7 +70,7 @@ function DashboardClientContent({
       id="main-content"
       className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-8 md:px-6 md:pb-10 md:pt-10"
     >
-      <header className="mb-7 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm md:p-9">
+      <header className="mb-7 rounded-3xl border border-stroke/80 bg-surface p-6 shadow-sm md:p-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-6">
             <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
@@ -78,10 +78,10 @@ function DashboardClientContent({
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">
                 Fairsplit
               </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">
+              <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink-strong md:text-5xl">
                 Settlement Dashboard
               </h1>
-              <p className="mt-2 max-w-2xl text-base text-slate-600">
+              <p className="mt-2 max-w-2xl text-base text-ink-muted">
                 See fair monthly contributions and transfer recommendation
               </p>
             </div>
@@ -117,19 +117,19 @@ function DashboardClientContent({
           <MetricCard label="Expense ratio" value={formatPercent(settlement.expenseRatio)} />
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-6 md:p-8">
+        <section className="overflow-hidden rounded-2xl border border-stroke/80 bg-surface shadow-sm">
+          <div className="border-b border-stroke/60 p-6 md:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Expenses by category</h2>
-                <p className="mt-1 text-sm text-slate-600">
+                <h2 className="text-xl font-semibold text-ink-strong">Expenses by category</h2>
+                <p className="mt-1 text-sm text-ink-muted">
                   Monthly distribution of expenses in ARS.
                 </p>
               </div>
               <button
                 aria-controls="expense-category-chart-content"
                 aria-expanded={isCategoryChartExpanded}
-                className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="min-h-11 rounded-lg border border-stroke px-3 py-2 text-sm font-medium text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 type="button"
                 onClick={() => setIsCategoryChartExpanded((current) => !current)}
               >
@@ -144,8 +144,8 @@ function DashboardClientContent({
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="divide-y divide-slate-100 md:hidden">
+        <section className="rounded-2xl border border-stroke/80 bg-surface shadow-sm">
+          <div className="divide-y divide-stroke/60 md:hidden">
             {users.map((user) => {
               const difference = Number(settlement.differenceByUser[user.id] ?? 0);
               const isPositiveDifference = difference >= 0;
@@ -154,7 +154,7 @@ function DashboardClientContent({
               return (
                 <article key={user.id} className="space-y-4 px-5 py-5">
                   <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-lg font-semibold text-slate-900">{user.name}</h3>
+                    <h3 className="text-lg font-semibold text-ink-strong">{user.name}</h3>
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-semibold ${
                         isPositiveDifference
@@ -165,8 +165,8 @@ function DashboardClientContent({
                       {isPositiveDifference ? 'Overpaid' : 'Needs to send'}
                     </span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  <div className="rounded-2xl border border-stroke bg-surface-muted/70 px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft">
                       Difference
                     </p>
                     <p
@@ -174,28 +174,28 @@ function DashboardClientContent({
                     >
                       {formatMoney(absoluteDifference)}
                     </p>
-                    <p className="mt-1 text-sm text-slate-600">
+                    <p className="mt-1 text-sm text-ink-muted">
                       {isPositiveDifference
                         ? 'Covered more than fair share this month.'
                         : 'Needs to send this month.'}
                     </p>
                   </div>
-                  <dl className="space-y-3 border-t border-slate-100 pt-3 text-sm">
+                  <dl className="space-y-3 border-t border-stroke/60 pt-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-slate-600">Income</dt>
-                      <dd className="font-medium tabular-nums text-slate-900">
+                      <dt className="text-ink-muted">Income</dt>
+                      <dd className="font-medium tabular-nums text-ink-strong">
                         {formatMoney(incomeByUser[user.id] ?? 0)}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-slate-600">Paid</dt>
-                      <dd className="font-medium tabular-nums text-slate-900">
+                      <dt className="text-ink-muted">Paid</dt>
+                      <dd className="font-medium tabular-nums text-ink-strong">
                         {formatMoney(settlement.paidByUser[user.id] ?? 0)}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-slate-600">Fair share</dt>
-                      <dd className="font-medium tabular-nums text-slate-900">
+                      <dt className="text-ink-muted">Fair share</dt>
+                      <dd className="font-medium tabular-nums text-ink-strong">
                         {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
                       </dd>
                     </div>
@@ -207,7 +207,7 @@ function DashboardClientContent({
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-left text-sm">
               <caption className="sr-only">Monthly settlement by partner</caption>
-              <thead className="bg-slate-50/85 text-slate-500">
+              <thead className="bg-surface-muted/85 text-ink-soft">
                 <tr>
                   <th
                     className="px-5 py-4 text-xs font-bold uppercase tracking-[0.14em] md:px-8"
@@ -241,22 +241,22 @@ function DashboardClientContent({
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-stroke/60">
                 {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50/70">
+                  <tr key={user.id} className="hover:bg-surface-muted/70">
                     <th
-                      className="px-5 py-5 text-left text-lg font-semibold text-slate-900 md:px-8 md:text-xl"
+                      className="px-5 py-5 text-left text-lg font-semibold text-ink-strong md:px-8 md:text-xl"
                       scope="row"
                     >
                       {user.name}
                     </th>
-                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
+                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-ink-strong md:px-8">
                       {formatMoney(incomeByUser[user.id] ?? 0)}
                     </td>
-                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
+                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-ink-strong md:px-8">
                       {formatMoney(settlement.paidByUser[user.id] ?? 0)}
                     </td>
-                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-slate-900 md:px-8">
+                    <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-ink-strong md:px-8">
                       {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
                     </td>
                     <td
@@ -281,21 +281,21 @@ function DashboardClientContent({
           </h2>
           {settlement.transfer ? (
             <div className="mt-3 space-y-2">
-              <p className="text-2xl font-semibold leading-snug text-slate-900 md:text-3xl">
+              <p className="text-2xl font-semibold leading-snug text-ink-strong md:text-3xl">
                 {usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId}
                 {' sends '}
                 {formatMoney(settlement.transfer.amount)}
                 {' to '}
                 {usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId}
               </p>
-              <p className="text-sm text-slate-600">One transfer balances this month.</p>
+              <p className="text-sm text-ink-muted">One transfer balances this month.</p>
             </div>
           ) : (
             <div className="mt-3 space-y-2">
-              <p className="text-2xl font-semibold text-slate-900 md:text-3xl">
+              <p className="text-2xl font-semibold text-ink-strong md:text-3xl">
                 No transfer needed
               </p>
-              <p className="text-sm text-slate-600">This month is already balanced.</p>
+              <p className="text-sm text-ink-muted">This month is already balanced.</p>
             </div>
           )}
         </section>
@@ -306,9 +306,9 @@ function DashboardClientContent({
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
+    <div className="rounded-3xl border border-stroke/80 bg-surface p-6 shadow-sm">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink-soft">{label}</p>
-      <p className="mt-2 text-4xl font-bold tracking-tight text-slate-900">{value}</p>
+      <p className="mt-2 text-4xl font-bold tracking-tight text-ink-strong">{value}</p>
     </div>
   );
 }
@@ -327,15 +327,14 @@ function CategoryPieChart({
     superCategoryColor: string | null;
   }>;
 }) {
-  const groups = buildSuperCategoryGroups(slices);
+  const groups = useMemo(() => buildSuperCategoryGroups(slices), [slices]);
   const [expandedGroupName, setExpandedGroupName] = useState<string | null>(
     groups[0]?.name ?? null,
   );
-  const groupedTotals = groups.map((group) => ({
-    categoryName: group.name,
-    totalArs: group.totalArs,
-    color: group.color,
-  }));
+  const groupedTotals = useMemo(
+    () => groups.map((group) => ({ categoryName: group.name, totalArs: group.totalArs, color: group.color })),
+    [groups],
+  );
   const chartSize = 320;
   const radius = 125;
   const innerRadius = 92;
@@ -350,7 +349,7 @@ function CategoryPieChart({
 
   if (slices.length === 0) {
     return (
-      <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      <p className="mt-4 rounded-xl bg-surface-muted px-4 py-3 text-sm text-ink-muted">
         No expenses available for this month.
       </p>
     );
@@ -384,40 +383,38 @@ function CategoryPieChart({
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-        <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+      <div className="space-y-4">
+        <div className="rounded-xl border border-stroke/60 bg-surface-muted/60 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
             Text summary
           </p>
-          <p className="mt-2 text-sm leading-6 text-slate-700">{chartSummary}</p>
-          <ol className="mt-4 space-y-2">
+          <p className="mt-2 text-sm leading-6 text-ink-base">{chartSummary}</p>
+          <ol className="mt-3 space-y-2">
             {topSegments.map((segment, index) => (
               <li
                 key={segment.categoryName}
                 className="flex items-start justify-between gap-3 text-sm"
               >
                 <div>
-                  <p className="font-semibold text-slate-900">
+                  <p className="font-semibold text-ink-strong">
                     {index + 1}. {segment.categoryName}
                   </p>
-                  <p className="text-slate-600">{formatMoney(segment.totalArs)} spent</p>
+                  <p className="text-ink-muted">{formatMoney(segment.totalArs)} spent</p>
                 </div>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-900">
+                <span className="shrink-0 font-semibold tabular-nums text-ink-strong">
                   {segment.percentage.toFixed(1)}%
                 </span>
               </li>
             ))}
           </ol>
         </div>
-        <div className="relative mx-auto w-fit">
+        <div className="relative mx-auto w-full max-w-[320px]">
           <svg
             aria-describedby="expense-category-chart-summary"
             aria-label="Pie chart showing expense groups"
-            className="mx-auto"
-            height={chartSize}
+            className="w-full"
             role="img"
             viewBox={`0 0 ${chartSize} ${chartSize}`}
-            width={chartSize}
           >
             {segments.map((segment) => (
               <path key={segment.categoryName} d={segment.path} fill={segment.color}>
@@ -430,7 +427,7 @@ function CategoryPieChart({
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-muted">
               Total spent
             </p>
-            <p className="mt-1 text-5xl font-bold leading-none text-slate-900">
+            <p className="mt-1 text-3xl font-bold leading-none text-ink-strong sm:text-5xl">
               {formatCompactMoney(total)}
             </p>
           </div>
@@ -440,13 +437,13 @@ function CategoryPieChart({
             .map((segment) => `${segment.categoryName}: ${segment.percentage.toFixed(1)}%`)
             .join('. ')}
         </p>
-        <ul className="mx-auto mt-5 max-w-sm space-y-2">
+        <ul className="mx-auto max-w-sm space-y-2">
           {segments.map((segment) => (
             <li
               key={segment.categoryName}
               className="flex items-center justify-between gap-3 text-sm"
             >
-              <div className="flex items-center gap-2 text-slate-700">
+              <div className="flex items-center gap-2 text-ink-base">
                 <span
                   aria-hidden="true"
                   className="h-3 w-3 rounded-full"
@@ -454,7 +451,7 @@ function CategoryPieChart({
                 />
                 <span className="font-medium">{segment.categoryName}</span>
               </div>
-              <span className="font-semibold tabular-nums text-slate-900">
+              <span className="font-semibold tabular-nums text-ink-strong">
                 {segment.percentage.toFixed(1)}%
               </span>
             </li>
@@ -483,7 +480,7 @@ function CategoryPieChart({
                   <SuperCategoryIcon color={group.color} name={group.name} />
                 </span>
                 <div>
-                  <p className="text-xl font-semibold leading-tight text-slate-900">{group.name}</p>
+                  <p className="text-xl font-semibold leading-tight text-ink-strong">{group.name}</p>
                   <p className="mt-1 text-sm text-ink-muted">
                     {formatCountLabel(group.categories.length, 'category', 'categories')} •{' '}
                     {formatMoney(group.totalArs)}
@@ -505,7 +502,7 @@ function CategoryPieChart({
             </button>
             {expandedGroupName === group.name ? (
               <div
-                className="mt-3 rounded-xl border border-slate-100 bg-slate-50/60 p-4"
+                className="mt-3 rounded-xl border border-stroke/60 bg-surface-muted/60 p-4"
                 id={`super-category-panel-${group.name}`}
               >
                 <ul className="space-y-3">
@@ -518,15 +515,15 @@ function CategoryPieChart({
                             className="h-2.5 w-2.5 rounded-full"
                             style={{ backgroundColor: group.color }}
                           />
-                          <span className="font-medium text-slate-700">
+                          <span className="font-medium text-ink-base">
                             {category.categoryName}
                           </span>
                         </div>
-                        <span className="font-semibold tabular-nums text-slate-900">
+                        <span className="font-semibold tabular-nums text-ink-strong">
                           {formatMoney(category.totalArs)}
                         </span>
                       </div>
-                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-stroke">
                         <div
                           className="h-full rounded-full"
                           style={{
@@ -602,13 +599,15 @@ function buildSuperCategoryGroups(
     .sort((a, b) => b.totalArs - a.totalArs);
 }
 
+const compactMoneyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
 function formatCompactMoney(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value);
+  return compactMoneyFormatter.format(value);
 }
 
 function SuperCategoryIcon({ name, color }: { name: string; color: string }) {

@@ -37,13 +37,13 @@ export function MonthSelector({ month }: MonthSelectorProps) {
   return (
     <label
       aria-busy={isPending}
-      className="flex w-full flex-col items-start gap-1.5 text-sm font-medium text-slate-700 sm:w-auto sm:flex-row sm:items-center sm:gap-3"
+      className="flex w-full flex-col items-start gap-1.5 text-sm font-medium text-ink-base sm:w-auto sm:flex-row sm:items-center sm:gap-3"
     >
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Month</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft">Month</span>
       <div className="flex w-full items-center gap-2 sm:w-auto">
         <button
           aria-label="Go to previous month"
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300/90 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stroke bg-surface text-ink-base shadow-sm transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           disabled={isPending}
           type="button"
           onClick={() => onMonthChange(addMonths(month, -1))}
@@ -55,7 +55,7 @@ export function MonthSelector({ month }: MonthSelectorProps) {
         <input
           aria-label="Select month"
           autoComplete="off"
-          className="min-h-11 w-full rounded-xl border border-slate-300/90 bg-white px-4 py-2.5 text-base font-medium leading-tight text-slate-700 shadow-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+          className="min-h-11 w-full rounded-xl border border-stroke bg-surface px-4 py-2.5 text-base font-medium leading-tight text-ink-base shadow-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
           disabled={isPending}
           lang="en"
           name="month"
@@ -65,7 +65,7 @@ export function MonthSelector({ month }: MonthSelectorProps) {
         />
         <button
           aria-label="Go to next month"
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-slate-300/90 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stroke bg-surface text-ink-base shadow-sm transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           disabled={isPending}
           type="button"
           onClick={() => onMonthChange(addMonths(month, 1))}
@@ -76,10 +76,10 @@ export function MonthSelector({ month }: MonthSelectorProps) {
         </button>
       </div>
       {isPending ? (
-        <span aria-live="polite" className="inline-flex items-center gap-2 text-xs font-medium text-slate-500">
+        <span aria-live="polite" className="inline-flex items-center gap-2 text-xs font-medium text-ink-soft">
           <span
             aria-hidden="true"
-            className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-700"
+            className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-stroke border-t-brand-700"
           />
           Loading {displayedMonth}...
         </span>

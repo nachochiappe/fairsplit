@@ -54,10 +54,10 @@ function DialogFrame({ children, title }: { children: ReactNode; title: string }
     <div
       aria-labelledby="settings-dialog-title"
       aria-modal="true"
-      className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl shadow-slate-900/10"
+      className="w-full max-w-lg rounded-3xl border border-stroke bg-surface p-6 shadow-2xl shadow-ink-strong/10"
       role="dialog"
     >
-      <h2 className="text-xl font-semibold text-slate-900" id="settings-dialog-title">
+      <h2 className="text-xl font-semibold text-ink-strong" id="settings-dialog-title">
         {title}
       </h2>
       {children}
@@ -79,7 +79,7 @@ function DialogActions({
   return (
     <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
       <button
-        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={busy}
         onClick={onCancel}
         type="button"
@@ -619,7 +619,7 @@ export function SettingsClient({
 
   const getCategoryIconClasses = (category: Category) => {
     if (category.archivedAt) {
-      return 'bg-slate-200 text-slate-500';
+      return 'bg-stroke text-ink-soft';
     }
     const normalizedGroup = (category.superCategoryName ?? '').toLowerCase();
     if (normalizedGroup.includes('hous') || normalizedGroup.includes('home')) {
@@ -638,7 +638,7 @@ export function SettingsClient({
     ) {
       return 'bg-amber-100 text-amber-600';
     }
-    return 'bg-slate-100 text-slate-600';
+    return 'bg-surface-muted text-ink-muted';
   };
 
   const renderMappedCategoryIcon = (superCategoryName: string | null, archived: boolean) => {
@@ -723,22 +723,22 @@ export function SettingsClient({
                 void submitRenameCategory();
               }}
             >
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">
                 Update the label for{' '}
-                <span className="font-semibold text-slate-900">
+                <span className="font-semibold text-ink-strong">
                   {categoryRenameDialog.category.name}
                 </span>
                 . The new name will apply to historical records too.
               </p>
               <label
-                className="mt-4 block text-sm font-medium text-slate-700"
+                className="mt-4 block text-sm font-medium text-ink-base"
                 htmlFor="rename-category-input"
               >
                 Category name
               </label>
               <input
                 autoFocus
-                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-strong00 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 id="rename-category-input"
                 onChange={(event) =>
                   setCategoryRenameDialog((current) =>
@@ -766,22 +766,22 @@ export function SettingsClient({
                 void submitRenameSuperCategory();
               }}
             >
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">
                 Rename{' '}
-                <span className="font-semibold text-slate-900">
+                <span className="font-semibold text-ink-strong">
                   {superCategoryRenameDialog.superCategory.name}
                 </span>{' '}
                 to match how you organize spending.
               </p>
               <label
-                className="mt-4 block text-sm font-medium text-slate-700"
+                className="mt-4 block text-sm font-medium text-ink-base"
                 htmlFor="rename-super-category-input"
               >
                 Group name
               </label>
               <input
                 autoFocus
-                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-strong00 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 id="rename-super-category-input"
                 onChange={(event) =>
                   setSuperCategoryRenameDialog((current) =>
@@ -809,21 +809,21 @@ export function SettingsClient({
                 void submitArchiveSuperCategory();
               }}
             >
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">
                 Archive{' '}
-                <span className="font-semibold text-slate-900">
+                <span className="font-semibold text-ink-strong">
                   {superCategoryArchiveDialog.superCategory.name}
                 </span>
                 . Existing categories can move to another group or become unassigned.
               </p>
               <label
-                className="mt-4 block text-sm font-medium text-slate-700"
+                className="mt-4 block text-sm font-medium text-ink-base"
                 htmlFor="archive-super-category-replacement"
               >
                 Move categories to
               </label>
               <select
-                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 id="archive-super-category-replacement"
                 onChange={(event) =>
                   setSuperCategoryArchiveDialog((current) =>
@@ -862,9 +862,9 @@ export function SettingsClient({
                 void submitArchiveCategory();
               }}
             >
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">
                 Archive{' '}
-                <span className="font-semibold text-slate-900">
+                <span className="font-semibold text-ink-strong">
                   {categoryArchiveDialog.category.name}
                 </span>
                 . It will disappear from active lists but remain available in historical records.
@@ -879,15 +879,15 @@ export function SettingsClient({
         </ViewportModal>
       ) : null}
 
-      <section className="mb-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Personal Information</h2>
-        <p className="mt-2 text-base text-slate-500">
+      <section className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
+        <h2 className="text-2xl font-semibold text-ink-strong">Personal Information</h2>
+        <p className="mt-2 text-base text-ink-soft00">
           Your identity across the Fairsplit platform.
         </p>
 
         <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          <h3 className="text-base font-semibold text-slate-900">Invite Someone</h3>
-          <p className="mt-1 text-xs text-slate-600">
+          <h3 className="text-base font-semibold text-ink-strong">Invite Someone</h3>
+          <p className="mt-1 text-xs text-ink-muted">
             Generate a one-time code so another person can join your household.
           </p>
           <button
@@ -900,13 +900,13 @@ export function SettingsClient({
           </button>
           {inviteCode ? (
             <div className="mt-3 rounded-lg border border-slate-300 bg-white/90 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft00">
                 Invite code
               </p>
               <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-bold tracking-[0.15em] text-slate-900">{inviteCode}</p>
+                <p className="text-sm font-bold tracking-[0.15em] text-ink-strong">{inviteCode}</p>
                 <button
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-ink-base hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onClick={() => void onCopyInviteCode()}
                   type="button"
                 >
@@ -914,7 +914,7 @@ export function SettingsClient({
                 </button>
               </div>
               {inviteExpiresAt ? (
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-ink-soft00">
                   Expires: {new Date(inviteExpiresAt).toLocaleString()}
                 </p>
               ) : null}
@@ -942,11 +942,11 @@ export function SettingsClient({
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
-              <p className="text-xl font-semibold text-slate-700">Display Name</p>
+              <p className="text-xl font-semibold text-ink-base">Display Name</p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
                   aria-label="Display name"
-                  className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-ink-strong00 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onChange={(event) => setDisplayNameDraft(event.target.value)}
                   placeholder="Your name"
                   value={displayNameDraft}
@@ -960,15 +960,15 @@ export function SettingsClient({
                   {profileSaving ? 'Updating...' : 'Update'}
                 </button>
               </div>
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-sm text-ink-soft00">
                 This is how your partner will see you in shared expenses.
               </p>
             </div>
 
             <div className="min-w-0">
-              <p className="text-xl font-semibold text-slate-700">Email Address</p>
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3">
-                <span className="min-w-0 truncate text-base font-medium text-slate-500">
+              <p className="text-xl font-semibold text-ink-base">Email Address</p>
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-stroke bg-surface-muted px-4 py-3">
+                <span className="min-w-0 truncate text-base font-medium text-ink-soft00">
                   {currentUserEmail ?? 'No email available in this session'}
                 </span>
                 <svg
@@ -987,14 +987,14 @@ export function SettingsClient({
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Session</h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <h3 className="text-lg font-semibold text-ink-strong">Session</h3>
+              <p className="mt-1 text-sm text-ink-soft00">
                 Sign out from this device when you are done.
               </p>
             </div>
             <form action="/logout" className="w-full sm:w-auto" method="post">
               <button
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
                 type="submit"
               >
                 Log out
@@ -1021,9 +1021,9 @@ export function SettingsClient({
         ) : null}
       </section>
 
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Super Categories</h2>
-        <p className="mt-2 text-base text-slate-500">
+      <section className="rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
+        <h2 className="text-2xl font-semibold text-ink-strong">Super Categories</h2>
+        <p className="mt-2 text-base text-ink-soft00">
           Default system groups for high-level tracking.
         </p>
 
@@ -1045,7 +1045,7 @@ export function SettingsClient({
                 </label>
                 <input
                   id="new-super-category"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onChange={(event) => setSuperCategoryName(event.target.value)}
                   placeholder="New super category name..."
                   value={superCategoryName}
@@ -1069,12 +1069,12 @@ export function SettingsClient({
             {sortedActiveSuperCategories.map((superCategory) => (
               <div
                 key={superCategory.id}
-                className="flex items-start justify-between gap-3 px-4 py-4 text-sm transition-colors hover:bg-slate-50 sm:items-center sm:px-5"
+                className="flex items-start justify-between gap-3 px-4 py-4 text-sm transition-colors hover:bg-surface-muted sm:items-center sm:px-5"
               >
                 <div className="flex min-w-0 items-start gap-3">
                   {renderSuperCategoryIcon(superCategory.name)}
                   <div className="min-w-0">
-                    <p className="min-w-0 text-base font-semibold text-slate-800 sm:text-lg">
+                    <p className="min-w-0 text-base font-semibold text-ink-strong00 sm:text-lg">
                       {superCategory.name}
                     </p>
                     <p className="text-sm font-medium text-ink-soft sm:text-base">
@@ -1158,11 +1158,11 @@ export function SettingsClient({
         </div>
       </section>
 
-      <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+      <section className="mt-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-slate-900">Detailed Categories</h2>
-            <p className="mt-2 text-base text-slate-500">
+            <h2 className="text-2xl font-semibold text-ink-strong">Detailed Categories</h2>
+            <p className="mt-2 text-base text-ink-soft00">
               Map specific spending labels to your super categories.
             </p>
           </div>
@@ -1179,7 +1179,7 @@ export function SettingsClient({
               </label>
               <input
                 id="new-category-name"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 onChange={(event) => setCategoryName(event.target.value)}
                 placeholder="Category name (e.g. Internet, Groceries)"
                 value={categoryName}
@@ -1191,7 +1191,7 @@ export function SettingsClient({
               </label>
               <select
                 id="new-category-super-category"
-                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 onChange={(event) => setCategorySuperCategoryId(event.target.value)}
                 value={categorySuperCategoryId}
               >
@@ -1229,8 +1229,8 @@ export function SettingsClient({
               key={category.id}
               className={
                 category.archivedAt
-                  ? 'rounded-2xl border border-slate-200 bg-slate-100/80 p-5 opacity-80'
-                  : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'
+                  ? 'rounded-2xl border border-stroke bg-surface-muted/80 p-5 opacity-80'
+                  : 'rounded-2xl border border-stroke bg-surface p-5 shadow-sm transition-shadow hover:shadow-md'
               }
             >
               <div className="flex items-start justify-between gap-3 lg:items-center">
@@ -1248,9 +1248,9 @@ export function SettingsClient({
 
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-semibold text-slate-800">{category.name}</h3>
+                        <h3 className="text-lg font-semibold text-ink-strong00">{category.name}</h3>
                         {category.archivedAt ? (
-                          <span className="rounded-full border border-slate-300 bg-slate-200 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-600">
+                          <span className="rounded-full border border-stroke bg-stroke px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-ink-muted">
                             Archived
                           </span>
                         ) : null}
@@ -1285,14 +1285,14 @@ export function SettingsClient({
                   {!category.archivedAt ? (
                     <div className="mt-3 flex items-center gap-2 text-sm">
                       <label
-                        className="font-medium text-slate-500"
+                        className="font-medium text-ink-soft00"
                         htmlFor={`group-${category.id}`}
                       >
                         Map to:
                       </label>
                       <select
                         id={`group-${category.id}`}
-                        className="h-11 min-h-11 min-w-0 max-w-[180px] flex-1 rounded-[16px] border border-slate-300 bg-slate-50 px-3 text-sm text-slate-700"
+                        className="h-11 min-h-11 min-w-0 max-w-[180px] flex-1 rounded-[16px] border border-slate-300 bg-slate-50 px-3 text-sm text-ink-base"
                         disabled={saving}
                         onChange={(event) => void onAssignCategory(category, event.target.value)}
                         value={category.superCategoryId ?? 'unassigned'}
@@ -1307,7 +1307,7 @@ export function SettingsClient({
                       </select>
                     </div>
                   ) : (
-                    <p className="mt-2 text-sm text-slate-500">
+                    <p className="mt-2 text-sm text-ink-soft00">
                       Group: {category.superCategoryName ?? 'Unassigned'}
                     </p>
                   )}
