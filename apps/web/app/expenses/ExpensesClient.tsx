@@ -2,11 +2,10 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { computeInstallmentAmounts } from '@fairsplit/shared';
-import { type TouchEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { AppShell } from '../../components/AppShell';
-import { ActionButton } from '../../components/ActionButton';
 import { MonthSelector } from '../../components/MonthSelector';
 import { ViewportModal } from '../../components/ViewportModal';
 import { formatMoney } from '../../lib/currency';
@@ -31,6 +30,23 @@ import {
   upsertExchangeRate,
   User,
 } from '../../lib/api';
+import {
+  cardClass,
+  compactFieldClass,
+  fieldClass,
+  moneyInputClass,
+  pillToggleThumbClass,
+  pillToggleTrackClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  tableControlFieldClass,
+  tableControlLabelClass,
+  tableControlSearchFieldClass,
+} from './expense-styles';
+import { ConfirmationDialog } from './ConfirmationDialog';
+import { ScopeDialog } from './ScopeDialog';
+import { MobileExpenseCard } from './MobileExpenseCard';
+import { DesktopExpenseActionMenu } from './DesktopExpenseActionMenu';
 
 type ApplyScope = 'single' | 'future' | 'all';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
@@ -40,29 +56,18 @@ const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
 type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const currencyCodeSchema = z.enum(supportedCurrencyCodes);
 const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
-const cardClass = 'rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm';
-const fieldClass =
-  'w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-const compactFieldClass =
-  'w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-const tableControlLabelClass = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500';
-const tableControlFieldClass =
-  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-const tableControlSearchFieldClass =
-  `${tableControlFieldClass} pr-10 [&::-webkit-search-cancel-button]:appearance-none`;
-const primaryButtonClass =
-  'rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-const secondaryButtonClass =
-  'rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-const moneyInputClass =
-  `${fieldClass} pl-8 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`;
-const pillToggleTrackClass =
-  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border border-slate-300 bg-slate-200 transition-colors duration-200 peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-brand-600 peer-focus-visible:ring-offset-2 peer-checked:border-brand-600 peer-checked:bg-brand-600';
-const pillToggleThumbClass =
-  'absolute left-[2px] top-[2px] h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-5';
 const SEARCH_DEBOUNCE_MS = 350;
-const MOBILE_ACTION_RAIL_WIDTH = 168;
-const MOBILE_ACTION_OPEN_THRESHOLD = 56;
+
+function getExpenseKindLabel(expense: Expense): string {
+  if (expense.fixed.enabled) {
+    return 'Recurring';
+  }
+  if (expense.installment) {
+    return `Installment ${expense.installment.number}/${expense.installment.total}`;
+  }
+  return 'One-time';
+}
+
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
 const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
 
@@ -169,117 +174,6 @@ interface SubmissionToastState {
 
 const SUBMISSION_TOAST_VISIBLE_MS = 6000;
 
-function ScopeDialog({
-  title,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: (scope: ApplyScope) => void;
-}) {
-  const [scope, setScope] = useState<ApplyScope>('future');
-
-  return (
-    <ViewportModal onDismiss={onCancel}>
-      <div
-        aria-labelledby="scope-dialog-title"
-        aria-modal="true"
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
-        role="dialog"
-      >
-        <h3 className="text-base font-semibold text-slate-900" id="scope-dialog-title">
-          {title}
-        </h3>
-        <fieldset className="mt-3 space-y-2 text-sm text-slate-700">
-          <legend className="sr-only">Select which expenses to apply this action to</legend>
-          <label className="flex items-center gap-2">
-            <input checked={scope === 'future'} onChange={() => setScope('future')} type="radio" />
-            This and future
-          </label>
-          <label className="flex items-center gap-2">
-            <input checked={scope === 'single'} onChange={() => setScope('single')} type="radio" />
-            Only this one
-          </label>
-          <label className="flex items-center gap-2">
-            <input checked={scope === 'all'} onChange={() => setScope('all')} type="radio" />
-            Whole series
-          </label>
-        </fieldset>
-        <div className="mt-4 flex gap-2">
-          <button
-            className={primaryButtonClass}
-            disabled={busy}
-            onClick={() => onConfirm(scope)}
-            type="button"
-          >
-            Confirm
-          </button>
-          <button
-            className={secondaryButtonClass}
-            disabled={busy}
-            onClick={onCancel}
-            type="button"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </ViewportModal>
-  );
-}
-
-function ConfirmationDialog({
-  title,
-  message,
-  busy,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  message: string;
-  busy: boolean;
-  confirmLabel: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <ViewportModal onDismiss={onCancel}>
-      <div
-        aria-labelledby="confirmation-dialog-title"
-        aria-modal="true"
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
-        role="dialog"
-      >
-        <h3 className="text-base font-semibold text-slate-900" id="confirmation-dialog-title">
-          {title}
-        </h3>
-        <p className="mt-2 text-sm text-slate-700">{message}</p>
-        <div className="mt-4 flex gap-2">
-          <button
-            className={primaryButtonClass}
-            disabled={busy}
-            onClick={onConfirm}
-            type="button"
-          >
-            {confirmLabel}
-          </button>
-          <button
-            className={secondaryButtonClass}
-            disabled={busy}
-            onClick={onCancel}
-            type="button"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </ViewportModal>
-  );
-}
 
 interface ExpensesClientProps {
   currentUserId: string | null;
@@ -340,42 +234,6 @@ function makeSectionLoadingMap(value: boolean): Record<ExpenseSectionKey, boolea
   };
 }
 
-function getExpenseKindLabel(expense: Expense): string {
-  if (expense.fixed.enabled) {
-    return 'Recurring';
-  }
-
-  if (expense.installment) {
-    return `Installment ${expense.installment.number}/${expense.installment.total}`;
-  }
-
-  return 'One-time';
-}
-
-function formatMobileExpenseDate(value: string): string {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date
-    .toLocaleDateString('en-US', {
-      day: '2-digit',
-      month: 'short',
-    })
-    .toUpperCase();
-}
-
-function formatMobileExpenseAmount(value: string): string {
-  const amount = Number(value);
-  if (Number.isNaN(amount)) {
-    return value;
-  }
-
-  return new Intl.NumberFormat('en-US', {
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 function formatOrdinalDayFromDateInput(value: string): string {
   const date = new Date(`${value}T00:00:00`);
@@ -421,237 +279,6 @@ function getSortFieldLabel(sortField: ExpenseSortField): string {
   return sortField.charAt(0).toUpperCase() + sortField.slice(1);
 }
 
-interface MobileExpenseCardProps {
-  expense: Expense;
-  isOpen: boolean;
-  onOpenChange: (nextOpen: boolean) => void;
-  onEdit: () => void;
-  onClone: () => void;
-  onDelete: () => void;
-  formatFxRate: (value: string | number) => string;
-}
-
-function MobileExpenseCard({
-  expense,
-  isOpen,
-  onOpenChange,
-  onEdit,
-  onClone,
-  onDelete,
-  formatFxRate,
-}: MobileExpenseCardProps) {
-  const touchStartXRef = useRef<number | null>(null);
-  const startOffsetRef = useRef(0);
-  const [dragOffset, setDragOffset] = useState(0);
-  const translatedOffset = dragOffset !== 0 ? dragOffset : isOpen ? -MOBILE_ACTION_RAIL_WIDTH : 0;
-  const showKindChip = Boolean(expense.installment);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setDragOffset(0);
-    }
-  }, [isOpen]);
-
-  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
-    if (event.touches.length !== 1) {
-      return;
-    }
-
-    touchStartXRef.current = event.touches[0]?.clientX ?? null;
-    startOffsetRef.current = isOpen ? -MOBILE_ACTION_RAIL_WIDTH : 0;
-  };
-
-  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
-    const startX = touchStartXRef.current;
-    const currentX = event.touches[0]?.clientX;
-    if (startX === null || currentX === undefined) {
-      return;
-    }
-
-    const deltaX = currentX - startX;
-    const nextOffset = Math.max(-MOBILE_ACTION_RAIL_WIDTH, Math.min(0, startOffsetRef.current + deltaX));
-    setDragOffset(nextOffset);
-  };
-
-  const handleTouchEnd = () => {
-    const nextOpen = isOpen ? translatedOffset < -(MOBILE_ACTION_RAIL_WIDTH - MOBILE_ACTION_OPEN_THRESHOLD) : translatedOffset <= -MOBILE_ACTION_OPEN_THRESHOLD;
-    setDragOffset(0);
-    touchStartXRef.current = null;
-    onOpenChange(nextOpen);
-  };
-
-  return (
-    <div
-      className="relative overflow-hidden rounded-[1.35rem] border border-slate-200 bg-slate-100/80 touch-pan-y"
-      data-expense-actions
-      onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchMove}
-      onTouchStart={handleTouchStart}
-    >
-      <div className="absolute inset-y-0 right-0 flex w-[168px] items-stretch">
-        <ActionButton action="edit" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onEdit}>
-          Edit
-        </ActionButton>
-        <ActionButton action="clone" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onClone}>
-          Clone
-        </ActionButton>
-        <ActionButton action="delete" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onDelete}>
-          Delete
-        </ActionButton>
-      </div>
-
-      <div
-        className="relative z-10 w-full rounded-[18px] border border-slate-200/95 bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.04)] transition-transform duration-200 ease-out"
-        style={{ transform: `translateX(${translatedOffset}px)` }}
-      >
-        {!isOpen ? (
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-1 bg-slate-200"
-          />
-        ) : null}
-
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-normal leading-[1.2] text-slate-900" title={expense.description}>
-              {expense.description}
-            </p>
-
-            <div className="mt-3.5 flex flex-wrap gap-2">
-              {showKindChip ? (
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1.5 text-[12px] font-normal leading-4 text-slate-700">
-                  {getExpenseKindLabel(expense)}
-                </span>
-              ) : null}
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1.5 text-[12px] font-normal leading-4 text-slate-700">
-                {expense.categoryName}
-              </span>
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1.5 text-[12px] font-normal leading-4 text-slate-700">
-                {expense.paidByUserName}
-              </span>
-            </div>
-
-            {expense.currencyCode !== 'ARS' ? (
-              <p className="mt-3 text-sm text-slate-600">
-                Original: {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="shrink-0 pr-1.5 text-right">
-            <div className="flex flex-col items-end gap-3">
-              <p className="whitespace-nowrap text-[12px] font-normal uppercase tracking-[0.08em] text-slate-500">
-                {formatMobileExpenseDate(expense.date)}
-              </p>
-              <p className="text-[18px] font-normal leading-[1.05] tabular-nums text-slate-900">
-                ${formatMobileExpenseAmount(expense.amountArs)}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface DesktopExpenseActionMenuProps {
-  expenseId: string;
-  isOpen: boolean;
-  onOpenChange: (nextOpen: boolean) => void;
-  onEdit: () => void;
-  onClone: () => void;
-  onDelete: () => void;
-}
-
-function DesktopExpenseActionMenu({
-  expenseId,
-  isOpen,
-  onOpenChange,
-  onEdit,
-  onClone,
-  onDelete,
-}: DesktopExpenseActionMenuProps) {
-  const menuId = `expense-actions-${expenseId}`;
-  const menuItemClass =
-    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-
-  return (
-    <div className="relative inline-flex justify-end" data-expense-actions>
-      <button
-        aria-controls={menuId}
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-        aria-label="Open expense actions"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-        onClick={() => onOpenChange(!isOpen)}
-        type="button"
-      >
-        <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-          <circle cx="12" cy="5" r="1.9" />
-          <circle cx="12" cy="12" r="1.9" />
-          <circle cx="12" cy="19" r="1.9" />
-        </svg>
-      </button>
-
-      {isOpen ? (
-        <div
-          className="absolute right-0 top-full z-20 mt-2 min-w-[160px] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_18px_40px_rgba(15,23,42,0.14)]"
-          id={menuId}
-          role="menu"
-        >
-          <button
-            className={menuItemClass}
-            onClick={() => {
-              onOpenChange(false);
-              onEdit();
-            }}
-            role="menuitem"
-            type="button"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-            Edit
-          </button>
-          <button
-            className={menuItemClass}
-            onClick={() => {
-              onOpenChange(false);
-              onClone();
-            }}
-            role="menuitem"
-            type="button"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-              <rect height="13" rx="2" width="13" x="9" y="9" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            Clone
-          </button>
-          <button
-            className={`${menuItemClass} text-red-700 hover:bg-red-50 hover:text-red-700`}
-            onClick={() => {
-              onOpenChange(false);
-              onDelete();
-            }}
-            role="menuitem"
-            type="button"
-          >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M3 6h18" />
-              <path d="M8 6V4h8v2" />
-              <path d="M19 6l-1 14H6L5 6" />
-              <path d="M10 11v6" />
-              <path d="M14 11v6" />
-            </svg>
-            Delete
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function getExpenseKindPillClasses(expense: Expense): string {
   if (expense.fixed.enabled) {
