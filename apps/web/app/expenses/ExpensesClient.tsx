@@ -1688,14 +1688,12 @@ export function ExpensesClient({
 
         <label className="block text-sm">
           <span className={mobileFieldLabelClass}>Date</span>
-          <div className="grid w-full" style={{ gridTemplateColumns: '1fr' }}>
-            <input
-              className={`${mobileInputClass} min-w-0 [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
-              lang="en"
-              type="date"
-              {...form.register('date')}
-            />
-          </div>
+          <input
+            className={`${mobileInputClass} appearance-none [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
+            lang="en"
+            type="date"
+            {...form.register('date')}
+          />
         </label>
 
         <label className="block text-sm">
