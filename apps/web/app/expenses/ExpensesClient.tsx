@@ -242,6 +242,14 @@ function makeSectionLoadingMap(value: boolean): Record<ExpenseSectionKey, boolea
   };
 }
 
+function makeSectionOpenMap(value: boolean): Record<ExpenseSectionKey, boolean> {
+  return {
+    fixed: value,
+    oneTime: value,
+    installment: value,
+  };
+}
+
 
 function formatOrdinalDayFromDateInput(value: string): string {
   const date = new Date(`${value}T00:00:00`);
@@ -343,6 +351,7 @@ export function ExpensesClient({
   const [isDesktopFxEditing, setIsDesktopFxEditing] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
   const [openExpenseActionMenuId, setOpenExpenseActionMenuId] = useState<string | null>(null);
+  const [sectionOpen, setSectionOpen] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionOpenMap(true));
   const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
   const expensesRef = useRef(expenses);
   const submissionToastTimeoutRef = useRef<number | null>(null);
@@ -2953,10 +2962,42 @@ export function ExpensesClient({
                           <p className="text-xs text-slate-500">{section.subtitle}</p>
                         </div>
                       </div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        Subtotal: <span className="text-sm normal-case text-slate-900">ARS {formatMoney(section.subtotalArs)}</span>
-                      </p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          Subtotal: <span className="text-sm normal-case text-slate-900">ARS {formatMoney(section.subtotalArs)}</span>
+                        </p>
+                        <button
+                          aria-controls={`${section.key}-expenses-panel`}
+                          aria-expanded={sectionOpen[section.key]}
+                          aria-label={`${sectionOpen[section.key] ? 'Collapse' : 'Expand'} ${section.title}`}
+                          className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                          onClick={() =>
+                            setSectionOpen((previous) => ({
+                              ...previous,
+                              [section.key]: !previous[section.key],
+                            }))
+                          }
+                          type="button"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            className={`h-4 w-4 transition-transform ${sectionOpen[section.key] ? 'rotate-180' : 'rotate-0'}`}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2.2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
+                    <div
+                      className={sectionOpen[section.key] ? 'block' : 'hidden'}
+                      id={`${section.key}-expenses-panel`}
+                    >
                     <div className="relative">
                       {sectionLoading[section.key] ? (
                         <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
@@ -3126,6 +3167,7 @@ export function ExpensesClient({
                         </div>
                       </div>
                     ) : null}
+                    </div>
                   </section>
                 ))}
               </div>
