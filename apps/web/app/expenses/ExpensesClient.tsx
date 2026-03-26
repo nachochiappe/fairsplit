@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { computeInstallmentAmounts } from '@fairsplit/shared';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { AppShell } from '../../components/AppShell';
@@ -18,6 +18,7 @@ import {
 } from './pagination';
 import {
   Category,
+  createOptimisticExpenseId,
   createExpense,
   deleteExpense,
   ExchangeRate,
@@ -30,6 +31,22 @@ import {
   upsertExchangeRate,
   User,
 } from '../../lib/api';
+import {
+  adjustSectionPagination,
+  adjustSubtotalTotals,
+  adjustTotalCombinedExpensesArs,
+  createExpenseScreenSnapshot,
+  ExpenseFilterState,
+  ExpenseScreenSnapshot,
+  ExpenseSectionKey,
+  mergeUniqueExpenses,
+  patchExpense,
+  removeExpenseById,
+  removeExpenses,
+  SectionPaginationMap,
+  sumExpensesArs,
+  insertExpense,
+} from './optimistic-expenses';
 import {
   cardClass,
   compactFieldClass,
@@ -51,7 +68,6 @@ import { DesktopExpenseActionMenu } from './DesktopExpenseActionMenu';
 type ApplyScope = 'single' | 'future' | 'all';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
-type ExpenseSectionKey = 'fixed' | 'oneTime' | 'installment';
 const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
 type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const currencyCodeSchema = z.enum(supportedCurrencyCodes);
@@ -167,7 +183,7 @@ interface ConfirmationDialogState {
 
 interface SubmissionToastState {
   id: number;
-  kind: 'loading' | 'success' | 'error';
+  kind: 'success' | 'error';
   title: string;
   message?: string;
 }
@@ -187,14 +203,6 @@ interface ExpensesClientProps {
   initialTotalExpensesArs: string;
   initialTotals: ExpenseListResponse['totals'];
 }
-
-interface SectionPaginationState {
-  nextCursor: string | null;
-  hasMore: boolean;
-  totalCount: number | null;
-}
-
-type SectionPaginationMap = Record<ExpenseSectionKey, SectionPaginationState>;
 
 const sectionTypeMap: Record<ExpenseSectionKey, 'fixed' | 'oneTime' | 'installment'> = {
   fixed: 'fixed',
@@ -279,39 +287,6 @@ function getSortFieldLabel(sortField: ExpenseSortField): string {
   return sortField.charAt(0).toUpperCase() + sortField.slice(1);
 }
 
-
-function getExpenseKindPillClasses(expense: Expense): string {
-  if (expense.fixed.enabled) {
-    return 'border-blue-200 bg-blue-100 text-blue-700';
-  }
-
-  if (expense.installment) {
-    return 'border-violet-200 bg-violet-100 text-violet-700';
-  }
-
-  return 'border-orange-200 bg-orange-100 text-orange-700';
-}
-
-function getExpenseCategoryPillClasses(): string {
-  return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-}
-
-function getExpensePayerPillClasses(): string {
-  return 'border-amber-200 bg-amber-50 text-amber-800';
-}
-
-function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
-  const dedupedById = new Map<string, Expense>();
-  for (const expense of expenses) {
-    dedupedById.set(expense.id, expense);
-  }
-  return Array.from(dedupedById.values());
-}
-
-function sumExpensesArs(expenses: Expense[]): number {
-  return expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
-}
-
 function resolveDefaultPaidByUserId(users: User[], currentUserId: string | null): string {
   if (currentUserId) {
     const currentUser = users.find((user) => user.id === currentUserId);
@@ -373,6 +348,9 @@ export function ExpensesClient({
   const submissionToastTimeoutRef = useRef<number | null>(null);
   const warningsRef = useRef(warnings);
   const sectionPaginationRef = useRef(sectionPagination);
+  const exchangeRatesRef = useRef(exchangeRates);
+  const subtotalTotalsRef = useRef(subtotalTotals);
+  const totalCombinedExpensesArsRef = useRef(totalCombinedExpensesArs);
   const sectionFetchInFlightRef = useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
   const sectionCacheFetchedAtRef = useRef<Record<ExpenseSectionKey, number>>(makeSectionTimestampMap(Date.now()));
   const sectionPrefetchTargetRef = useRef<Record<ExpenseSectionKey, string | null>>(makeSectionPrefetchTargetMap());
@@ -383,6 +361,7 @@ export function ExpensesClient({
   });
   const fetchBatchSizeRef = useRef(fetchBatchSize);
   const expenseFormRef = useRef<HTMLFormElement | null>(null);
+  const mutationTokenRef = useRef(0);
   const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
   useEffect(() => {
@@ -431,7 +410,7 @@ export function ExpensesClient({
   }, [openExpenseActionMenuId]);
 
   useEffect(() => {
-    if (!submissionToast || submissionToast.kind === 'loading') {
+    if (!submissionToast) {
       return;
     }
 
@@ -554,11 +533,22 @@ export function ExpensesClient({
     }),
     [debouncedSearchQuery, selectedCategoryId],
   );
+  const optimisticFilterState = useMemo<ExpenseFilterState>(
+    () => ({
+      searchQuery: debouncedSearchQuery,
+      categoryId: selectedCategoryId,
+    }),
+    [debouncedSearchQuery, selectedCategoryId],
+  );
   const filterQueryRef = useRef(filterQuery);
+  const optimisticFilterStateRef = useRef(optimisticFilterState);
   const hasMountedFilterTotalsEffectRef = useRef(false);
   useEffect(() => {
     filterQueryRef.current = filterQuery;
   }, [filterQuery]);
+  useEffect(() => {
+    optimisticFilterStateRef.current = optimisticFilterState;
+  }, [optimisticFilterState]);
   const visibleExpenses = useMemo(() => applyClientControls(expenses), [applyClientControls, expenses]);
   const loadedFilteredSubtotalArs = useMemo(
     () => visibleExpenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
@@ -631,8 +621,6 @@ export function ExpensesClient({
   const watchedFixedEnabled = useWatch({ control: form.control, name: 'fixedEnabled' });
   const watchedNextMonthExpense = useWatch({ control: form.control, name: 'nextMonthExpense' });
   const watchedDate = useWatch({ control: form.control, name: 'date' });
-  const watchedPaidByUserId = useWatch({ control: form.control, name: 'paidByUserId' });
-
   useEffect(() => {
     if (watchedInstallmentEnabled) {
       return;
@@ -728,6 +716,266 @@ export function ExpensesClient({
     [defaultPaidByUserId, form],
   );
 
+  const applyExpenseScreenSnapshot = useCallback((snapshot: ExpenseScreenSnapshot) => {
+    expensesRef.current = snapshot.expenses;
+    warningsRef.current = snapshot.warnings;
+    sectionPaginationRef.current = snapshot.sectionPagination;
+    exchangeRatesRef.current = snapshot.exchangeRates;
+    subtotalTotalsRef.current = snapshot.subtotalTotals;
+    totalCombinedExpensesArsRef.current = snapshot.totalCombinedExpensesArs;
+
+    startTransition(() => {
+      setExpenses(snapshot.expenses);
+      setWarnings(snapshot.warnings);
+      setSectionPagination(snapshot.sectionPagination);
+      setExchangeRates(snapshot.exchangeRates);
+      setSubtotalTotals(snapshot.subtotalTotals);
+      setTotalCombinedExpensesArs(snapshot.totalCombinedExpensesArs);
+    });
+  }, []);
+
+  const captureExpenseScreenSnapshot = useCallback(
+    () =>
+      createExpenseScreenSnapshot({
+        expenses: expensesRef.current,
+        warnings: warningsRef.current,
+        subtotalTotals: subtotalTotalsRef.current,
+        totalCombinedExpensesArs: totalCombinedExpensesArsRef.current,
+        sectionPagination: sectionPaginationRef.current,
+        exchangeRates: exchangeRatesRef.current,
+      }),
+    [],
+  );
+
+  const applyExpenseMutationState = useCallback(
+    (options: {
+      expenses: Expense[];
+      previousAffected?: Expense[];
+      nextAffected?: Expense[];
+      warnings?: string[];
+      exchangeRates?: ExchangeRate[];
+      subtotalTotals?: ExpenseListResponse['totals'];
+      totalCombinedExpensesArs?: number;
+      sectionPagination?: SectionPaginationMap;
+    }) => {
+      const previousSnapshot = captureExpenseScreenSnapshot();
+      const previousAffected = options.previousAffected ?? [];
+      const nextAffected = options.nextAffected ?? [];
+      const nextSnapshot: ExpenseScreenSnapshot = {
+        expenses: options.expenses,
+        warnings: options.warnings ?? previousSnapshot.warnings,
+        subtotalTotals:
+          options.subtotalTotals ??
+          adjustSubtotalTotals(
+            previousSnapshot.subtotalTotals,
+            previousAffected,
+            nextAffected,
+            optimisticFilterStateRef.current,
+          ),
+        totalCombinedExpensesArs:
+          options.totalCombinedExpensesArs ??
+          adjustTotalCombinedExpensesArs(
+            previousSnapshot.totalCombinedExpensesArs,
+            previousAffected,
+            nextAffected,
+          ),
+        sectionPagination:
+          options.sectionPagination ??
+          adjustSectionPagination(previousSnapshot.sectionPagination, previousAffected, nextAffected),
+        exchangeRates: options.exchangeRates ?? previousSnapshot.exchangeRates,
+      };
+
+      applyExpenseScreenSnapshot(nextSnapshot);
+      return nextSnapshot;
+    },
+    [applyExpenseScreenSnapshot, captureExpenseScreenSnapshot],
+  );
+
+  const getUserName = useCallback(
+    (userId: string, fallbackName: string) => users.find((user) => user.id === userId)?.name ?? fallbackName,
+    [users],
+  );
+
+  const getCategoryDetails = useCallback(
+    (categoryId: string, fallbackExpense?: Expense) => {
+      const category = categories.find((entry) => entry.id === categoryId);
+      return {
+        categoryName: category?.name ?? fallbackExpense?.categoryName ?? 'Uncategorized',
+        superCategoryId: category?.superCategoryId ?? fallbackExpense?.superCategoryId ?? null,
+        superCategoryName: category?.superCategoryName ?? fallbackExpense?.superCategoryName ?? null,
+        superCategoryColor: category?.superCategoryColor ?? fallbackExpense?.superCategoryColor ?? null,
+      };
+    },
+    [categories],
+  );
+
+  const toAmountArsString = useCallback((amountOriginal: string, fxRateUsed: string) => {
+    return (Number(amountOriginal) * Number(fxRateUsed)).toFixed(2);
+  }, []);
+
+  const buildInstallmentValues = useCallback(
+    (
+      options:
+        | {
+            installmentPayload?: Parameters<typeof createExpense>[0]['installment'];
+            amount?: number;
+            existingExpense?: Expense;
+          }
+        | {
+            installmentPayload?: Parameters<typeof updateExpense>[1]['installment'];
+            amount?: number;
+            existingExpense?: Expense;
+          },
+    ) => {
+      const payload = options.installmentPayload;
+      const existingExpense = options.existingExpense;
+      if (!payload?.enabled && !existingExpense?.installment) {
+        return null;
+      }
+
+      const existingInstallment = existingExpense?.installment;
+      const nextTotal = payload?.enabled ? (payload.count ?? existingInstallment?.total ?? 1) : (existingInstallment?.total ?? 1);
+      const entryMode =
+        payload?.enabled
+          ? (payload.entryMode ?? (payload.totalAmount !== undefined ? 'total' : 'perInstallment'))
+          : 'perInstallment';
+      const perInstallmentAmount =
+        payload?.enabled && entryMode === 'perInstallment'
+          ? (payload.perInstallmentAmount ?? options.amount ?? Number(existingExpense?.amountOriginal ?? 0))
+          : options.amount ?? Number(existingExpense?.amountOriginal ?? 0);
+      const totalAmount =
+        payload?.enabled && entryMode === 'total'
+          ? payload.totalAmount
+          : existingInstallment?.source === 'manual' && existingInstallment.total > 0
+            ? undefined
+            : undefined;
+
+      const schedule = computeInstallmentAmounts({
+        count: nextTotal,
+        entryMode,
+        perInstallmentAmount,
+        totalAmount,
+      });
+      const installmentNumber = existingInstallment?.number ?? 1;
+      if (installmentNumber > nextTotal) {
+        return null;
+      }
+
+      return {
+        amountOriginal: schedule.amounts[installmentNumber - 1] ?? schedule.amounts[0] ?? '0.00',
+        installment: {
+          seriesId: existingInstallment?.seriesId ?? `optimistic:series:${createOptimisticExpenseId()}`,
+          number: installmentNumber,
+          total: nextTotal,
+          isGenerated: existingInstallment?.isGenerated ?? false,
+          source: existingInstallment?.source ?? 'manual',
+        },
+      };
+    },
+    [],
+  );
+
+  const buildOptimisticCreateExpense = useCallback(
+    (
+      payload: Parameters<typeof createExpense>[0],
+      source: NonNullable<Expense['optimisticSource']>,
+      existingExpense?: Expense,
+    ): Expense | null => {
+      if (payload.month !== month) {
+        return null;
+      }
+
+      const fxRateUsed = (payload.currencyCode ?? 'ARS') === 'ARS' ? '1.000000' : Number(payload.fxRate ?? 0).toFixed(6);
+      const installmentValues = buildInstallmentValues({
+        installmentPayload: payload.installment,
+        amount: payload.amount,
+        existingExpense,
+      });
+      const amountOriginal = installmentValues?.amountOriginal ?? Number(payload.amount ?? 0).toFixed(2);
+      const categoryDetails = getCategoryDetails(payload.categoryId, existingExpense);
+
+      return {
+        id: createOptimisticExpenseId(),
+        isOptimistic: true,
+        optimisticSource: source,
+        month: payload.month,
+        date: payload.date,
+        description: payload.description,
+        categoryId: payload.categoryId,
+        categoryName: categoryDetails.categoryName,
+        superCategoryId: categoryDetails.superCategoryId,
+        superCategoryName: categoryDetails.superCategoryName,
+        superCategoryColor: categoryDetails.superCategoryColor,
+        amountOriginal,
+        amountArs: toAmountArsString(amountOriginal, fxRateUsed),
+        currencyCode: payload.currencyCode ?? 'ARS',
+        fxRateUsed,
+        paidByUserId: payload.paidByUserId,
+        paidByUserName: getUserName(payload.paidByUserId, existingExpense?.paidByUserName ?? 'Unknown'),
+        fixed: {
+          enabled: Boolean(payload.fixed?.enabled),
+          templateId: payload.fixed?.enabled ? `optimistic:template:${createOptimisticExpenseId()}` : null,
+        },
+        installment: installmentValues?.installment ?? null,
+      };
+    },
+    [buildInstallmentValues, getCategoryDetails, getUserName, month, toAmountArsString],
+  );
+
+  const buildOptimisticUpdatedExpense = useCallback(
+    (existingExpense: Expense, payload: Parameters<typeof updateExpense>[1]): Expense | null => {
+      const nextMonthValue = payload.month ?? existingExpense.month;
+      if (nextMonthValue !== month) {
+        return null;
+      }
+
+      const nextCurrencyCode = payload.currencyCode ?? existingExpense.currencyCode;
+      const nextFxRateUsed =
+        nextCurrencyCode === 'ARS'
+          ? '1.000000'
+          : payload.fxRate !== undefined
+            ? Number(payload.fxRate).toFixed(6)
+            : existingExpense.fxRateUsed;
+      const nextInstallmentValues = buildInstallmentValues({
+        installmentPayload: payload.installment,
+        amount: payload.amount,
+        existingExpense,
+      });
+      if (existingExpense.installment && nextInstallmentValues === null) {
+        return null;
+      }
+
+      const amountOriginal =
+        nextInstallmentValues?.amountOriginal ??
+        (payload.amount !== undefined ? Number(payload.amount).toFixed(2) : existingExpense.amountOriginal);
+      const nextCategoryId = payload.categoryId ?? existingExpense.categoryId;
+      const categoryDetails = getCategoryDetails(nextCategoryId, existingExpense);
+      const nextPaidByUserId = payload.paidByUserId ?? existingExpense.paidByUserId;
+
+      return {
+        ...existingExpense,
+        isOptimistic: true,
+        optimisticSource: 'update',
+        month: nextMonthValue,
+        date: payload.date ?? existingExpense.date,
+        description: payload.description ?? existingExpense.description,
+        categoryId: nextCategoryId,
+        categoryName: categoryDetails.categoryName,
+        superCategoryId: categoryDetails.superCategoryId,
+        superCategoryName: categoryDetails.superCategoryName,
+        superCategoryColor: categoryDetails.superCategoryColor,
+        amountOriginal,
+        amountArs: toAmountArsString(amountOriginal, nextFxRateUsed),
+        currencyCode: nextCurrencyCode,
+        fxRateUsed: nextFxRateUsed,
+        paidByUserId: nextPaidByUserId,
+        paidByUserName: getUserName(nextPaidByUserId, existingExpense.paidByUserName),
+        installment: nextInstallmentValues?.installment ?? existingExpense.installment,
+      };
+    },
+    [buildInstallmentValues, getCategoryDetails, getUserName, month, toAmountArsString],
+  );
+
   const openMobileComposer = useCallback(() => {
     setEditingExpenseId(null);
     resetForm(sortedActiveCategories[0]?.id ?? '');
@@ -740,13 +988,25 @@ export function ExpensesClient({
     resetForm(sortedActiveCategories[0]?.id ?? '');
   }, [resetForm, sortedActiveCategories]);
 
-  const fetchMonthData = useCallback(async (options?: { includeRates?: boolean; includeSettlement?: boolean }) => {
+  const resetExpenseComposer = useCallback(
+    (options?: { closeMobile?: boolean }) => {
+      setEditingExpenseId(null);
+      resetForm(sortedActiveCategories[0]?.id ?? '');
+      if (options?.closeMobile ?? true) {
+        setIsMobileAddExpenseOpen(false);
+      }
+    },
+    [resetForm, sortedActiveCategories],
+  );
+
+  const fetchMonthData = useCallback(async (options?: { includeRates?: boolean; includeSettlement?: boolean; mutationToken?: number }) => {
     const allSectionKeys: ExpenseSectionKey[] = ['fixed', 'oneTime', 'installment'];
     beginSectionLoading(allSectionKeys);
 
     try {
     const includeRates = options?.includeRates ?? false;
     const includeSettlement = options?.includeSettlement ?? false;
+    const mutationToken = options?.mutationToken;
     const sharedQuery = { sortBy: 'date' as const, sortDir: 'desc' as const, limit: fetchBatchSizeRef.current };
     let hasNoIncomeSettlement = false;
 
@@ -795,7 +1055,11 @@ export function ExpensesClient({
       },
     };
 
-    setExpenses(mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses]));
+    if (mutationToken !== undefined && mutationToken !== mutationTokenRef.current) {
+      return;
+    }
+
+    const mergedExpenses = mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses]);
     const nextWarnings = Array.from(
       new Set([
         ...fixedData.warnings,
@@ -804,41 +1068,70 @@ export function ExpensesClient({
         ...(hasNoIncomeSettlement ? [NO_INCOME_WARNING] : []),
       ]),
     );
-    setWarnings(nextWarnings);
-    setSectionPagination(paginationBySection);
-    setSubtotalTotals(totalsData.totals);
-    sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
-    invalidateSectionChunkState();
-    if (settlement) {
-      setTotalCombinedExpensesArs(Number(settlement.totalExpenses));
-    } else if (hasNoIncomeSettlement) {
+
+    let nextTotalExpensesArs = settlement ? Number(settlement.totalExpenses) : totalCombinedExpensesArsRef.current;
+    if (hasNoIncomeSettlement) {
       const allExpensesResult = await getExpenses(month, {
         sortBy: 'date',
         sortDir: 'desc',
         hydrate: false,
         includeCount: false,
       });
-      setTotalCombinedExpensesArs(sumExpensesArs(allExpensesResult.expenses));
+      nextTotalExpensesArs = sumExpensesArs(allExpensesResult.expenses);
     }
-    if (rates) {
-      setExchangeRates(rates);
+
+    if (mutationToken !== undefined && mutationToken !== mutationTokenRef.current) {
+      return;
     }
+
+    applyExpenseScreenSnapshot({
+      expenses: mergedExpenses,
+      warnings: nextWarnings,
+      sectionPagination: paginationBySection,
+      subtotalTotals: totalsData.totals,
+      totalCombinedExpensesArs: nextTotalExpensesArs,
+      exchangeRates: rates ?? exchangeRatesRef.current,
+    });
+    sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
+    invalidateSectionChunkState();
     } finally {
       endSectionLoading(allSectionKeys);
     }
-  }, [month, invalidateSectionChunkState, beginSectionLoading, endSectionLoading]);
+  }, [month, invalidateSectionChunkState, beginSectionLoading, endSectionLoading, applyExpenseScreenSnapshot]);
+
+  const runBackgroundRefresh = useCallback(
+    async (
+      mutationToken: number,
+      options: { includeRates?: boolean; includeSettlement?: boolean },
+      failureMessage: string,
+    ) => {
+      try {
+        await fetchMonthData({ ...options, mutationToken });
+      } catch (refreshError) {
+        if (mutationToken !== mutationTokenRef.current) {
+          return;
+        }
+        setError(
+          refreshError instanceof Error ? `${failureMessage} ${refreshError.message}` : failureMessage,
+        );
+      }
+    },
+    [fetchMonthData],
+  );
 
   useEffect(() => {
     setUsers(initialUsers);
-    setExpenses(initialExpenses);
-    setWarnings(initialWarnings);
     setCategories(initialCategories);
-    setExchangeRates(initialExchangeRates);
-    setTotalCombinedExpensesArs(Number(initialTotalExpensesArs));
-    setSubtotalTotals(initialTotals);
+    applyExpenseScreenSnapshot({
+      expenses: initialExpenses,
+      warnings: initialWarnings,
+      sectionPagination: initialSectionPagination,
+      exchangeRates: initialExchangeRates,
+      totalCombinedExpensesArs: Number(initialTotalExpensesArs),
+      subtotalTotals: initialTotals,
+    });
     setError(null);
     resetSectionPages();
-    setSectionPagination(initialSectionPagination);
     sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
     invalidateSectionChunkState();
     resetForm(initialCategories.find((c) => c.archivedAt === null)?.id ?? '');
@@ -851,6 +1144,7 @@ export function ExpensesClient({
     initialTotals,
     initialUsers,
     initialWarnings,
+    applyExpenseScreenSnapshot,
     invalidateSectionChunkState,
     resetForm,
     resetSectionPages,
@@ -918,7 +1212,10 @@ export function ExpensesClient({
     expensesRef.current = expenses;
     warningsRef.current = warnings;
     sectionPaginationRef.current = sectionPagination;
-  }, [expenses, sectionPagination, warnings]);
+    exchangeRatesRef.current = exchangeRates;
+    subtotalTotalsRef.current = subtotalTotals;
+    totalCombinedExpensesArsRef.current = totalCombinedExpensesArs;
+  }, [exchangeRates, expenses, sectionPagination, subtotalTotals, totalCombinedExpensesArs, warnings]);
 
   useEffect(() => {
     const previousCurrencyCode = previousCurrencyRef.current;
@@ -939,10 +1236,6 @@ export function ExpensesClient({
       form.setValue('fxRate', undefined, { shouldDirty: true });
     }
   }, [form, monthlyRateForCurrency, watchedCurrencyCode]);
-
-  const reloadFirstPage = useCallback(async () => {
-    await fetchMonthData({ includeRates: true, includeSettlement: true });
-  }, [fetchMonthData]);
 
   const rowsForSection = useCallback((sectionKey: ExpenseSectionKey, list: Expense[]) => {
     if (sectionKey === 'fixed') {
@@ -1033,11 +1326,27 @@ export function ExpensesClient({
     ],
   );
 
-  const executeUpdate = async (values: ExpenseForm, scope?: ApplyScope) => {
-    if (!editingExpenseId) {
-      return;
-    }
+  const mapScopedExpenses = useCallback(
+    (
+      list: Expense[],
+      predicate: (expense: Expense) => boolean,
+      mapper: (expense: Expense) => Expense | null,
+    ) => {
+      const previousAffected = list.filter(predicate);
+      const nextAffected = previousAffected
+        .map(mapper)
+        .filter((expense): expense is Expense => expense !== null);
 
+      return {
+        expenses: mergeUniqueExpenses([...nextAffected, ...list.filter((expense) => !predicate(expense))]),
+        previousAffected,
+        nextAffected,
+      };
+    },
+    [],
+  );
+
+  const buildUpdatePayload = useCallback((values: ExpenseForm, scope?: ApplyScope) => {
     const applyToFuture = values.fixedEnabled && !values.installmentEnabled ? values.applyToFuture : false;
     const payload: Parameters<typeof updateExpense>[1] = {
       month: values.nextMonthExpense ? addMonths(month, 1) : month,
@@ -1063,12 +1372,12 @@ export function ExpensesClient({
       };
     }
 
-    await updateExpense(editingExpenseId, payload);
-  };
+    return payload;
+  }, [month]);
 
-  const executeCreate = async (values: ExpenseForm) => {
+  const buildCreatePayload = useCallback((values: ExpenseForm) => {
     const issuedMonth = values.nextMonthExpense ? addMonths(month, 1) : month;
-    await createExpense({
+    return {
       month: issuedMonth,
       date: values.date,
       description: values.description,
@@ -1087,65 +1396,187 @@ export function ExpensesClient({
             totalAmount: values.installmentEntryMode === 'total' ? values.totalAmount : undefined,
           }
         : undefined,
-    });
-  };
+    };
+  }, [month]);
+
+  const runOptimisticMutation = useCallback(
+    async <T,>(options: {
+      successTitle: string;
+      successMessage: string;
+      errorTitle: string;
+      errorFallbackMessage: string;
+      applyOptimistic?: () => void;
+      execute: () => Promise<T>;
+      reconcile?: (result: T) => void;
+      onSuccess?: (result: T, mutationToken: number) => void;
+    }) => {
+      const mutationToken = mutationTokenRef.current + 1;
+      mutationTokenRef.current = mutationToken;
+      const snapshot = captureExpenseScreenSnapshot();
+
+      setSaving(true);
+      setError(null);
+      options.applyOptimistic?.();
+
+      try {
+        const result = await options.execute();
+        if (mutationToken !== mutationTokenRef.current) {
+          return;
+        }
+
+        options.reconcile?.(result);
+        options.onSuccess?.(result, mutationToken);
+        setSubmissionToast({
+          id: Date.now(),
+          kind: 'success',
+          title: options.successTitle,
+          message: options.successMessage,
+        });
+      } catch (mutationError) {
+        if (mutationToken !== mutationTokenRef.current) {
+          return;
+        }
+
+        applyExpenseScreenSnapshot(snapshot);
+        const message =
+          mutationError instanceof Error ? mutationError.message : options.errorFallbackMessage;
+        setError(message);
+        setSubmissionToast({
+          id: Date.now(),
+          kind: 'error',
+          title: options.errorTitle,
+          message,
+        });
+      } finally {
+        if (mutationToken === mutationTokenRef.current) {
+          setSaving(false);
+        }
+      }
+    },
+    [applyExpenseScreenSnapshot, captureExpenseScreenSnapshot],
+  );
 
   const submit = form.handleSubmit(async (values) => {
     const wasEditing = Boolean(editingExpenseId);
-    const loadingToastId = Date.now();
 
-    try {
-      setSaving(true);
-      setError(null);
-
-      if (editingExpenseId) {
-        const current = expenses.find((expense) => expense.id === editingExpenseId);
-        setSubmissionToast({
-          id: loadingToastId,
-          kind: 'loading',
-          title: 'Updating expense...',
-        });
-
-        if (current?.installment) {
-          await executeUpdate(values, 'all');
-        } else if (current?.fixed.enabled) {
-          await executeUpdate(values, values.applyToFuture ? 'future' : 'single');
-        } else {
-          await executeUpdate(values, 'single');
-        }
-      } else {
-        setSubmissionToast({
-          id: loadingToastId,
-          kind: 'loading',
-          title: 'Adding expense...',
-        });
-        await executeCreate(values);
+    if (editingExpenseId) {
+      const current = expensesRef.current.find((expense) => expense.id === editingExpenseId);
+      if (!current) {
+        setError('Expense not found');
+        return;
       }
 
-      setEditingExpenseId(null);
-      if (!wasEditing) {
-        setIsMobileAddExpenseOpen(false);
-      }
-      resetForm(sortedActiveCategories[0]?.id ?? '');
-      await reloadFirstPage();
-      setSubmissionToast({
-        id: loadingToastId,
-        kind: 'success',
-        title: wasEditing ? 'Expense updated' : 'Expense added',
-        message: wasEditing ? 'Your changes were saved successfully.' : 'Expense added successfully.',
+      const scope: ApplyScope = current.installment
+        ? 'all'
+        : current.fixed.enabled
+          ? (values.applyToFuture ? 'future' : 'single')
+          : 'single';
+      const payload = buildUpdatePayload(values, scope);
+      const scopedPredicate = current.installment?.seriesId
+        ? (expense: Expense) => expense.installment?.seriesId === current.installment?.seriesId
+        : current.fixed.templateId
+          ? (expense: Expense) => expense.fixed.templateId === current.fixed.templateId
+          : (expense: Expense) => expense.id === current.id;
+
+      await runOptimisticMutation({
+        successTitle: 'Expense updated',
+        successMessage: 'Your changes were saved successfully.',
+        errorTitle: 'Could not update expense',
+        errorFallbackMessage: 'Failed to save expense',
+        applyOptimistic: () => {
+          const updateResult =
+            scope === 'single'
+              ? patchExpense(expensesRef.current, current.id, (expense) => {
+                  const nextExpense = buildOptimisticUpdatedExpense(expense, payload);
+                  return nextExpense ?? expense;
+                })
+              : mapScopedExpenses(expensesRef.current, scopedPredicate, (expense) =>
+                  buildOptimisticUpdatedExpense(expense, payload),
+                );
+          applyExpenseMutationState(updateResult);
+          resetExpenseComposer();
+        },
+        execute: () => updateExpense(current.id, payload),
+        reconcile: (updatedExpense) => {
+          const currentExpenses = expensesRef.current;
+          const currentRow = currentExpenses.find((expense) => expense.id === current.id);
+
+          if (updatedExpense.month !== month) {
+            if (!currentRow) {
+              return;
+            }
+            const removal = removeExpenseById(currentExpenses, current.id);
+            applyExpenseMutationState(removal);
+            return;
+          }
+
+          if (currentRow) {
+            const replacement = patchExpense(currentExpenses, current.id, () => ({
+              ...updatedExpense,
+              isOptimistic: false,
+              optimisticSource: undefined,
+            }));
+            applyExpenseMutationState(replacement);
+            return;
+          }
+
+          const insertion = insertExpense(currentExpenses, {
+            ...updatedExpense,
+            isOptimistic: false,
+            optimisticSource: undefined,
+          });
+          applyExpenseMutationState(insertion);
+        },
+        onSuccess: (_result, mutationToken) => {
+          if (current.installment || (current.fixed.enabled && scope !== 'single')) {
+            void runBackgroundRefresh(
+              mutationToken,
+              { includeRates: false, includeSettlement: true },
+              'Expense updated, but the page could not refresh automatically.',
+            );
+          }
+        },
       });
-    } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : 'Failed to save expense';
-      setError(message);
-      setSubmissionToast({
-        id: Date.now(),
-        kind: 'error',
-        title: wasEditing ? 'Could not update expense' : 'Could not add expense',
-        message,
-      });
-    } finally {
-      setSaving(false);
+      return;
     }
+
+    const payload = buildCreatePayload(values);
+    const optimisticExpense = buildOptimisticCreateExpense(payload, 'create');
+    const optimisticExpenseId = optimisticExpense?.id ?? null;
+
+    await runOptimisticMutation({
+      successTitle: 'Expense added',
+      successMessage: 'Expense added successfully.',
+      errorTitle: 'Could not add expense',
+      errorFallbackMessage: 'Failed to save expense',
+      applyOptimistic: () => {
+        if (!optimisticExpense) {
+          resetExpenseComposer({ closeMobile: !wasEditing });
+          return;
+        }
+        const insertion = insertExpense(expensesRef.current, optimisticExpense);
+        applyExpenseMutationState(insertion);
+        resetExpenseComposer({ closeMobile: !wasEditing });
+      },
+      execute: () => createExpense(payload),
+      reconcile: (createdExpense) => {
+        if (!optimisticExpenseId) {
+          return;
+        }
+
+        const currentExpenses = expensesRef.current;
+        const previousAffected = currentExpenses.filter((expense) => expense.id === optimisticExpenseId);
+        const nextExpenses = mergeUniqueExpenses([
+          { ...createdExpense, isOptimistic: false, optimisticSource: undefined },
+          ...currentExpenses.filter((expense) => expense.id !== optimisticExpenseId),
+        ]);
+        applyExpenseMutationState({
+          expenses: nextExpenses,
+          previousAffected,
+          nextAffected: createdExpense.month === month ? [createdExpense] : [],
+        });
+      },
+    });
   });
 
   const jumpToExpenseEditor = useCallback(() => {
@@ -1190,37 +1621,59 @@ export function ExpensesClient({
   };
 
   const confirmCloneExpense = async (expense: Expense) => {
-    try {
-      setSaving(true);
-      setError(null);
-      const today = getTodayDateInputValue();
+    const today = getTodayDateInputValue();
+    const payload: Parameters<typeof createExpense>[0] = {
+      month: dateInputValueToMonth(today),
+      date: today,
+      description: expense.description,
+      categoryId: expense.categoryId,
+      amount: expense.installment ? undefined : Number(expense.amountOriginal),
+      currencyCode: expense.currencyCode,
+      fxRate: Number(expense.fxRateUsed),
+      paidByUserId: expense.paidByUserId,
+      fixed: { enabled: expense.fixed.enabled },
+      installment: expense.installment
+        ? {
+            enabled: true,
+            count: expense.installment.total,
+            entryMode: 'perInstallment',
+            perInstallmentAmount: Number(expense.amountOriginal),
+          }
+        : undefined,
+    };
+    const optimisticExpense = buildOptimisticCreateExpense(payload, 'clone', expense);
+    const optimisticExpenseId = optimisticExpense?.id ?? null;
 
-      await createExpense({
-        month: dateInputValueToMonth(today),
-        date: today,
-        description: expense.description,
-        categoryId: expense.categoryId,
-        amount: expense.installment ? undefined : Number(expense.amountOriginal),
-        currencyCode: expense.currencyCode,
-        fxRate: Number(expense.fxRateUsed),
-        paidByUserId: expense.paidByUserId,
-        fixed: { enabled: expense.fixed.enabled },
-        installment: expense.installment
-          ? {
-              enabled: true,
-              count: expense.installment.total,
-              entryMode: 'perInstallment',
-              perInstallmentAmount: Number(expense.amountOriginal),
-            }
-          : undefined,
-      });
-
-      await reloadFirstPage();
-    } catch (cloneError) {
-      setError(cloneError instanceof Error ? cloneError.message : 'Failed to clone expense');
-    } finally {
-      setSaving(false);
-    }
+    await runOptimisticMutation({
+      successTitle: 'Expense added',
+      successMessage: 'Expense added successfully.',
+      errorTitle: 'Could not clone expense',
+      errorFallbackMessage: 'Failed to clone expense',
+      applyOptimistic: () => {
+        if (!optimisticExpense) {
+          return;
+        }
+        const insertion = insertExpense(expensesRef.current, optimisticExpense);
+        applyExpenseMutationState(insertion);
+      },
+      execute: () => createExpense(payload),
+      reconcile: (createdExpense) => {
+        if (!optimisticExpenseId) {
+          return;
+        }
+        const currentExpenses = expensesRef.current;
+        const previousAffected = currentExpenses.filter((entry) => entry.id === optimisticExpenseId);
+        const nextExpenses = mergeUniqueExpenses([
+          { ...createdExpense, isOptimistic: false, optimisticSource: undefined },
+          ...currentExpenses.filter((entry) => entry.id !== optimisticExpenseId),
+        ]);
+        applyExpenseMutationState({
+          expenses: nextExpenses,
+          previousAffected,
+          nextAffected: createdExpense.month === month ? [createdExpense] : [],
+        });
+      },
+    });
   };
 
   const confirmDeleteExpense = async (expense: Expense) => {
@@ -1229,26 +1682,23 @@ export function ExpensesClient({
       return;
     }
 
-    try {
-      setSaving(true);
-      setError(null);
-      await deleteExpense(expense.id, 'single');
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : 'Failed to delete expense');
-      return;
-    }
-
-    try {
-      await reloadFirstPage();
-    } catch (refreshError) {
-      setError(
-        refreshError instanceof Error
-          ? `Expense deleted, but the page could not refresh automatically. ${refreshError.message}`
-          : 'Expense deleted, but the page could not refresh automatically.',
-      );
-    } finally {
-      setSaving(false);
-    }
+    await runOptimisticMutation({
+      successTitle: 'Expense deleted',
+      successMessage: 'Expense deleted successfully.',
+      errorTitle: 'Could not delete expense',
+      errorFallbackMessage: 'Failed to delete expense',
+      applyOptimistic: () => {
+        const removal = removeExpenseById(expensesRef.current, expense.id);
+        applyExpenseMutationState(removal);
+      },
+      execute: () => deleteExpense(expense.id, 'single'),
+      onSuccess: () => {
+        if (editingExpenseId === expense.id) {
+          setEditingExpenseId(null);
+          resetForm(sortedActiveCategories[0]?.id ?? '');
+        }
+      },
+    });
   };
 
   const confirmAction = async () => {
@@ -1271,28 +1721,34 @@ export function ExpensesClient({
     if (!scopeDialog) {
       return;
     }
+    const scopedExpense = scopeDialog.expense;
+    const predicate = scopedExpense.installment?.seriesId
+      ? (expense: Expense) => expense.installment?.seriesId === scopedExpense.installment?.seriesId
+      : scopedExpense.fixed.templateId
+        ? (expense: Expense) => expense.fixed.templateId === scopedExpense.fixed.templateId
+        : (expense: Expense) => expense.id === scopedExpense.id;
 
-    try {
-      setSaving(true);
-      setError(null);
-      await deleteExpense(scopeDialog.expense.id, scope);
-
-      setScopeDialog(null);
-      setEditingExpenseId(null);
-      resetForm(sortedActiveCategories[0]?.id ?? '');
-    } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'Failed to apply action');
-      return;
-    }
-
-    try {
-      await reloadFirstPage();
-    } catch (refreshError) {
-      const fallbackMessage = 'Expense deleted, but the page could not refresh automatically.';
-      setError(refreshError instanceof Error ? `${fallbackMessage} ${refreshError.message}` : fallbackMessage);
-    } finally {
-      setSaving(false);
-    }
+    await runOptimisticMutation({
+      successTitle: 'Expense deleted',
+      successMessage: 'Expense deleted successfully.',
+      errorTitle: 'Could not delete expense',
+      errorFallbackMessage: 'Failed to apply action',
+      applyOptimistic: () => {
+        const removal = removeExpenses(expensesRef.current, predicate);
+        applyExpenseMutationState(removal);
+      },
+      execute: () => deleteExpense(scopedExpense.id, scope),
+      onSuccess: (_result, mutationToken) => {
+        setScopeDialog(null);
+        setEditingExpenseId(null);
+        resetForm(sortedActiveCategories[0]?.id ?? '');
+        void runBackgroundRefresh(
+          mutationToken,
+          { includeRates: false, includeSettlement: true },
+          'Expense deleted, but the page could not refresh automatically.',
+        );
+      },
+    });
   };
 
   const onSaveExchangeRate = async () => {
@@ -1300,18 +1756,46 @@ export function ExpensesClient({
     if (!newFxCurrency || Number.isNaN(parsedRate) || parsedRate <= 0) {
       return;
     }
+    const nextExchangeRates = (() => {
+      const existingIndex = exchangeRatesRef.current.findIndex((rate) => rate.currencyCode === newFxCurrency);
+      if (existingIndex === -1) {
+        return [
+          ...exchangeRatesRef.current,
+          {
+            id: createOptimisticExpenseId(),
+            month,
+            currencyCode: newFxCurrency,
+            rateToArs: parsedRate.toFixed(6),
+          },
+        ];
+      }
 
-    try {
-      setSaving(true);
-      setError(null);
-      await upsertExchangeRate({ month, currencyCode: newFxCurrency, rateToArs: parsedRate });
-      setNewFxRate('');
-      await reloadFirstPage();
-    } catch (fxError) {
-      setError(fxError instanceof Error ? fxError.message : 'Failed to save FX rate');
-    } finally {
-      setSaving(false);
-    }
+      return exchangeRatesRef.current.map((rate, index) =>
+        index === existingIndex ? { ...rate, rateToArs: parsedRate.toFixed(6) } : rate,
+      );
+    })();
+
+    await runOptimisticMutation({
+      successTitle: 'FX rate saved',
+      successMessage: 'Exchange rate saved successfully.',
+      errorTitle: 'Could not save FX rate',
+      errorFallbackMessage: 'Failed to save FX rate',
+      applyOptimistic: () => {
+        applyExpenseMutationState({
+          expenses: expensesRef.current,
+          exchangeRates: nextExchangeRates,
+        });
+      },
+      execute: () => upsertExchangeRate({ month, currencyCode: newFxCurrency, rateToArs: parsedRate }),
+      onSuccess: (_result, mutationToken) => {
+        setNewFxRate('');
+        void runBackgroundRefresh(
+          mutationToken,
+          { includeRates: true, includeSettlement: true },
+          'FX rate saved, but the page could not refresh automatically.',
+        );
+      },
+    });
   };
 
   const expenseFormFields = (
@@ -1575,86 +2059,13 @@ export function ExpensesClient({
       </label>
 
       <div className="flex gap-2">
-        {!editingExpenseId && submissionToast ? (
-          <div
-            aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
-            className={`relative inline-flex min-h-[44px] min-w-[128px] flex-1 items-center gap-2 overflow-hidden rounded-lg border px-4 py-2.5 text-sm font-semibold shadow-sm ${
-              submissionToast.kind === 'loading'
-                ? 'border-slate-300 bg-white text-slate-800'
-                : submissionToast.kind === 'success'
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                  : 'border-rose-200 bg-rose-50 text-rose-800'
-            }`}
-            role={submissionToast.kind === 'error' ? 'alert' : 'status'}
-          >
-            {submissionToast.kind === 'loading' ? (
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-400/70 border-t-slate-700"
-              />
-            ) : submissionToast.kind === 'success' ? (
-              <svg
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2.6"
-                viewBox="0 0 24 24"
-              >
-                <path d="m5 13 4 4L19 7" />
-              </svg>
-            ) : (
-              <svg
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2.6"
-                viewBox="0 0 24 24"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            )}
-            <span className="truncate">
-              {submissionToast.message ?? submissionToast.title}
-            </span>
-            <span className="absolute inset-x-0 bottom-0 h-1 bg-black/5">
-              <span
-                className={`block h-full ${
-                  submissionToast.kind === 'loading'
-                    ? 'animate-pulse bg-slate-500/80'
-                    : submissionToast.kind === 'success'
-                      ? 'submission-toast-progress bg-emerald-600'
-                      : 'submission-toast-progress bg-rose-600'
-                }`}
-                style={
-                  submissionToast.kind === 'loading'
-                    ? undefined
-                    : ({ '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<string, string>)
-                }
-              />
-            </span>
-          </div>
-        ) : (
-          <button
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={saving}
-            type="submit"
-          >
-            <span aria-hidden="true" className="text-base leading-none">+</span>
-            {!editingExpenseId && saving ? (
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white"
-              />
-            ) : null}
-            {editingExpenseId ? 'Update' : saving ? 'Adding...' : 'Add'}
-          </button>
-        )}
+        <button
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          type="submit"
+        >
+          <span aria-hidden="true" className="text-base leading-none">+</span>
+          {editingExpenseId ? 'Update' : 'Add'}
+        </button>
         {editingExpenseId ? (
           <button
             className={secondaryButtonClass}
@@ -1925,32 +2336,12 @@ export function ExpensesClient({
         </section>
       ) : null}
 
-      {!editingExpenseId && submissionToast ? (
-        <div
-          aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
-          className={`relative inline-flex min-h-[44px] w-full items-center gap-2 overflow-hidden rounded-2xl border px-4 py-3 text-sm font-semibold shadow-sm ${
-            submissionToast.kind === 'loading'
-              ? 'border-slate-300 bg-white text-slate-800'
-              : submissionToast.kind === 'success'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-rose-200 bg-rose-50 text-rose-800'
-          }`}
-          role={submissionToast.kind === 'error' ? 'alert' : 'status'}
-        >
-          <span className="truncate">{submissionToast.message ?? submissionToast.title}</span>
-        </div>
-      ) : null}
-
       <div className="space-y-2.5">
         <button
           className="inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[18px] bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-3 text-base font-extrabold text-white shadow-[0_14px_28px_rgba(99,102,241,0.25)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={saving}
           type="submit"
         >
-          {!editingExpenseId && saving ? (
-            <span aria-hidden="true" className="h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-white" />
-          ) : null}
-          {editingExpenseId ? 'Save changes' : saving ? 'Saving...' : 'Save expense'}
+          {editingExpenseId ? 'Save changes' : 'Save expense'}
         </button>
         <button
           className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-300/40 bg-white px-4 py-3 text-sm font-bold text-slate-700"
@@ -2742,6 +3133,56 @@ export function ExpensesClient({
           </div>
         </div>
       </div>
+      {submissionToast ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+          <div
+            aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
+            className={`pointer-events-auto relative flex w-full max-w-md items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl ${
+              submissionToast.kind === 'success'
+                ? 'border-emerald-200 bg-white text-emerald-800'
+                : 'border-rose-200 bg-white text-rose-800'
+            }`}
+            role={submissionToast.kind === 'error' ? 'alert' : 'status'}
+          >
+            {submissionToast.kind === 'success' ? (
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.6"
+                viewBox="0 0 24 24"
+              >
+                <path d="m5 13 4 4L19 7" />
+              </svg>
+            ) : (
+              <svg
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.6"
+                viewBox="0 0 24 24"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            )}
+            <span className="truncate">{submissionToast.message ?? submissionToast.title}</span>
+            <span className="absolute inset-x-0 bottom-0 h-1 bg-black/5">
+              <span
+                className={`submission-toast-progress block h-full ${
+                  submissionToast.kind === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+                }`}
+                style={{ '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<string, string>}
+              />
+            </span>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }
