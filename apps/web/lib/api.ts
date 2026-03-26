@@ -22,6 +22,8 @@ export interface Income {
 
 export interface Expense {
   id: string;
+  isOptimistic?: boolean;
+  optimisticSource?: 'create' | 'clone' | 'update' | 'delete';
   month: string;
   date: string;
   description: string;
@@ -149,7 +151,20 @@ export interface HouseholdInvite {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
+const OPTIMISTIC_EXPENSE_ID_PREFIX = 'optimistic:expense:';
 type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
+
+export function createOptimisticExpenseId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${OPTIMISTIC_EXPENSE_ID_PREFIX}${crypto.randomUUID()}`;
+  }
+
+  return `${OPTIMISTIC_EXPENSE_ID_PREFIX}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function isOptimisticExpenseId(id: string): boolean {
+  return id.startsWith(OPTIMISTIC_EXPENSE_ID_PREFIX);
+}
 
 async function fetchFromApi(input: string, init?: RequestInit): Promise<Response> {
   try {
