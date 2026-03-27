@@ -69,10 +69,19 @@ type ApplyScope = 'single' | 'future' | 'all';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
 const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
+const DEFAULT_SORT_FIELD: ExpenseSortField = 'date';
+const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const currencyCodeSchema = z.enum(supportedCurrencyCodes);
 const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
 const SEARCH_DEBOUNCE_MS = 350;
+const SORTABLE_EXPENSE_COLUMNS: ReadonlyArray<{ field: ExpenseSortField; label: string }> = [
+  { field: 'date', label: 'Date' },
+  { field: 'description', label: 'Description' },
+  { field: 'category', label: 'Category' },
+  { field: 'amountArs', label: 'Amount' },
+  { field: 'paidBy', label: 'Paid by' },
+];
 
 function getExpenseKindLabel(expense: Expense): string {
   if (expense.fixed.enabled) {
@@ -295,6 +304,38 @@ function getSortFieldLabel(sortField: ExpenseSortField): string {
   return sortField.charAt(0).toUpperCase() + sortField.slice(1);
 }
 
+function getDefaultSortDirection(sortField: ExpenseSortField): SortDirection {
+  if (sortField === 'description' || sortField === 'category' || sortField === 'paidBy') {
+    return 'asc';
+  }
+
+  return 'desc';
+}
+
+function getSortDirectionLabel(sortField: ExpenseSortField, sortDirection: SortDirection): string {
+  if (sortField === 'amountArs') {
+    return sortDirection === 'asc' ? 'Lowest first' : 'Highest first';
+  }
+
+  if (sortField === 'description' || sortField === 'category' || sortField === 'paidBy') {
+    return sortDirection === 'asc' ? 'A to Z' : 'Z to A';
+  }
+
+  return sortDirection === 'asc' ? 'Oldest first' : 'Newest first';
+}
+
+function getAriaSortValue(
+  activeSortField: ExpenseSortField,
+  activeSortDirection: SortDirection,
+  currentField: ExpenseSortField,
+): 'ascending' | 'descending' | 'none' {
+  if (activeSortField !== currentField) {
+    return 'none';
+  }
+
+  return activeSortDirection === 'asc' ? 'ascending' : 'descending';
+}
+
 function resolveDefaultPaidByUserId(users: User[], currentUserId: string | null): string {
   if (currentUserId) {
     const currentUser = users.find((user) => user.id === currentUserId);
@@ -343,8 +384,8 @@ export function ExpensesClient({
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
-  const [sortField, setSortField] = useState<ExpenseSortField>('date');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortField, setSortField] = useState<ExpenseSortField>(DEFAULT_SORT_FIELD);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION);
   const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
   const hasSearchQuery = searchQuery.trim().length > 0;
   const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
@@ -475,9 +516,18 @@ export function ExpensesClient({
     [searchQuery, selectedCategoryId],
   );
   const hasActiveControls = useMemo(
-    () => hasActiveFilters || sortField !== 'date' || sortDirection !== 'desc',
+    () => hasActiveFilters || sortField !== DEFAULT_SORT_FIELD || sortDirection !== DEFAULT_SORT_DIRECTION,
     [hasActiveFilters, sortDirection, sortField],
   );
+  const handleSortChange = useCallback((nextSortField: ExpenseSortField) => {
+    if (nextSortField === sortField) {
+      setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setSortField(nextSortField);
+    setSortDirection(getDefaultSortDirection(nextSortField));
+  }, [sortField]);
   const mobileControlChips = useMemo(() => {
     const chips: string[] = [];
 
@@ -487,11 +537,8 @@ export function ExpensesClient({
         chips.push(category.name);
       }
     }
-    if (sortField !== 'date') {
-      chips.push(getSortFieldLabel(sortField));
-    }
-    if (sortDirection !== 'desc') {
-      chips.push('Oldest');
+    if (sortField !== DEFAULT_SORT_FIELD || sortDirection !== DEFAULT_SORT_DIRECTION) {
+      chips.push(`${getSortFieldLabel(sortField)}: ${getSortDirectionLabel(sortField, sortDirection)}`);
     }
 
     return chips;
@@ -2744,33 +2791,6 @@ export function ExpensesClient({
                           ))}
                         </select>
                       </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <label>
-                          <span className={tableControlLabelClass}>Sort by</span>
-                          <select
-                            className={tableControlFieldClass}
-                            onChange={(event) => setSortField(event.target.value as ExpenseSortField)}
-                            value={sortField}
-                          >
-                            <option value="date">Date</option>
-                            <option value="description">Description</option>
-                            <option value="category">Category</option>
-                            <option value="amountArs">Amount</option>
-                            <option value="paidBy">Paid by</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span className={tableControlLabelClass}>Order</span>
-                          <select
-                            className={tableControlFieldClass}
-                            onChange={(event) => setSortDirection(event.target.value as SortDirection)}
-                            value={sortDirection}
-                          >
-                            <option value="desc">Newest first</option>
-                            <option value="asc">Oldest first</option>
-                          </select>
-                        </label>
-                      </div>
                       <div className="flex items-center justify-between gap-3">
                         <button
                           className="text-sm font-semibold text-slate-500"
@@ -2784,8 +2804,8 @@ export function ExpensesClient({
                           onClick={() => {
                             setSearchQuery('');
                             setSelectedCategoryId('all');
-                            setSortField('date');
-                            setSortDirection('desc');
+                            setSortField(DEFAULT_SORT_FIELD);
+                            setSortDirection(DEFAULT_SORT_DIRECTION);
                             resetSectionPages();
                             setIsMobileFiltersOpen(false);
                           }}
@@ -2812,8 +2832,8 @@ export function ExpensesClient({
                           onClick={() => {
                             setSearchQuery('');
                             setSelectedCategoryId('all');
-                            setSortField('date');
-                            setSortDirection('desc');
+                            setSortField(DEFAULT_SORT_FIELD);
+                            setSortDirection(DEFAULT_SORT_DIRECTION);
                             resetSectionPages();
                           }}
                           type="button"
@@ -2867,43 +2887,16 @@ export function ExpensesClient({
                   </div>
                   <div className="mt-3 border-t border-slate-200 pt-3">
                     <div className="flex flex-wrap items-end justify-between gap-3">
-                      <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-2">
-                        <label className="sm:min-w-56">
-                          <span className={tableControlLabelClass}>Sort by</span>
-                          <select
-                            className={tableControlFieldClass}
-                            onChange={(event) => setSortField(event.target.value as ExpenseSortField)}
-                            value={sortField}
-                          >
-                            <option value="date">Date</option>
-                            <option value="description">Description</option>
-                            <option value="category">Category</option>
-                            <option value="amountArs">Amount</option>
-                            <option value="paidBy">Paid by</option>
-                          </select>
-                        </label>
-                        <label className="sm:min-w-56">
-                          <span className={tableControlLabelClass}>Order</span>
-                          <select
-                            className={tableControlFieldClass}
-                            onChange={(event) => setSortDirection(event.target.value as SortDirection)}
-                            value={sortDirection}
-                          >
-                            <option value="desc">Newest first</option>
-                            <option value="asc">Oldest first</option>
-                          </select>
-                        </label>
-                      </div>
                       <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
-                        <p className="text-xs text-slate-500">Use filters to narrow results, then sort to compare spending quickly.</p>
+                        <p className="text-xs text-slate-500">Use filters to narrow results, then click column labels to sort.</p>
                         {hasActiveControls ? (
                           <button
                             className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                             onClick={() => {
                               setSearchQuery('');
                               setSelectedCategoryId('all');
-                              setSortField('date');
-                              setSortDirection('desc');
+                              setSortField(DEFAULT_SORT_FIELD);
+                              setSortDirection(DEFAULT_SORT_DIRECTION);
                               resetSectionPages();
                             }}
                             type="button"
@@ -2914,6 +2907,42 @@ export function ExpensesClient({
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+              <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+                <div className="flex flex-wrap gap-2">
+                  {SORTABLE_EXPENSE_COLUMNS.map((column) => {
+                    const isActive = sortField === column.field;
+                    return (
+                      <button
+                        key={column.field}
+                        aria-pressed={isActive}
+                        className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
+                          isActive
+                            ? 'border-brand-200 bg-brand-50 text-brand-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        }`}
+                        onClick={() => handleSortChange(column.field)}
+                        type="button"
+                      >
+                        <span>{column.label}</span>
+                        {isActive ? (
+                          <svg
+                            aria-hidden="true"
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2.2"
+                            viewBox="0 0 24 24"
+                          >
+                            {sortDirection === 'asc' ? <path d="m6 14 6-6 6 6" /> : <path d="m6 10 6 6 6-6" />}
+                          </svg>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="space-y-5 p-4">
@@ -3060,21 +3089,43 @@ export function ExpensesClient({
                           </colgroup>
                           <thead className="bg-white text-left text-slate-600">
                             <tr>
-                              <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                                Date
-                              </th>
-                              <th className="px-4 py-3 font-medium" scope="col">
-                                Description
-                              </th>
-                              <th className="px-4 py-3 font-medium" scope="col">
-                                Category
-                              </th>
-                              <th className="px-4 py-3 font-medium" scope="col">
-                                Amount
-                              </th>
-                              <th className="whitespace-nowrap px-4 py-3 font-medium" scope="col">
-                                Paid by
-                              </th>
+                              {SORTABLE_EXPENSE_COLUMNS.map((column) => {
+                                const isActive = sortField === column.field;
+                                const ariaSort = getAriaSortValue(sortField, sortDirection, column.field);
+                                return (
+                                  <th
+                                    key={column.field}
+                                    aria-sort={ariaSort}
+                                    className={`px-4 py-3 font-medium ${column.field === 'date' || column.field === 'paidBy' ? 'whitespace-nowrap' : ''}`}
+                                    scope="col"
+                                  >
+                                    <button
+                                      aria-label={`Sort by ${column.label}`}
+                                      className={`inline-flex items-center gap-1.5 rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
+                                        isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-900'
+                                      }`}
+                                      onClick={() => handleSortChange(column.field)}
+                                      type="button"
+                                    >
+                                      <span>{column.label}</span>
+                                      {isActive ? (
+                                        <svg
+                                          aria-hidden="true"
+                                          className="h-3.5 w-3.5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth="2.2"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          {sortDirection === 'asc' ? <path d="m6 14 6-6 6 6" /> : <path d="m6 10 6 6 6-6" />}
+                                        </svg>
+                                      ) : null}
+                                    </button>
+                                  </th>
+                                );
+                              })}
                               <th className="whitespace-nowrap px-4 py-3 text-right font-medium" scope="col">
                                 <span className="sr-only">Actions</span>
                               </th>
