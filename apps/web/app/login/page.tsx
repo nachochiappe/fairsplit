@@ -34,7 +34,10 @@ export default function LoginPage() {
 
     try {
       const redirectTo = `${window.location.origin}/auth/callback`;
-      const response = await fetch(`${supabaseUrl}/auth/v1/otp`, {
+      const otpUrl = new URL(`${supabaseUrl}/auth/v1/otp`);
+      otpUrl.searchParams.set('redirect_to', redirectTo);
+
+      const response = await fetch(otpUrl.toString(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -43,9 +46,6 @@ export default function LoginPage() {
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           create_user: true,
-          options: {
-            emailRedirectTo: redirectTo,
-          },
         }),
       });
 
