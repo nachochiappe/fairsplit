@@ -308,6 +308,15 @@ export async function getExpenses(
   return parseResponse<ExpenseListResponse>(response);
 }
 
+export async function getExpenseDescriptionSuggestions(query: string, init?: NextRequestInit): Promise<string[]> {
+  const params = new URLSearchParams({ q: query.trim() });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/expense-description-suggestions?${params.toString()}`,
+    init ?? { cache: 'no-store' },
+  );
+  return parseResponse<string[]>(response);
+}
+
 export async function createExpense(payload: {
   month: string;
   date: string;
