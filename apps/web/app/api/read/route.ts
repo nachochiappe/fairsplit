@@ -11,6 +11,7 @@ const ALLOWED_READ_PATH_PREFIXES = [
   '/months',
   '/incomes',
   '/expenses',
+  '/expense-description-suggestions',
   '/categories',
   '/super-categories',
   '/exchange-rates',
