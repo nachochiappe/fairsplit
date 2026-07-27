@@ -73,6 +73,10 @@ const expenseListQuerySchema = z.object({
     });
   }
 });
+const expenseDescriptionSuggestionQuerySchema = z.object({
+  q: z.string().trim().min(2).max(120),
+  limit: z.coerce.number().int().min(1).max(20).default(8),
+});
 
 function withExpenseTypeConstraint(
   baseWhere: Record<string, unknown>,
@@ -1764,6 +1768,45 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       totals,
       pagination: null,
     });
+  });
+
+  app.get('/api/expense-description-suggestions', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = expenseDescriptionSuggestionQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const rows = await prisma.expense.findMany({
+      where: {
+        householdId: auth.householdId,
+        description: { contains: parsed.data.q, mode: 'insensitive' },
+      },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      select: { description: true },
+      take: Math.min(parsed.data.limit * 8, 100),
+    });
+
+    const seen = new Set<string>();
+    const suggestions: string[] = [];
+    for (const row of rows) {
+      const description = row.description.trim();
+      const key = description.toLocaleLowerCase().replace(/\s+/g, ' ');
+      if (key.length === 0 || seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      suggestions.push(description);
+      if (suggestions.length >= parsed.data.limit) {
+        break;
+      }
+    }
+
+    return res.json(suggestions);
   });
 
   app.post('/api/expenses', async (req: Request, res: Response) => {

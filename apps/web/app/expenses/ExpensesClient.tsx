@@ -2,7 +2,9 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { computeInstallmentAmounts } from '@fairsplit/shared';
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { UseFormReturn } from 'react-hook-form';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { AppShell } from '../../components/AppShell';
@@ -26,6 +28,7 @@ import {
   Expense,
   ExpenseListResponse,
   type AppLocale,
+  getExpenseDescriptionSuggestions,
   getExchangeRates,
   getExpenses,
   getSettlement,
@@ -77,6 +80,8 @@ type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const currencyCodeSchema = z.enum(supportedCurrencyCodes);
 const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
 const SEARCH_DEBOUNCE_MS = 350;
+const DESCRIPTION_SUGGESTION_DEBOUNCE_MS = 200;
+
 type ExpensesCopy = Translation['expenses'];
 
 const SORTABLE_EXPENSE_FIELDS: readonly ExpenseSortField[] = [
@@ -196,6 +201,160 @@ const expenseSchema = z
   });
 
 type ExpenseForm = z.infer<typeof expenseSchema>;
+
+interface ExpenseDescriptionFieldProps {
+  form: UseFormReturn<ExpenseForm>;
+  inputClassName: string;
+  label: string;
+  labelClassName: string;
+}
+
+function ExpenseDescriptionField({
+  form,
+  inputClassName,
+  label,
+  labelClassName,
+}: ExpenseDescriptionFieldProps) {
+  const listboxId = useId();
+  const description = useWatch({ control: form.control, name: 'description' }) ?? '';
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const registration = form.register('description');
+  const visibleSuggestions = suggestions.filter(
+    (suggestion) => suggestion.trim().toLocaleLowerCase() !== description.trim().toLocaleLowerCase(),
+  );
+
+  useEffect(() => {
+    const query = description.trim();
+    if (query.length < 2) {
+      setSuggestions([]);
+      setIsOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      getExpenseDescriptionSuggestions(query, { cache: 'no-store', signal: controller.signal })
+        .then((nextSuggestions) => {
+          setSuggestions(nextSuggestions);
+          setIsOpen(nextSuggestions.some((suggestion) => suggestion.trim().toLocaleLowerCase() !== query.toLocaleLowerCase()));
+          setActiveIndex(-1);
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            return;
+          }
+          setSuggestions([]);
+          setIsOpen(false);
+          setActiveIndex(-1);
+        });
+    }, DESCRIPTION_SUGGESTION_DEBOUNCE_MS);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [description]);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const selectSuggestion = (suggestion: string) => {
+    form.setValue('description', suggestion, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+    setIsOpen(false);
+    setActiveIndex(-1);
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen || visibleSuggestions.length === 0) {
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveIndex((current) => (current + 1) % visibleSuggestions.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveIndex((current) => (current <= 0 ? visibleSuggestions.length - 1 : current - 1));
+    } else if (event.key === 'Enter' && activeIndex >= 0) {
+      event.preventDefault();
+      selectSuggestion(visibleSuggestions[activeIndex]);
+    } else if (event.key === 'Escape') {
+      setIsOpen(false);
+      setActiveIndex(-1);
+    }
+  };
+
+  return (
+    <label className="relative block text-sm">
+      <span className={labelClassName}>{label}</span>
+      <input
+        className={inputClassName}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={isOpen && visibleSuggestions.length > 0}
+        aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
+        {...registration}
+        onBlur={(event) => {
+          void registration.onBlur(event);
+          blurTimeoutRef.current = setTimeout(() => {
+            setIsOpen(false);
+            setActiveIndex(-1);
+          }, 120);
+        }}
+        onChange={(event) => {
+          void registration.onChange(event);
+        }}
+        onFocus={() => {
+          if (visibleSuggestions.length > 0) {
+            if (blurTimeoutRef.current) {
+              clearTimeout(blurTimeoutRef.current);
+              blurTimeoutRef.current = null;
+            }
+            setIsOpen(true);
+          }
+        }}
+        onKeyDown={handleKeyDown}
+      />
+      {isOpen && visibleSuggestions.length > 0 ? (
+        <div
+          id={listboxId}
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+        >
+          {visibleSuggestions.map((suggestion, index) => (
+            <button
+              key={suggestion}
+              id={`${listboxId}-${index}`}
+              role="option"
+              aria-selected={index === activeIndex}
+              type="button"
+              className={`block w-full px-3 py-2 text-left text-sm text-slate-800 ${
+                index === activeIndex ? 'bg-blue-50 text-brand-700' : 'hover:bg-slate-50'
+              }`}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                selectSuggestion(suggestion);
+              }}
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </label>
+  );
+}
 
 interface ScopeDialogState {
   expense: Expense;
@@ -1874,13 +2033,12 @@ export function ExpensesClient({
           {...form.register('date')}
         />
       </label>
-      <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.description}</span>
-        <input
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-          {...form.register('description')}
-        />
-      </label>
+      <ExpenseDescriptionField
+        form={form}
+        inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+        label={copy.form.description}
+        labelClassName="mb-1 block text-xs font-medium text-slate-600"
+      />
       <label className="block text-sm">
         <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.category}</span>
         <select
@@ -2176,10 +2334,12 @@ export function ExpensesClient({
           />
         </label>
 
-        <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>{copy.form.description}</span>
-          <input className={mobileInputClass} {...form.register('description')} />
-        </label>
+        <ExpenseDescriptionField
+          form={form}
+          inputClassName={mobileInputClass}
+          label={copy.form.description}
+          labelClassName={mobileFieldLabelClass}
+        />
 
         <label className="block text-sm">
           <span className={mobileFieldLabelClass}>{copy.form.category}</span>
