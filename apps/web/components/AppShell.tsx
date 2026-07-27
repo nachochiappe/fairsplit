@@ -7,11 +7,14 @@ import {
 } from './MonthNavigationPending';
 import { Nav } from './Nav';
 import { TitleMark } from './TitleMark';
+import { LocaleSync } from './LocaleSync';
+import { type AppLocale } from '../lib/api';
 
 interface AppShellProps {
   month: string;
   title: string;
   subtitle: string;
+  locale: AppLocale;
   rightSlot?: ReactNode;
   containerClassName?: string;
   children: ReactNode;
@@ -21,6 +24,7 @@ export function AppShell({
   month,
   title,
   subtitle,
+  locale,
   rightSlot,
   containerClassName,
   children,
@@ -31,6 +35,7 @@ export function AppShell({
         month={month}
         title={title}
         subtitle={subtitle}
+        locale={locale}
         rightSlot={rightSlot}
         containerClassName={containerClassName}
       >
@@ -44,6 +49,7 @@ function AppShellContent({
   month,
   title,
   subtitle,
+  locale,
   rightSlot,
   containerClassName,
   children,
@@ -70,7 +76,8 @@ function AppShellContent({
         </div>
         {rightSlot}
       </header>
-      <Nav month={month} />
+      <LocaleSync locale={locale} />
+      <Nav month={month} locale={locale} />
       <section className="relative rounded-3xl border border-stroke/80 bg-surface p-4 shadow-sm md:p-6">
         <div
           aria-busy={isPending}

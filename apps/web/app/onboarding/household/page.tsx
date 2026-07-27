@@ -79,7 +79,7 @@ export default function HouseholdOnboardingPage() {
                 onClick={() => void handleSkip()}
                 type="button"
               >
-                {isSkipping ? 'Finalizing...' : 'Skip and continue'}
+                <span className="truncate">{isSkipping ? 'Finalizing...' : 'Skip and continue'}</span>
               </button>
             </div>
           </div>
@@ -120,7 +120,7 @@ export default function HouseholdOnboardingPage() {
             disabled={isSubmitting || isSkipping}
             type="submit"
           >
-            {isSubmitting ? 'Joining...' : 'Join household'}
+            <span className="truncate">{isSubmitting ? 'Joining...' : 'Join household'}</span>
           </button>
         </form>
 
@@ -131,7 +131,7 @@ export default function HouseholdOnboardingPage() {
             onClick={() => setIsSkipDialogOpen(true)}
             type="button"
           >
-            {isSkipping ? 'Finalizing...' : 'Skip for now'}
+            <span className="truncate">{isSkipping ? 'Finalizing...' : 'Skip for now'}</span>
           </button>
           <p className="mt-2 text-xs text-slate-500">Skipping creates a new household for your account and cannot be undone.</p>
         </div>

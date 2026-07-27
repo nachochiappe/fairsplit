@@ -94,7 +94,7 @@ export default function LoginPage() {
             disabled={submitting || !hasSupabaseConfig}
             className="w-full rounded-xl bg-brand-600 px-4 py-2.5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? 'Sending link...' : 'Send magic link'}
+            <span className="truncate">{submitting ? 'Sending link...' : 'Send magic link'}</span>
           </button>
         </form>
 

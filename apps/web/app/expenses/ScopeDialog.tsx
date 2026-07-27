@@ -3,21 +3,27 @@
 import { useState } from 'react';
 import { ViewportModal } from '../../components/ViewportModal';
 import { primaryButtonClass, secondaryButtonClass } from './expense-styles';
+import { type AppLocale } from '../../lib/api';
+import { t } from '../../lib/i18n';
 
 type ApplyScope = 'single' | 'future' | 'all';
 
 export function ScopeDialog({
   title,
   busy,
+  locale,
   onCancel,
   onConfirm,
 }: {
   title: string;
   busy: boolean;
+  locale: AppLocale;
   onCancel: () => void;
   onConfirm: (scope: ApplyScope) => void;
 }) {
   const [scope, setScope] = useState<ApplyScope>('future');
+  const copy = t(locale).expenses.dialogs;
+  const shared = t(locale).common;
 
   return (
     <ViewportModal onDismiss={onCancel}>
@@ -31,18 +37,18 @@ export function ScopeDialog({
           {title}
         </h3>
         <fieldset className="mt-3 space-y-2 text-sm text-slate-700">
-          <legend className="sr-only">Select which expenses to apply this action to</legend>
+          <legend className="sr-only">{copy.scopeLegend}</legend>
           <label className="flex items-center gap-2">
             <input checked={scope === 'future'} onChange={() => setScope('future')} type="radio" />
-            This and future
+            {copy.scopeFuture}
           </label>
           <label className="flex items-center gap-2">
             <input checked={scope === 'single'} onChange={() => setScope('single')} type="radio" />
-            Only this one
+            {copy.scopeSingle}
           </label>
           <label className="flex items-center gap-2">
             <input checked={scope === 'all'} onChange={() => setScope('all')} type="radio" />
-            Whole series
+            {copy.scopeAll}
           </label>
         </fieldset>
         <div className="mt-4 flex gap-2">
@@ -52,7 +58,7 @@ export function ScopeDialog({
             onClick={() => onConfirm(scope)}
             type="button"
           >
-            Confirm
+            {shared.confirm}
           </button>
           <button
             className={secondaryButtonClass}
@@ -60,7 +66,7 @@ export function ScopeDialog({
             onClick={onCancel}
             type="button"
           >
-            Cancel
+            {shared.cancel}
           </button>
         </div>
       </div>

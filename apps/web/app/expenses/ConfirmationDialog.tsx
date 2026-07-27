@@ -7,6 +7,7 @@ export function ConfirmationDialog({
   title,
   message,
   busy,
+  cancelLabel,
   confirmLabel,
   onCancel,
   onConfirm,
@@ -14,6 +15,7 @@ export function ConfirmationDialog({
   title: string;
   message: string;
   busy: boolean;
+  cancelLabel: string;
   confirmLabel: string;
   onCancel: () => void;
   onConfirm: () => void;
@@ -45,7 +47,7 @@ export function ConfirmationDialog({
             onClick={onCancel}
             type="button"
           >
-            Cancel
+            {cancelLabel}
           </button>
         </div>
       </div>

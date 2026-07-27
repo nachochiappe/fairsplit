@@ -9,6 +9,7 @@ import { AppShell } from '../../components/AppShell';
 import { MonthSelector } from '../../components/MonthSelector';
 import { ViewportModal } from '../../components/ViewportModal';
 import { formatMoney } from '../../lib/currency';
+import { localeTags, t, type Translation } from '../../lib/i18n';
 import { addMonths } from '../../lib/month';
 import {
   DEFAULT_MAX_ROWS_PER_SECTION,
@@ -24,6 +25,7 @@ import {
   ExchangeRate,
   Expense,
   ExpenseListResponse,
+  type AppLocale,
   getExchangeRates,
   getExpenses,
   getSettlement,
@@ -75,26 +77,42 @@ type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
 const currencyCodeSchema = z.enum(supportedCurrencyCodes);
 const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
 const SEARCH_DEBOUNCE_MS = 350;
-const SORTABLE_EXPENSE_COLUMNS: ReadonlyArray<{ field: ExpenseSortField; label: string }> = [
-  { field: 'date', label: 'Date' },
-  { field: 'description', label: 'Description' },
-  { field: 'category', label: 'Category' },
-  { field: 'amountArs', label: 'Amount' },
-  { field: 'paidBy', label: 'Paid by' },
+type ExpensesCopy = Translation['expenses'];
+
+const SORTABLE_EXPENSE_FIELDS: readonly ExpenseSortField[] = [
+  'date',
+  'description',
+  'category',
+  'amountArs',
+  'paidBy',
 ];
 
-function getExpenseKindLabel(expense: Expense): string {
+function getSortFieldLabel(copy: ExpensesCopy, sortField: ExpenseSortField): string {
+  switch (sortField) {
+    case 'description':
+      return copy.columns.description;
+    case 'category':
+      return copy.columns.category;
+    case 'amountArs':
+      return copy.columns.amount;
+    case 'paidBy':
+      return copy.columns.paidBy;
+    default:
+      return copy.columns.date;
+  }
+}
+
+function getExpenseKindLabel(copy: ExpensesCopy, expense: Expense): string {
   if (expense.fixed.enabled) {
-    return 'Recurring';
+    return copy.kindRecurring;
   }
   if (expense.installment) {
-    return `Installment ${expense.installment.number}/${expense.installment.total}`;
+    return copy.kindInstallment(expense.installment.number, expense.installment.total);
   }
-  return 'One-time';
+  return copy.kindOneTime;
 }
 
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
-const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
 
 function getTodayDateInputValue() {
   const now = new Date();
@@ -211,6 +229,7 @@ interface ExpensesClientProps {
   initialExchangeRates: ExchangeRate[];
   initialTotalExpensesArs: string;
   initialTotals: ExpenseListResponse['totals'];
+  locale: AppLocale;
 }
 
 const sectionTypeMap: Record<ExpenseSectionKey, 'fixed' | 'oneTime' | 'installment'> = {
@@ -260,48 +279,21 @@ function makeSectionOpenMap(value: boolean): Record<ExpenseSectionKey, boolean> 
 }
 
 
-function formatOrdinalDayFromDateInput(value: string): string {
+function getDayFromDateInput(value: string): number | null {
   const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return 'scheduled day';
-  }
-
-  const day = date.getDate();
-  const mod10 = day % 10;
-  const mod100 = day % 100;
-
-  if (mod10 === 1 && mod100 !== 11) {
-    return `${day}st`;
-  }
-  if (mod10 === 2 && mod100 !== 12) {
-    return `${day}nd`;
-  }
-  if (mod10 === 3 && mod100 !== 13) {
-    return `${day}rd`;
-  }
-  return `${day}th`;
+  return Number.isNaN(date.getTime()) ? null : date.getDate();
 }
 
-function formatMonthHeading(value: string): string {
+function formatMonthHeading(value: string, locale: AppLocale): string {
   const date = new Date(`${value}-01T00:00:00`);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(localeTags[locale], {
     month: 'long',
     year: 'numeric',
   });
-}
-
-function getSortFieldLabel(sortField: ExpenseSortField): string {
-  if (sortField === 'amountArs') {
-    return 'Amount';
-  }
-  if (sortField === 'paidBy') {
-    return 'Paid by';
-  }
-  return sortField.charAt(0).toUpperCase() + sortField.slice(1);
 }
 
 function getDefaultSortDirection(sortField: ExpenseSortField): SortDirection {
@@ -312,16 +304,20 @@ function getDefaultSortDirection(sortField: ExpenseSortField): SortDirection {
   return 'desc';
 }
 
-function getSortDirectionLabel(sortField: ExpenseSortField, sortDirection: SortDirection): string {
+function getSortDirectionLabel(
+  copy: ExpensesCopy,
+  sortField: ExpenseSortField,
+  sortDirection: SortDirection,
+): string {
   if (sortField === 'amountArs') {
-    return sortDirection === 'asc' ? 'Lowest first' : 'Highest first';
+    return sortDirection === 'asc' ? copy.sortDirection.lowestFirst : copy.sortDirection.highestFirst;
   }
 
   if (sortField === 'description' || sortField === 'category' || sortField === 'paidBy') {
-    return sortDirection === 'asc' ? 'A to Z' : 'Z to A';
+    return sortDirection === 'asc' ? copy.sortDirection.aToZ : copy.sortDirection.zToA;
   }
 
-  return sortDirection === 'asc' ? 'Oldest first' : 'Newest first';
+  return sortDirection === 'asc' ? copy.sortDirection.oldestFirst : copy.sortDirection.newestFirst;
 }
 
 function getAriaSortValue(
@@ -357,7 +353,10 @@ export function ExpensesClient({
   initialExchangeRates,
   initialTotalExpensesArs,
   initialTotals,
+  locale,
 }: ExpensesClientProps) {
+  const copy = t(locale).expenses;
+  const shared = t(locale).common;
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [warnings, setWarnings] = useState<string[]>(initialWarnings);
@@ -528,6 +527,10 @@ export function ExpensesClient({
     setSortField(nextSortField);
     setSortDirection(getDefaultSortDirection(nextSortField));
   }, [sortField]);
+  const sortableColumns = useMemo(
+    () => SORTABLE_EXPENSE_FIELDS.map((field) => ({ field, label: getSortFieldLabel(copy, field) })),
+    [copy],
+  );
   const mobileControlChips = useMemo(() => {
     const chips: string[] = [];
 
@@ -538,11 +541,11 @@ export function ExpensesClient({
       }
     }
     if (sortField !== DEFAULT_SORT_FIELD || sortDirection !== DEFAULT_SORT_DIRECTION) {
-      chips.push(`${getSortFieldLabel(sortField)}: ${getSortDirectionLabel(sortField, sortDirection)}`);
+      chips.push(`${getSortFieldLabel(copy, sortField)}: ${getSortDirectionLabel(copy, sortField, sortDirection)}`);
     }
 
     return chips;
-  }, [selectedCategoryId, sortDirection, sortField, sortedActiveCategories]);
+  }, [copy, selectedCategoryId, sortDirection, sortField, sortedActiveCategories]);
   const applyClientControls = useCallback(
     (list: Expense[]) => {
       const searchTerm = debouncedSearchQuery.trim().toLowerCase();
@@ -695,13 +698,11 @@ export function ExpensesClient({
   const effectiveFxRate = watchedCurrencyCode === 'ARS' ? 1 : Number(watchedFxRate ?? monthlyRateForCurrency ?? 0);
   const formatFxRate = useCallback(
     (value: string | number) =>
-      Number(value).toLocaleString('en-US', {
-        style: 'currency',
-        currency: 'USD',
+      `$${Number(value).toLocaleString(localeTags[locale], {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      }),
-    [],
+      })}`,
+    [locale],
   );
 
   const resetSectionPages = useCallback(() => {
@@ -856,13 +857,13 @@ export function ExpensesClient({
     (categoryId: string, fallbackExpense?: Expense) => {
       const category = categories.find((entry) => entry.id === categoryId);
       return {
-        categoryName: category?.name ?? fallbackExpense?.categoryName ?? 'Uncategorized',
+        categoryName: category?.name ?? fallbackExpense?.categoryName ?? copy.uncategorized,
         superCategoryId: category?.superCategoryId ?? fallbackExpense?.superCategoryId ?? null,
         superCategoryName: category?.superCategoryName ?? fallbackExpense?.superCategoryName ?? null,
         superCategoryColor: category?.superCategoryColor ?? fallbackExpense?.superCategoryColor ?? null,
       };
     },
-    [categories],
+    [categories, copy.uncategorized],
   );
 
   const toAmountArsString = useCallback((amountOriginal: string, fxRateUsed: string) => {
@@ -967,7 +968,7 @@ export function ExpensesClient({
         currencyCode: payload.currencyCode ?? 'ARS',
         fxRateUsed,
         paidByUserId: payload.paidByUserId,
-        paidByUserName: getUserName(payload.paidByUserId, existingExpense?.paidByUserName ?? 'Unknown'),
+        paidByUserName: getUserName(payload.paidByUserId, existingExpense?.paidByUserName ?? copy.unknownUser),
         fixed: {
           enabled: Boolean(payload.fixed?.enabled),
           templateId: payload.fixed?.enabled ? `optimistic:template:${createOptimisticExpenseId()}` : null,
@@ -975,7 +976,7 @@ export function ExpensesClient({
         installment: installmentValues?.installment ?? null,
       };
     },
-    [buildInstallmentValues, getCategoryDetails, getUserName, month, toAmountArsString],
+    [buildInstallmentValues, copy.unknownUser, getCategoryDetails, getUserName, month, toAmountArsString],
   );
 
   const buildOptimisticUpdatedExpense = useCallback(
@@ -1082,7 +1083,7 @@ export function ExpensesClient({
       includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
       includeSettlement
         ? getSettlement(month, undefined, { hydrate: false }).catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : 'Failed to load settlement';
+            const message = error instanceof Error ? error.message : copy.settlementLoadFailed;
             if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
               hasNoIncomeSettlement = true;
               return null;
@@ -1121,7 +1122,7 @@ export function ExpensesClient({
         ...fixedData.warnings,
         ...oneTimeData.warnings,
         ...installmentData.warnings,
-        ...(hasNoIncomeSettlement ? [NO_INCOME_WARNING] : []),
+        ...(hasNoIncomeSettlement ? [copy.noIncomeWarning] : []),
       ]),
     );
 
@@ -1153,7 +1154,15 @@ export function ExpensesClient({
     } finally {
       endSectionLoading(allSectionKeys);
     }
-  }, [month, invalidateSectionChunkState, beginSectionLoading, endSectionLoading, applyExpenseScreenSnapshot]);
+  }, [
+    applyExpenseScreenSnapshot,
+    beginSectionLoading,
+    copy.noIncomeWarning,
+    copy.settlementLoadFailed,
+    endSectionLoading,
+    invalidateSectionChunkState,
+    month,
+  ]);
 
   const runBackgroundRefresh = useCallback(
     async (
@@ -1518,7 +1527,7 @@ export function ExpensesClient({
     if (editingExpenseId) {
       const current = expensesRef.current.find((expense) => expense.id === editingExpenseId);
       if (!current) {
-        setError('Expense not found');
+        setError(copy.expenseNotFound);
         return;
       }
 
@@ -1535,10 +1544,10 @@ export function ExpensesClient({
           : (expense: Expense) => expense.id === current.id;
 
       await runOptimisticMutation({
-        successTitle: 'Expense updated',
-        successMessage: 'Your changes were saved successfully.',
-        errorTitle: 'Could not update expense',
-        errorFallbackMessage: 'Failed to save expense',
+        successTitle: copy.toasts.expenseUpdated,
+        successMessage: copy.toasts.changesSaved,
+        errorTitle: copy.toasts.couldNotUpdate,
+        errorFallbackMessage: copy.toasts.saveFailed,
         applyOptimistic: () => {
           const updateResult =
             scope === 'single'
@@ -1588,7 +1597,7 @@ export function ExpensesClient({
             void runBackgroundRefresh(
               mutationToken,
               { includeRates: false, includeSettlement: true },
-              'Expense updated, but the page could not refresh automatically.',
+              copy.updatedNoRefresh,
             );
           }
         },
@@ -1601,10 +1610,10 @@ export function ExpensesClient({
     const optimisticExpenseId = optimisticExpense?.id ?? null;
 
     await runOptimisticMutation({
-      successTitle: 'Expense added',
-      successMessage: 'Expense added successfully.',
-      errorTitle: 'Could not add expense',
-      errorFallbackMessage: 'Failed to save expense',
+      successTitle: copy.toasts.expenseAdded,
+      successMessage: copy.toasts.addedSuccessfully,
+      errorTitle: copy.toasts.couldNotAdd,
+      errorFallbackMessage: copy.toasts.saveFailed,
       applyOptimistic: () => {
         if (!optimisticExpense) {
           resetExpenseComposer({ closeMobile: !wasEditing });
@@ -1701,10 +1710,10 @@ export function ExpensesClient({
     const optimisticExpenseId = optimisticExpense?.id ?? null;
 
     await runOptimisticMutation({
-      successTitle: 'Expense added',
-      successMessage: 'Expense added successfully.',
-      errorTitle: 'Could not clone expense',
-      errorFallbackMessage: 'Failed to clone expense',
+      successTitle: copy.toasts.expenseAdded,
+      successMessage: copy.toasts.addedSuccessfully,
+      errorTitle: copy.toasts.couldNotClone,
+      errorFallbackMessage: copy.toasts.cloneFailed,
       applyOptimistic: () => {
         if (!optimisticExpense) {
           return;
@@ -1739,10 +1748,10 @@ export function ExpensesClient({
     }
 
     await runOptimisticMutation({
-      successTitle: 'Expense deleted',
-      successMessage: 'Expense deleted successfully.',
-      errorTitle: 'Could not delete expense',
-      errorFallbackMessage: 'Failed to delete expense',
+      successTitle: copy.toasts.expenseDeleted,
+      successMessage: copy.toasts.deletedSuccessfully,
+      errorTitle: copy.toasts.couldNotDelete,
+      errorFallbackMessage: copy.toasts.deleteFailed,
       applyOptimistic: () => {
         const removal = removeExpenseById(expensesRef.current, expense.id);
         applyExpenseMutationState(removal);
@@ -1785,10 +1794,10 @@ export function ExpensesClient({
         : (expense: Expense) => expense.id === scopedExpense.id;
 
     await runOptimisticMutation({
-      successTitle: 'Expense deleted',
-      successMessage: 'Expense deleted successfully.',
-      errorTitle: 'Could not delete expense',
-      errorFallbackMessage: 'Failed to apply action',
+      successTitle: copy.toasts.expenseDeleted,
+      successMessage: copy.toasts.deletedSuccessfully,
+      errorTitle: copy.toasts.couldNotDelete,
+      errorFallbackMessage: copy.toasts.applyActionFailed,
       applyOptimistic: () => {
         const removal = removeExpenses(expensesRef.current, predicate);
         applyExpenseMutationState(removal);
@@ -1801,7 +1810,7 @@ export function ExpensesClient({
         void runBackgroundRefresh(
           mutationToken,
           { includeRates: false, includeSettlement: true },
-          'Expense deleted, but the page could not refresh automatically.',
+          copy.deletedNoRefresh,
         );
       },
     });
@@ -1832,10 +1841,10 @@ export function ExpensesClient({
     })();
 
     await runOptimisticMutation({
-      successTitle: 'FX rate saved',
-      successMessage: 'Exchange rate saved successfully.',
-      errorTitle: 'Could not save FX rate',
-      errorFallbackMessage: 'Failed to save FX rate',
+      successTitle: copy.toasts.fxSaved,
+      successMessage: copy.toasts.fxSavedSuccessfully,
+      errorTitle: copy.toasts.couldNotSaveFx,
+      errorFallbackMessage: copy.toasts.fxSaveFailed,
       applyOptimistic: () => {
         applyExpenseMutationState({
           expenses: expensesRef.current,
@@ -1848,7 +1857,7 @@ export function ExpensesClient({
         void runBackgroundRefresh(
           mutationToken,
           { includeRates: true, includeSettlement: true },
-          'FX rate saved, but the page could not refresh automatically.',
+          copy.fxNoRefresh,
         );
       },
     });
@@ -1857,7 +1866,7 @@ export function ExpensesClient({
   const expenseFormFields = (
     <>
       <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">Date</span>
+        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.date}</span>
         <input
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 [color-scheme:light] [&::-webkit-date-and-time-value]:text-left"
           lang="en"
@@ -1866,14 +1875,14 @@ export function ExpensesClient({
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">Description</span>
+        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.description}</span>
         <input
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           {...form.register('description')}
         />
       </label>
       <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">Category</span>
+        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.category}</span>
         <select
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           {...form.register('categoryId')}
@@ -1888,7 +1897,7 @@ export function ExpensesClient({
 
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Currency</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.currency}</span>
           <select
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
             {...form.register('currencyCode')}
@@ -1901,7 +1910,7 @@ export function ExpensesClient({
           </select>
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">FX to ARS</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.fxToArs}</span>
           <div className="relative">
             <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
               $
@@ -1920,7 +1929,7 @@ export function ExpensesClient({
 
       <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-2.5">
         <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-          <span>Recurring expense</span>
+          <span>{copy.form.recurringExpense}</span>
           <span className="relative inline-flex items-center">
             <input
               checked={watchedFixedEnabled}
@@ -1935,7 +1944,7 @@ export function ExpensesClient({
           </span>
         </label>
         <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-          <span>Next-month expense</span>
+          <span>{copy.form.nextMonthExpense}</span>
           <span className="relative inline-flex items-center">
             <input
               checked={watchedNextMonthExpense}
@@ -1951,7 +1960,7 @@ export function ExpensesClient({
         </label>
         {editingExpenseId && watchedFixedEnabled && !watchedInstallmentEnabled ? (
           <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-            <span>Apply changes to future months</span>
+            <span>{copy.form.applyToFuture}</span>
             <span className="relative inline-flex items-center">
               <input
                 checked={watchedApplyToFuture}
@@ -1967,7 +1976,7 @@ export function ExpensesClient({
           </label>
         ) : null}
         <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-          <span>Installments</span>
+          <span>{copy.form.installments}</span>
           <span className="relative inline-flex items-center">
             <input
               checked={watchedInstallmentEnabled}
@@ -1986,19 +1995,19 @@ export function ExpensesClient({
       {watchedInstallmentEnabled ? (
         <>
           <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Installment count</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.installmentCount}</span>
             <input className={fieldClass} min="2" type="number" {...form.register('installmentCount')} />
           </label>
           <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">Entry mode</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.entryMode}</span>
             <select className={fieldClass} {...form.register('installmentEntryMode')}>
-              <option value="perInstallment">Per installment amount</option>
-              <option value="total">Total amount</option>
+              <option value="perInstallment">{copy.form.perInstallmentOption}</option>
+              <option value="total">{copy.form.totalAmountOption}</option>
             </select>
           </label>
           {watchedInstallmentEntryMode === 'total' ? (
             <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-600">Total amount</span>
+              <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.totalAmount}</span>
               <div className="relative">
                 <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                   $
@@ -2027,7 +2036,7 @@ export function ExpensesClient({
             </label>
           ) : (
             <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-600">Per-installment amount</span>
+              <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.perInstallmentAmount}</span>
               <div className="relative">
                 <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
                   $
@@ -2058,7 +2067,7 @@ export function ExpensesClient({
         </>
       ) : (
         <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">Amount</span>
+          <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.amount}</span>
           <div className="relative">
             <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
               $
@@ -2089,19 +2098,23 @@ export function ExpensesClient({
 
       {installmentPreview ? (
         <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          {installmentPreview.count} installments: first {formatMoney(installmentPreview.first)} and last{' '}
-          {formatMoney(installmentPreview.last)} (total {formatMoney(installmentPreview.total)})
+          {copy.form.installmentPreview(
+            installmentPreview.count,
+            formatMoney(installmentPreview.first, locale),
+            formatMoney(installmentPreview.last, locale),
+            formatMoney(installmentPreview.total, locale),
+          )}
         </div>
       ) : null}
 
       {watchedCurrencyCode !== 'ARS' && projectedArsAmount !== null ? (
         <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          Estimated ARS amount: {formatMoney(projectedArsAmount.toFixed(2))}
+          {copy.form.estimatedArs(formatMoney(projectedArsAmount.toFixed(2), locale))}
         </div>
       ) : null}
 
       <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">Paid by</span>
+        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.paidBy}</span>
         <select
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           {...form.register('paidByUserId')}
@@ -2120,7 +2133,7 @@ export function ExpensesClient({
           type="submit"
         >
           <span aria-hidden="true" className="text-base leading-none">+</span>
-          {editingExpenseId ? 'Update' : 'Add'}
+          {editingExpenseId ? copy.form.update : copy.form.add}
         </button>
         {editingExpenseId ? (
           <button
@@ -2132,7 +2145,7 @@ export function ExpensesClient({
               setIsMobileAddExpenseOpen(false);
             }}
           >
-            Cancel
+            {shared.cancel}
           </button>
         ) : null}
       </div>
@@ -2151,10 +2164,10 @@ export function ExpensesClient({
   const mobileExpenseFormFields = (
     <>
       <section className={mobileSectionClass}>
-        <h3 className="text-[18px] font-semibold text-slate-900">Expense details</h3>
+        <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.expenseDetails}</h3>
 
         <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>Date</span>
+          <span className={mobileFieldLabelClass}>{copy.form.date}</span>
           <input
             className={`${mobileInputClass} appearance-none [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
             lang="en"
@@ -2164,12 +2177,12 @@ export function ExpensesClient({
         </label>
 
         <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>Description</span>
+          <span className={mobileFieldLabelClass}>{copy.form.description}</span>
           <input className={mobileInputClass} {...form.register('description')} />
         </label>
 
         <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>Category</span>
+          <span className={mobileFieldLabelClass}>{copy.form.category}</span>
           <select className={mobileInputClass} {...form.register('categoryId')}>
             {sortedActiveCategories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -2181,7 +2194,7 @@ export function ExpensesClient({
 
         <div className="grid grid-cols-[8.75rem_minmax(0,1fr)] gap-3">
           <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>Currency</span>
+            <span className={mobileFieldLabelClass}>{copy.form.currency}</span>
             <select className={mobileInputClass} {...form.register('currencyCode')}>
               {supportedCurrencyCodes.map((currencyCode) => (
                 <option key={currencyCode} value={currencyCode}>
@@ -2191,7 +2204,7 @@ export function ExpensesClient({
             </select>
           </label>
           <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>Amount</span>
+            <span className={mobileFieldLabelClass}>{copy.form.amount}</span>
             <div className="relative">
               <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
                 $
@@ -2222,7 +2235,7 @@ export function ExpensesClient({
 
         {watchedCurrencyCode !== 'ARS' ? (
           <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>FX to ARS</span>
+            <span className={mobileFieldLabelClass}>{copy.form.fxToArs}</span>
             <div className="relative">
               <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
                 $
@@ -2240,15 +2253,15 @@ export function ExpensesClient({
 
         {watchedCurrencyCode !== 'ARS' && projectedArsAmount !== null ? (
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            Estimated ARS amount: {formatMoney(projectedArsAmount.toFixed(2))}
+            {copy.form.estimatedArs(formatMoney(projectedArsAmount.toFixed(2), locale))}
           </div>
         ) : null}
 
         <label className="block text-sm">
           <div className="flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3">
             <div className="min-w-0">
-              <span className="block font-semibold text-slate-900">Paid by</span>
-              <span className="block text-[13px] leading-4 text-slate-500">Who covered this expense</span>
+              <span className="block font-semibold text-slate-900">{copy.form.paidBy}</span>
+              <span className="block text-[13px] leading-4 text-slate-500">{copy.form.whoCovered}</span>
             </div>
             <div className="relative shrink-0">
               <select
@@ -2267,10 +2280,10 @@ export function ExpensesClient({
       </section>
 
       <section className={mobileSectionClass}>
-        <h3 className="text-[18px] font-semibold text-slate-900">Behavior</h3>
+        <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.behavior}</h3>
         <div className="space-y-2.5">
           <label className={mobileToggleRowClass}>
-            <span className="font-medium">Recurring expense</span>
+            <span className="font-medium">{copy.form.recurringExpense}</span>
             <span className="relative inline-flex items-center">
               <input
                 checked={watchedFixedEnabled}
@@ -2286,7 +2299,7 @@ export function ExpensesClient({
           </label>
 
           <label className={mobileToggleRowClass}>
-            <span className="font-medium">Next-month expense</span>
+            <span className="font-medium">{copy.form.nextMonthExpense}</span>
             <span className="relative inline-flex items-center">
               <input
                 checked={watchedNextMonthExpense}
@@ -2303,8 +2316,8 @@ export function ExpensesClient({
 
           <label className={mobileToggleRowClass}>
             <span className="min-w-0">
-              <span className="block font-medium">Installments</span>
-              <span className="block text-[13px] leading-4 text-slate-500">Split into multiple monthly charges</span>
+              <span className="block font-medium">{copy.form.installments}</span>
+              <span className="block text-[13px] leading-4 text-slate-500">{copy.form.installmentsHelp}</span>
             </span>
             <span className="relative inline-flex items-center">
               <input
@@ -2324,21 +2337,21 @@ export function ExpensesClient({
 
       {watchedInstallmentEnabled ? (
         <section className={mobileSectionClass}>
-          <h3 className="text-[18px] font-semibold text-slate-900">Installment setup</h3>
+          <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.installmentSetup}</h3>
           <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>Installment count</span>
+            <span className={mobileFieldLabelClass}>{copy.form.installmentCount}</span>
             <input className={mobileInputClass} min="2" type="number" {...form.register('installmentCount')} />
           </label>
           <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>Entry mode</span>
+            <span className={mobileFieldLabelClass}>{copy.form.entryMode}</span>
             <select className={mobileInputClass} {...form.register('installmentEntryMode')}>
-              <option value="perInstallment">Per installment amount</option>
-              <option value="total">Total amount</option>
+              <option value="perInstallment">{copy.form.perInstallmentOption}</option>
+              <option value="total">{copy.form.totalAmountOption}</option>
             </select>
           </label>
           {watchedInstallmentEntryMode === 'total' ? (
             <label className="block text-sm">
-              <span className={mobileFieldLabelClass}>Total amount</span>
+              <span className={mobileFieldLabelClass}>{copy.form.totalAmount}</span>
               <div className="relative">
                 <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
                   $
@@ -2368,7 +2381,12 @@ export function ExpensesClient({
           ) : null}
           {installmentPreview ? (
             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              {installmentPreview.count} installments: first {formatMoney(installmentPreview.first)} and last {formatMoney(installmentPreview.last)} (total {formatMoney(installmentPreview.total)})
+              {copy.form.installmentPreview(
+                installmentPreview.count,
+                formatMoney(installmentPreview.first, locale),
+                formatMoney(installmentPreview.last, locale),
+                formatMoney(installmentPreview.total, locale),
+              )}
             </div>
           ) : null}
         </section>
@@ -2378,16 +2396,16 @@ export function ExpensesClient({
         <section className="space-y-3 rounded-[24px] border border-indigo-200/30 bg-gradient-to-br from-slate-50 to-indigo-50/50 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-[18px] font-semibold text-slate-900">Recurring schedule</h3>
+              <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.recurringSchedule}</h3>
               <p className="text-[14px] leading-5 text-slate-600">
-                This will repeat every month on the {formatOrdinalDayFromDateInput(watchedDate ?? getTodayDateInputValue())}.
+                {copy.form.repeatsOnDay(getDayFromDateInput(watchedDate ?? getTodayDateInputValue()))}
               </p>
             </div>
             <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm">↺</span>
           </div>
           <div className="flex flex-wrap gap-2">
-            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">Starts this month</span>
-            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">Editable later</span>
+            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">{copy.form.startsThisMonth}</span>
+            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">{copy.form.editableLater}</span>
           </div>
         </section>
       ) : null}
@@ -2397,14 +2415,14 @@ export function ExpensesClient({
           className="inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[18px] bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-3 text-base font-extrabold text-white shadow-[0_14px_28px_rgba(99,102,241,0.25)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
           type="submit"
         >
-          {editingExpenseId ? 'Save changes' : 'Save expense'}
+          {editingExpenseId ? copy.form.saveChanges : copy.form.saveExpense}
         </button>
         <button
           className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-300/40 bg-white px-4 py-3 text-sm font-bold text-slate-700"
           onClick={closeMobileComposer}
           type="button"
         >
-          Cancel
+          {shared.cancel}
         </button>
       </div>
     </>
@@ -2414,7 +2432,7 @@ export function ExpensesClient({
     <div className="mt-2 flex flex-wrap gap-2">
       {exchangeRates.length === 0 ? (
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-          No rates yet
+          {copy.fx.noRatesYet}
         </span>
       ) : (
         exchangeRates.map((rate) => (
@@ -2440,27 +2458,31 @@ export function ExpensesClient({
     }> = [
       {
         key: 'fixed',
-        title: 'Recurring expenses',
-        subtitle: 'Recurring monthly costs',
+        title: copy.sections.fixedTitle,
+        subtitle: copy.sections.fixedSubtitle,
         subtotalArs: fixedSubtotalArs,
         allRows: fixedExpenses,
-        emptyMessage: 'No recurring expenses in the current results',
+        emptyMessage: copy.sections.fixedEmpty,
       },
       {
         key: 'oneTime',
-        title: 'One-time expenses',
-        subtitle: 'Variable purchases',
+        title: copy.sections.oneTimeTitle,
+        subtitle: copy.sections.oneTimeSubtitle,
         subtotalArs: oneTimeSubtotalArs,
         allRows: oneTimeExpenses,
-        emptyMessage: hasActiveFilters ? 'No one-time expenses match the current filters' : 'No one-time expenses yet for this month',
+        emptyMessage: hasActiveFilters
+          ? copy.sections.oneTimeEmptyFiltered
+          : copy.sections.oneTimeEmpty,
       },
       {
         key: 'installment',
-        title: 'Installments',
-        subtitle: 'Purchases paid across multiple months',
+        title: copy.sections.installmentTitle,
+        subtitle: copy.sections.installmentSubtitle,
         subtotalArs: installmentSubtotalArs,
         allRows: installmentExpenses,
-        emptyMessage: hasActiveFilters ? 'No installments match the current filters' : 'No installments yet for this month',
+        emptyMessage: hasActiveFilters
+          ? copy.sections.installmentEmptyFiltered
+          : copy.sections.installmentEmpty,
       },
     ];
 
@@ -2487,6 +2509,7 @@ export function ExpensesClient({
       };
     });
   }, [
+    copy,
     fixedSubtotalArs,
     fixedExpenses,
     hasActiveFilters,
@@ -2530,30 +2553,45 @@ export function ExpensesClient({
   return (
     <AppShell
       month={month}
-      title="Monthly Expenses"
-      subtitle="Track each expense, category, currency and recurring expenses"
-      rightSlot={<MonthSelector month={month} />}
+      title={copy.title}
+      subtitle={copy.subtitle}
+      locale={locale}
+      rightSlot={<MonthSelector month={month} locale={locale} />}
     >
       {scopeDialog ? (
         <ScopeDialog
           busy={saving}
           onCancel={() => setScopeDialog(null)}
           onConfirm={(scope) => void confirmScopedAction(scope)}
-          title={scopeDialog.expense.installment ? 'Delete installment expense' : 'Delete recurring expense'}
+          locale={locale}
+          title={
+            scopeDialog.expense.installment
+              ? copy.dialogs.deleteInstallmentExpense
+              : copy.dialogs.deleteRecurringExpense
+          }
         />
       ) : null}
       {confirmationDialog ? (
         <ConfirmationDialog
           busy={saving}
-          confirmLabel={confirmationDialog.action === 'clone' ? 'Clone expense' : 'Delete expense'}
+          cancelLabel={shared.cancel}
+          confirmLabel={
+            confirmationDialog.action === 'clone'
+              ? copy.dialogs.cloneExpense
+              : copy.dialogs.deleteExpense
+          }
           message={
             confirmationDialog.action === 'clone'
-              ? `Create a new copy of "${confirmationDialog.expense.description}" using today's date?`
-              : `Delete "${confirmationDialog.expense.description}"?`
+              ? copy.dialogs.cloneMessage(confirmationDialog.expense.description)
+              : copy.dialogs.deleteMessage(confirmationDialog.expense.description)
           }
           onCancel={() => setConfirmationDialog(null)}
           onConfirm={() => void confirmAction()}
-          title={confirmationDialog.action === 'clone' ? 'Confirm clone' : 'Confirm delete'}
+          title={
+            confirmationDialog.action === 'clone'
+              ? copy.dialogs.confirmClone
+              : copy.dialogs.confirmDelete
+          }
         />
       ) : null}
       {isMobileAddExpenseOpen ? (
@@ -2571,8 +2609,10 @@ export function ExpensesClient({
                 </svg>
               </button>
               <div className="min-w-0 flex-1">
-                <p className="text-lg font-semibold text-slate-900">{editingExpenseId ? 'Edit expense' : 'Add expense'}</p>
-                <p className="text-sm text-slate-500">{formatMonthHeading(month)}</p>
+                <p className="text-lg font-semibold text-slate-900">
+                  {editingExpenseId ? copy.form.editExpense : copy.form.addExpense}
+                </p>
+                <p className="text-sm text-slate-500">{formatMonthHeading(month, locale)}</p>
               </div>
               </div>
             </div>
@@ -2589,7 +2629,7 @@ export function ExpensesClient({
       <div className="space-y-4">
         {warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-semibold">Recurring expense generation warnings</p>
+            <p className="font-semibold">{copy.warningsHeading}</p>
             <ul className="mt-2 list-disc pl-5">
               {warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
@@ -2613,7 +2653,9 @@ export function ExpensesClient({
                 type="button"
               >
                 <div>
-                  <p className="text-base font-semibold text-slate-900">{editingExpenseId ? 'Continue editing expense' : 'Add a new expense'}</p>
+                  <p className="text-base font-semibold text-slate-900">
+                    {editingExpenseId ? copy.form.continueEditing : copy.form.addNewExpense}
+                  </p>
                 </div>
                 <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-violet-500 text-2xl font-semibold text-white shadow-lg shadow-brand-200/70">
                   +
@@ -2629,7 +2671,7 @@ export function ExpensesClient({
               >
                 <div className="px-1">
                   <h2 className="text-lg font-semibold text-slate-900">
-                    {editingExpenseId ? 'Edit expense' : 'Add expense'}
+                    {editingExpenseId ? copy.form.editExpense : copy.form.addExpense}
                   </h2>
                 </div>
                 <div className="space-y-4" id="add-expense-panel">
@@ -2641,7 +2683,7 @@ export function ExpensesClient({
             <section className={cardClass}>
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-base font-semibold text-slate-900">Default FX rates</h3>
+                  <h3 className="text-base font-semibold text-slate-900">{copy.fx.heading}</h3>
                   {fxRatePills}
                 </div>
                 <button
@@ -2651,7 +2693,7 @@ export function ExpensesClient({
                   onClick={() => setIsMobileFxOpen((isOpen) => !isOpen)}
                   type="button"
                 >
-                  {isMobileFxOpen ? 'Close' : 'Edit'}
+                  {isMobileFxOpen ? shared.close : shared.edit}
                 </button>
                 <button
                   aria-controls="fx-defaults-panel"
@@ -2660,7 +2702,7 @@ export function ExpensesClient({
                   onClick={() => setIsDesktopFxEditing((isEditing) => !isEditing)}
                   type="button"
                 >
-                  {isDesktopFxEditing ? 'Close' : 'Edit'}
+                  {isDesktopFxEditing ? shared.close : shared.edit}
                 </button>
               </div>
 
@@ -2688,14 +2730,14 @@ export function ExpensesClient({
                       className={moneyInputClass}
                       min="0"
                       onChange={(e) => setNewFxRate(e.target.value)}
-                      placeholder="Rate"
+                      placeholder={copy.fx.ratePlaceholder}
                       step="0.000001"
                       type="number"
                       value={newFxRate}
                     />
                   </div>
                   <button className={primaryButtonClass} onClick={() => void onSaveExchangeRate()} type="button">
-                    Save
+                    {shared.save}
                   </button>
                 </div>
               </div>
@@ -2704,22 +2746,24 @@ export function ExpensesClient({
 
           <div className="min-w-0 space-y-4">
             <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white shadow-lg">
-              <p className="text-base font-semibold text-blue-100">Total Combined Expenses</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">ARS {formatMoney(totalCombinedExpensesArs)}</p>
+              <p className="text-base font-semibold text-blue-100">{copy.totalCombinedExpenses}</p>
+              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+                ARS {formatMoney(totalCombinedExpensesArs, locale)}
+              </p>
             </section>
             <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
               <div className="border-b border-slate-200 bg-white px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-800">
-                      Showing {visibleExpenses.length} loaded results
+                      {copy.showingLoaded(visibleExpenses.length)}
                     </p>
-                    <p className="text-xs text-slate-500">Filtered results for this month</p>
-                    <p className="text-xs font-medium text-slate-600">Subtotal (filtered): ARS {formatMoney(filteredSubtotalArs)}</p>
+                    <p className="text-xs text-slate-500">{copy.filteredResults}</p>
+                    <p className="text-xs font-medium text-slate-600">{copy.filteredSubtotal(formatMoney(filteredSubtotalArs, locale))}</p>
                   </div>
                   <div className="hidden w-full flex-col gap-2 sm:w-auto sm:items-end md:flex">
                     <label className="flex items-center gap-2 text-sm text-slate-700" htmlFor="expense-max-rows-per-section">
-                      <span className="font-medium">Max rows per section</span>
+                      <span className="font-medium">{copy.maxRowsPerSection}</span>
                       <select
                         className={`${compactFieldClass} min-w-20 rounded-lg px-3 py-2`}
                         id="expense-max-rows-per-section"
@@ -2743,16 +2787,16 @@ export function ExpensesClient({
                   <div className="flex items-center gap-2">
                     <div className="relative min-w-0 flex-1">
                       <input
-                        aria-label="Search expenses"
+                        aria-label={copy.searchExpenses}
                         className={tableControlSearchFieldClass}
                         onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder="Search expenses..."
+                        placeholder={copy.searchPlaceholderMobile}
                         type="search"
                         value={searchQuery}
                       />
                       {hasSearchQuery ? (
                         <button
-                          aria-label="Clear expense search"
+                          aria-label={copy.clearSearch}
                           className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                           onClick={() => setSearchQuery('')}
                           type="button"
@@ -2762,7 +2806,7 @@ export function ExpensesClient({
                       ) : null}
                     </div>
                     <button
-                      aria-label="Open expense filters"
+                      aria-label={copy.openFilters}
                       className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-brand-200 bg-brand-50 text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                       onClick={() => setIsMobileFiltersOpen((current) => !current)}
                       type="button"
@@ -2777,13 +2821,13 @@ export function ExpensesClient({
                   {isMobileFiltersOpen ? (
                     <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                       <label className="block">
-                        <span className={tableControlLabelClass}>Category</span>
+                        <span className={tableControlLabelClass}>{copy.columns.category}</span>
                         <select
                           className={tableControlFieldClass}
                           onChange={(event) => setSelectedCategoryId(event.target.value)}
                           value={selectedCategoryId}
                         >
-                          <option value="all">All categories</option>
+                          <option value="all">{copy.allCategories}</option>
                           {sortedActiveCategories.map((category) => (
                             <option key={category.id} value={category.id}>
                               {category.name}
@@ -2797,7 +2841,7 @@ export function ExpensesClient({
                           onClick={() => setIsMobileFiltersOpen(false)}
                           type="button"
                         >
-                          Done
+                          {shared.done}
                         </button>
                         <button
                           className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700"
@@ -2811,7 +2855,7 @@ export function ExpensesClient({
                           }}
                           type="button"
                         >
-                          Clear
+                          {shared.clear}
                         </button>
                       </div>
                     </div>
@@ -2838,7 +2882,7 @@ export function ExpensesClient({
                           }}
                           type="button"
                         >
-                          Clear
+                          {shared.clear}
                         </button>
                       ) : null}
                     </div>
@@ -2848,18 +2892,18 @@ export function ExpensesClient({
                 <div className="hidden md:block" id="expense-mobile-filters">
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
                     <label className="hidden lg:col-span-8 md:block">
-                      <span className={tableControlLabelClass}>Search</span>
+                      <span className={tableControlLabelClass}>{copy.searchLabel}</span>
                       <div className="relative">
                         <input
                           className={tableControlSearchFieldClass}
                           onChange={(event) => setSearchQuery(event.target.value)}
-                          placeholder="Description, category, or payer"
+                          placeholder={copy.searchPlaceholderDesktop}
                           type="search"
                           value={searchQuery}
                         />
                         {hasSearchQuery ? (
                           <button
-                            aria-label="Clear expense search"
+                            aria-label={copy.clearSearch}
                             className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                             onClick={() => setSearchQuery('')}
                             type="button"
@@ -2870,13 +2914,13 @@ export function ExpensesClient({
                       </div>
                     </label>
                     <label className="lg:col-span-4">
-                      <span className={tableControlLabelClass}>Category</span>
+                      <span className={tableControlLabelClass}>{copy.columns.category}</span>
                       <select
                         className={tableControlFieldClass}
                         onChange={(event) => setSelectedCategoryId(event.target.value)}
                         value={selectedCategoryId}
                       >
-                        <option value="all">All categories</option>
+                        <option value="all">{copy.allCategories}</option>
                         {sortedActiveCategories.map((category) => (
                           <option key={category.id} value={category.id}>
                             {category.name}
@@ -2888,7 +2932,7 @@ export function ExpensesClient({
                   <div className="mt-3 border-t border-slate-200 pt-3">
                     <div className="flex flex-wrap items-end justify-between gap-3">
                       <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
-                        <p className="text-xs text-slate-500">Use filters to narrow results, then click column labels to sort.</p>
+                        <p className="text-xs text-slate-500">{copy.sortHint}</p>
                         {hasActiveControls ? (
                           <button
                             className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
@@ -2901,7 +2945,7 @@ export function ExpensesClient({
                             }}
                             type="button"
                           >
-                            Clear filters
+                            {copy.clearFilters}
                           </button>
                         ) : null}
                       </div>
@@ -2911,7 +2955,7 @@ export function ExpensesClient({
               </div>
               <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
                 <div className="flex flex-wrap gap-2">
-                  {SORTABLE_EXPENSE_COLUMNS.map((column) => {
+                  {sortableColumns.map((column) => {
                     const isActive = sortField === column.field;
                     return (
                       <button
@@ -2993,12 +3037,19 @@ export function ExpensesClient({
                       </div>
                       <div className="flex items-center gap-3">
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Subtotal: <span className="text-sm normal-case text-slate-900">ARS {formatMoney(section.subtotalArs)}</span>
+                          {copy.subtotal}:{' '}
+                          <span className="text-sm normal-case text-slate-900">
+                            ARS {formatMoney(section.subtotalArs, locale)}
+                          </span>
                         </p>
                         <button
                           aria-controls={`${section.key}-expenses-panel`}
                           aria-expanded={sectionOpen[section.key]}
-                          aria-label={`${sectionOpen[section.key] ? 'Collapse' : 'Expand'} ${section.title}`}
+                          aria-label={
+                            sectionOpen[section.key]
+                              ? copy.collapseSection(section.title)
+                              : copy.expandSection(section.title)
+                          }
                           className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                           onClick={() =>
                             setSectionOpen((previous) => ({
@@ -3040,7 +3091,7 @@ export function ExpensesClient({
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                               <path className="opacity-90" d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeLinecap="round" strokeWidth="4" />
                             </svg>
-                            Loading...
+                            {shared.loading}
                           </div>
                         </div>
                       ) : null}
@@ -3050,6 +3101,7 @@ export function ExpensesClient({
                             key={expense.id}
                             expense={expense}
                             formatFxRate={formatFxRate}
+                            locale={locale}
                             isOpen={openExpenseActionMenuId === expense.id}
                             onClone={() => {
                               setOpenExpenseActionMenuId(null);
@@ -3089,7 +3141,7 @@ export function ExpensesClient({
                           </colgroup>
                           <thead className="bg-white text-left text-slate-600">
                             <tr>
-                              {SORTABLE_EXPENSE_COLUMNS.map((column) => {
+                              {sortableColumns.map((column) => {
                                 const isActive = sortField === column.field;
                                 const ariaSort = getAriaSortValue(sortField, sortDirection, column.field);
                                 return (
@@ -3100,7 +3152,7 @@ export function ExpensesClient({
                                     scope="col"
                                   >
                                     <button
-                                      aria-label={`Sort by ${column.label}`}
+                                      aria-label={copy.sortBy(column.label)}
                                       className={`inline-flex items-center gap-1.5 rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
                                         isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-900'
                                       }`}
@@ -3127,7 +3179,7 @@ export function ExpensesClient({
                                 );
                               })}
                               <th className="whitespace-nowrap px-4 py-3 text-right font-medium" scope="col">
-                                <span className="sr-only">Actions</span>
+                                <span className="sr-only">{shared.actions}</span>
                               </th>
                             </tr>
                           </thead>
@@ -3139,14 +3191,18 @@ export function ExpensesClient({
                                   <div className="truncate font-medium text-slate-900" title={expense.description}>
                                     {expense.description}
                                   </div>
-                                  <div className="truncate text-xs text-slate-500">{getExpenseKindLabel(expense)}</div>
+                                  <div className="truncate text-xs text-slate-500">{getExpenseKindLabel(copy, expense)}</div>
                                 </td>
                                 <td className="px-4 py-3">{expense.categoryName}</td>
                                 <td className="px-4 py-3 tabular-nums">
-                                  <div>ARS {formatMoney(expense.amountArs)}</div>
+                                  <div>ARS {formatMoney(expense.amountArs, locale)}</div>
                                   {expense.currencyCode !== 'ARS' ? (
                                     <div className="text-xs text-slate-500">
-                                      {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
+                                      {copy.originalAmount(
+                                        expense.currencyCode,
+                                        formatMoney(expense.amountOriginal, locale),
+                                        formatFxRate(expense.fxRateUsed),
+                                      )}
                                     </div>
                                   ) : null}
                                 </td>
@@ -3155,6 +3211,7 @@ export function ExpensesClient({
                                   <DesktopExpenseActionMenu
                                     expenseId={expense.id}
                                     isOpen={openExpenseActionMenuId === expense.id}
+                                    locale={locale}
                                     onClone={() => void cloneExpense(expense)}
                                     onDelete={() => void removeExpense(expense)}
                                     onEdit={() => startEdit(expense)}
@@ -3177,12 +3234,16 @@ export function ExpensesClient({
                     {section.showSectionPager ? (
                       <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm font-medium text-slate-600">
-                          Showing {section.pageStart}-{section.pageEnd} of {section.totalRows}
-                          {section.hasMore ? '+' : ''} results
+                          {copy.pageRange(
+                            section.pageStart,
+                            section.pageEnd,
+                            section.totalRows,
+                            section.hasMore,
+                          )}
                         </p>
                         <div className="flex items-center gap-3">
                           <button
-                            aria-label={`Previous ${section.title} page`}
+                            aria-label={copy.previousPage(section.title)}
                             className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                             disabled={section.currentPage === 1 || sectionLoading[section.key]}
                             onClick={() =>
@@ -3198,7 +3259,7 @@ export function ExpensesClient({
                             </svg>
                           </button>
                           <button
-                            aria-label={`Next ${section.title} page`}
+                            aria-label={copy.nextPage(section.title)}
                             className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                             disabled={!section.canMoveNext || sectionLoading[section.key]}
                             onClick={async () => {
