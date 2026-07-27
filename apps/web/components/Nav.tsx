@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { type AppLocale } from '../lib/api';
+import { t } from '../lib/i18n';
 
 const links = [
   {
     href: '/dashboard',
-    label: 'Dashboard',
+    labelKey: 'dashboard',
     monthScoped: true,
     icon: (
       <svg
@@ -26,7 +28,7 @@ const links = [
   },
   {
     href: '/incomes',
-    label: 'Incomes',
+    labelKey: 'incomes',
     monthScoped: true,
     icon: (
       <svg
@@ -46,7 +48,7 @@ const links = [
   },
   {
     href: '/expenses',
-    label: 'Expenses',
+    labelKey: 'expenses',
     monthScoped: true,
     icon: (
       <svg
@@ -68,7 +70,7 @@ const links = [
   },
   {
     href: '/settings',
-    label: 'Settings',
+    labelKey: 'settings',
     monthScoped: false,
     icon: (
       <svg
@@ -88,13 +90,14 @@ const links = [
   },
 ] as const;
 
-export function Nav({ month }: { month: string }) {
+export function Nav({ month, locale }: { month: string; locale: AppLocale }) {
   const pathname = usePathname();
+  const copy = t(locale);
 
   return (
     <>
       <nav
-        aria-label="Primary navigation"
+        aria-label={copy.nav.primaryNavigation}
         className="mb-8 hidden grid-cols-2 gap-2 rounded-2xl border border-stroke/80 bg-surface p-2 shadow-sm md:grid md:grid-cols-4"
       >
         {links.map((link) => {
@@ -114,7 +117,7 @@ export function Nav({ month }: { month: string }) {
               aria-current={isCurrent ? 'page' : undefined}
             >
               {link.icon}
-              {link.label}
+              <span className="max-w-full truncate">{copy.nav[link.labelKey]}</span>
             </Link>
           );
         })}
@@ -122,7 +125,7 @@ export function Nav({ month }: { month: string }) {
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] md:hidden">
         <nav
-          aria-label="Primary navigation"
+          aria-label={copy.nav.primaryNavigation}
           className="pointer-events-auto mx-auto flex max-w-md items-center gap-1 rounded-[26px] border border-stroke/80 bg-surface/95 p-2 shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur"
         >
           {links.map((link) => {
@@ -142,7 +145,9 @@ export function Nav({ month }: { month: string }) {
                 } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2`}
               >
                 <span className={isCurrent ? 'text-brand-700' : 'text-ink-soft'}>{link.icon}</span>
-                <span className="text-[11px] font-semibold leading-none">{link.label}</span>
+                <span className="max-w-full truncate text-[11px] font-semibold leading-none">
+                  {copy.nav[link.labelKey]}
+                </span>
               </Link>
             );
           })}

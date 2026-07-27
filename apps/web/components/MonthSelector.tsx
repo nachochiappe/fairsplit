@@ -4,12 +4,15 @@ import { useEffect, useState, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMonthNavigationPending } from './MonthNavigationPending';
 import { addMonths } from '../lib/month';
+import { type AppLocale } from '../lib/api';
+import { t } from '../lib/i18n';
 
 interface MonthSelectorProps {
   month: string;
+  locale: AppLocale;
 }
 
-export function MonthSelector({ month }: MonthSelectorProps) {
+export function MonthSelector({ month, locale }: MonthSelectorProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -33,16 +36,17 @@ export function MonthSelector({ month }: MonthSelectorProps) {
   };
 
   const displayedMonth = pendingMonth ?? month;
+  const copy = t(locale);
 
   return (
     <label
       aria-busy={isPending}
       className="flex w-full flex-col items-start gap-1.5 text-sm font-medium text-ink-base sm:w-auto sm:flex-row sm:items-center sm:gap-3"
     >
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft">Month</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft">{copy.month.label}</span>
       <div className="flex w-full items-center gap-2 sm:w-auto">
         <button
-          aria-label="Go to previous month"
+          aria-label={copy.month.previous}
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stroke bg-surface text-ink-base shadow-sm transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           disabled={isPending}
           type="button"
@@ -53,7 +57,7 @@ export function MonthSelector({ month }: MonthSelectorProps) {
           </svg>
         </button>
         <input
-          aria-label="Select month"
+          aria-label={copy.month.select}
           autoComplete="off"
           className="min-h-11 w-full rounded-xl border border-stroke bg-surface px-4 py-2.5 text-base font-medium leading-tight text-ink-base shadow-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
           disabled={isPending}
@@ -64,7 +68,7 @@ export function MonthSelector({ month }: MonthSelectorProps) {
           onChange={(event) => onMonthChange(event.target.value)}
         />
         <button
-          aria-label="Go to next month"
+          aria-label={copy.month.next}
           className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stroke bg-surface text-ink-base shadow-sm transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
           disabled={isPending}
           type="button"
@@ -81,7 +85,7 @@ export function MonthSelector({ month }: MonthSelectorProps) {
             aria-hidden="true"
             className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-stroke border-t-brand-700"
           />
-          Loading {displayedMonth}...
+          {copy.month.loading(displayedMonth)}
         </span>
       ) : null}
     </label>

@@ -19,7 +19,9 @@ import {
   unarchiveCategory,
   updateUser,
   updateSuperCategory,
+  type AppLocale,
 } from '../../lib/api';
+import { formatCountLabel, localeLabels, localeTags, resolveLocale, t } from '../../lib/i18n';
 
 interface SettingsClientProps {
   month: string;
@@ -28,6 +30,7 @@ interface SettingsClientProps {
   currentUserId: string | null;
   currentUserName: string | null;
   currentUserEmail: string | null;
+  currentUserLocale: AppLocale;
 }
 
 type CategoryRenameDialogState = {
@@ -67,12 +70,12 @@ function DialogFrame({ children, title }: { children: ReactNode; title: string }
 
 function DialogActions({
   busy,
-  cancelLabel = 'Cancel',
+  cancelLabel,
   confirmLabel,
   onCancel,
 }: {
   busy: boolean;
-  cancelLabel?: string;
+  cancelLabel: string;
   confirmLabel: string;
   onCancel: () => void;
 }) {
@@ -97,10 +100,6 @@ function DialogActions({
   );
 }
 
-function formatCountLabel(count: number, singular: string, plural: string): string {
-  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
-}
-
 export function SettingsClient({
   month,
   initialCategories,
@@ -108,6 +107,7 @@ export function SettingsClient({
   currentUserId,
   currentUserName,
   currentUserEmail,
+  currentUserLocale,
 }: SettingsClientProps) {
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [superCategories, setSuperCategories] = useState<SuperCategory[]>(initialSuperCategories);
@@ -115,7 +115,9 @@ export function SettingsClient({
   const [categorySuperCategoryId, setCategorySuperCategoryId] = useState<string>('unassigned');
   const [superCategoryName, setSuperCategoryName] = useState('');
   const [displayNameDraft, setDisplayNameDraft] = useState(currentUserName ?? '');
+  const [localeDraft, setLocaleDraft] = useState<AppLocale>(currentUserLocale);
   const [resolvedCurrentUserName, setResolvedCurrentUserName] = useState(currentUserName ?? '');
+  const [resolvedLocale, setResolvedLocale] = useState<AppLocale>(currentUserLocale);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
@@ -135,6 +137,8 @@ export function SettingsClient({
     useState<SuperCategoryArchiveDialogState | null>(null);
   const [categoryArchiveDialog, setCategoryArchiveDialog] =
     useState<CategoryArchiveDialogState | null>(null);
+  const copy = t(resolvedLocale).settings;
+  const shared = t(resolvedLocale).common;
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -186,18 +190,18 @@ export function SettingsClient({
 
   const onUpdateDisplayName = async () => {
     if (!currentUserId) {
-      setProfileError('No active user found in session.');
+      setProfileError(copy.noActiveUser);
       return;
     }
 
     const nextName = displayNameDraft.trim();
     if (!nextName) {
-      setProfileError('Display name is required.');
+      setProfileError(copy.displayNameRequired);
       return;
     }
 
-    if (nextName === resolvedCurrentUserName.trim()) {
-      setProfileSuccess('Display name is already up to date.');
+    if (nextName === resolvedCurrentUserName.trim() && localeDraft === resolvedLocale) {
+      setProfileSuccess(copy.profileAlreadyUpdated);
       setProfileError(null);
       return;
     }
@@ -206,15 +210,19 @@ export function SettingsClient({
       setProfileSaving(true);
       setProfileError(null);
       setProfileSuccess(null);
-      const updated = await updateUser(currentUserId, { name: nextName });
+      const updated = await updateUser(currentUserId, { name: nextName, locale: localeDraft });
+      // An API that predates the locale column omits it from the response.
+      const updatedLocale = resolveLocale(updated);
       setResolvedCurrentUserName(updated.name);
       setDisplayNameDraft(updated.name);
-      setProfileSuccess('Display name updated.');
+      setResolvedLocale(updatedLocale);
+      setLocaleDraft(updatedLocale);
+      setProfileSuccess(t(updatedLocale).settings.profileUpdated);
     } catch (profileUpdateError) {
       setProfileError(
         profileUpdateError instanceof Error
           ? profileUpdateError.message
-          : 'Failed to update display name',
+          : copy.profileUpdateFailed,
       );
     } finally {
       setProfileSaving(false);
@@ -229,12 +237,12 @@ export function SettingsClient({
       const invite = await createHouseholdInvite();
       setInviteCode(invite.code);
       setInviteExpiresAt(invite.expiresAt);
-      setInviteSuccess('Invite code generated. Share it with your partner.');
+      setInviteSuccess(copy.inviteGenerated);
     } catch (inviteCreateError) {
       setInviteError(
         inviteCreateError instanceof Error
           ? inviteCreateError.message
-          : 'Failed to create invite code',
+          : copy.inviteCreateFailed,
       );
     } finally {
       setInviteLoading(false);
@@ -247,9 +255,9 @@ export function SettingsClient({
     }
     try {
       await navigator.clipboard.writeText(inviteCode);
-      setInviteSuccess('Invite code copied to clipboard.');
+      setInviteSuccess(copy.inviteCopied);
     } catch {
-      setInviteError('Unable to copy invite code. Please copy it manually.');
+      setInviteError(copy.inviteCopyFailed);
     }
   };
 
@@ -269,7 +277,7 @@ export function SettingsClient({
       setCategorySuperCategoryId('unassigned');
     } catch (categoryError) {
       setCategoryError(
-        categoryError instanceof Error ? categoryError.message : 'Failed to create category',
+        categoryError instanceof Error ? categoryError.message : copy.errors.createCategory,
       );
       return;
     }
@@ -279,7 +287,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setCategoryError(
         formatPostMutationRefreshError(
-          'Category created, but settings could not refresh automatically.',
+          copy.refreshErrors.categoryCreated,
           refreshError,
         ),
       );
@@ -313,7 +321,7 @@ export function SettingsClient({
       setCategoryRenameDialog(null);
     } catch (renameError) {
       setCategoryError(
-        renameError instanceof Error ? renameError.message : 'Failed to rename category',
+        renameError instanceof Error ? renameError.message : copy.errors.renameCategory,
       );
       return;
     }
@@ -323,7 +331,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setCategoryError(
         formatPostMutationRefreshError(
-          'Category renamed, but settings could not refresh automatically.',
+          copy.refreshErrors.categoryRenamed,
           refreshError,
         ),
       );
@@ -341,7 +349,7 @@ export function SettingsClient({
       });
     } catch (assignError) {
       setCategoryError(
-        assignError instanceof Error ? assignError.message : 'Failed to assign category',
+        assignError instanceof Error ? assignError.message : copy.errors.assignCategory,
       );
       return;
     }
@@ -351,7 +359,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setCategoryError(
         formatPostMutationRefreshError(
-          'Category updated, but settings could not refresh automatically.',
+          copy.refreshErrors.categoryUpdated,
           refreshError,
         ),
       );
@@ -379,7 +387,7 @@ export function SettingsClient({
       setCategoryArchiveDialog(null);
     } catch (archiveError) {
       setCategoryError(
-        archiveError instanceof Error ? archiveError.message : 'Failed to archive category',
+        archiveError instanceof Error ? archiveError.message : copy.errors.archiveCategory,
       );
       return;
     }
@@ -389,7 +397,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setCategoryError(
         formatPostMutationRefreshError(
-          'Category archived, but settings could not refresh automatically.',
+          copy.refreshErrors.categoryArchived,
           refreshError,
         ),
       );
@@ -409,7 +417,7 @@ export function SettingsClient({
       await unarchiveCategory(category.id);
     } catch (unarchiveError) {
       setCategoryError(
-        unarchiveError instanceof Error ? unarchiveError.message : 'Failed to unarchive category',
+        unarchiveError instanceof Error ? unarchiveError.message : copy.errors.unarchiveCategory,
       );
       return;
     }
@@ -419,7 +427,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setCategoryError(
         formatPostMutationRefreshError(
-          'Category restored, but settings could not refresh automatically.',
+          copy.refreshErrors.categoryRestored,
           refreshError,
         ),
       );
@@ -449,7 +457,7 @@ export function SettingsClient({
       setSuperCategoryError(
         superCategoryError instanceof Error
           ? superCategoryError.message
-          : 'Failed to create super category',
+          : copy.errors.createGroup,
       );
       return;
     }
@@ -459,7 +467,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setSuperCategoryError(
         formatPostMutationRefreshError(
-          'Group created, but settings could not refresh automatically.',
+          copy.refreshErrors.groupCreated,
           refreshError,
         ),
       );
@@ -493,7 +501,7 @@ export function SettingsClient({
       setSuperCategoryRenameDialog(null);
     } catch (renameError) {
       setSuperCategoryError(
-        renameError instanceof Error ? renameError.message : 'Failed to rename super category',
+        renameError instanceof Error ? renameError.message : copy.errors.renameGroup,
       );
       return;
     }
@@ -503,7 +511,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setSuperCategoryError(
         formatPostMutationRefreshError(
-          'Group renamed, but settings could not refresh automatically.',
+          copy.refreshErrors.groupRenamed,
           refreshError,
         ),
       );
@@ -539,7 +547,7 @@ export function SettingsClient({
       setSuperCategoryArchiveDialog(null);
     } catch (archiveError) {
       setSuperCategoryError(
-        archiveError instanceof Error ? archiveError.message : 'Failed to archive super category',
+        archiveError instanceof Error ? archiveError.message : copy.errors.archiveGroup,
       );
       return;
     }
@@ -549,7 +557,7 @@ export function SettingsClient({
     } catch (refreshError) {
       setSuperCategoryError(
         formatPostMutationRefreshError(
-          'Group archived, but settings could not refresh automatically.',
+          copy.refreshErrors.groupArchived,
           refreshError,
         ),
       );
@@ -711,12 +719,13 @@ export function SettingsClient({
   return (
     <AppShell
       month={month}
-      title="Settings"
-      subtitle="Manage categories and super categories used for monthly expenses"
+      title={copy.shellTitle}
+      subtitle={copy.shellSubtitle}
+      locale={resolvedLocale}
     >
       {categoryRenameDialog ? (
         <ViewportModal onDismiss={() => (saving ? undefined : setCategoryRenameDialog(null))}>
-          <DialogFrame title="Rename category">
+          <DialogFrame title={copy.renameCategoryTitle}>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -724,17 +733,17 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-                Update the label for{' '}
+                {copy.renameCategoryBefore}
                 <span className="font-semibold text-ink-strong">
                   {categoryRenameDialog.category.name}
                 </span>
-                . The new name will apply to historical records too.
+                {copy.renameCategoryAfter}
               </p>
               <label
                 className="mt-4 block text-sm font-medium text-ink-base"
                 htmlFor="rename-category-input"
               >
-                Category name
+                {copy.categoryNameLabel}
               </label>
               <input
                 autoFocus
@@ -749,7 +758,8 @@ export function SettingsClient({
               />
               <DialogActions
                 busy={saving}
-                confirmLabel={saving ? 'Saving...' : 'Save category'}
+                cancelLabel={shared.cancel}
+                confirmLabel={saving ? shared.saving : copy.saveCategory}
                 onCancel={() => setCategoryRenameDialog(null)}
               />
             </form>
@@ -759,7 +769,7 @@ export function SettingsClient({
 
       {superCategoryRenameDialog ? (
         <ViewportModal onDismiss={() => (saving ? undefined : setSuperCategoryRenameDialog(null))}>
-          <DialogFrame title="Rename group">
+          <DialogFrame title={copy.renameGroupTitle}>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -767,17 +777,17 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-                Rename{' '}
+                {copy.renameGroupBefore}
                 <span className="font-semibold text-ink-strong">
                   {superCategoryRenameDialog.superCategory.name}
-                </span>{' '}
-                to match how you organize spending.
+                </span>
+                {copy.renameGroupAfter}
               </p>
               <label
                 className="mt-4 block text-sm font-medium text-ink-base"
                 htmlFor="rename-super-category-input"
               >
-                Group name
+                {copy.groupNameLabel}
               </label>
               <input
                 autoFocus
@@ -792,7 +802,8 @@ export function SettingsClient({
               />
               <DialogActions
                 busy={saving}
-                confirmLabel={saving ? 'Saving...' : 'Save group'}
+                cancelLabel={shared.cancel}
+                confirmLabel={saving ? shared.saving : copy.saveGroup}
                 onCancel={() => setSuperCategoryRenameDialog(null)}
               />
             </form>
@@ -802,7 +813,7 @@ export function SettingsClient({
 
       {superCategoryArchiveDialog ? (
         <ViewportModal onDismiss={() => (saving ? undefined : setSuperCategoryArchiveDialog(null))}>
-          <DialogFrame title="Archive group">
+          <DialogFrame title={copy.archiveGroupTitle}>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -810,17 +821,17 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-                Archive{' '}
+                {copy.archiveGroupBefore}
                 <span className="font-semibold text-ink-strong">
                   {superCategoryArchiveDialog.superCategory.name}
                 </span>
-                . Existing categories can move to another group or become unassigned.
+                {copy.archiveGroupAfter}
               </p>
               <label
                 className="mt-4 block text-sm font-medium text-ink-base"
                 htmlFor="archive-super-category-replacement"
               >
-                Move categories to
+                {copy.moveCategoriesTo}
               </label>
               <select
                 className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
@@ -834,7 +845,7 @@ export function SettingsClient({
                 }
                 value={superCategoryArchiveDialog.replacementSuperCategoryId}
               >
-                <option value="unassigned">Unassigned</option>
+                <option value="unassigned">{shared.unassigned}</option>
                 {sortedActiveSuperCategories
                   .filter((entry) => entry.id !== superCategoryArchiveDialog.superCategory.id)
                   .map((entry) => (
@@ -845,7 +856,8 @@ export function SettingsClient({
               </select>
               <DialogActions
                 busy={saving}
-                confirmLabel={saving ? 'Archiving...' : 'Archive group'}
+                cancelLabel={shared.cancel}
+                confirmLabel={saving ? shared.archiving : copy.archiveGroupTitle}
                 onCancel={() => setSuperCategoryArchiveDialog(null)}
               />
             </form>
@@ -855,7 +867,7 @@ export function SettingsClient({
 
       {categoryArchiveDialog ? (
         <ViewportModal onDismiss={() => (saving ? undefined : setCategoryArchiveDialog(null))}>
-          <DialogFrame title="Archive category">
+          <DialogFrame title={copy.archiveCategoryTitle}>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -863,15 +875,16 @@ export function SettingsClient({
               }}
             >
               <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-                Archive{' '}
+                {copy.archiveCategoryBefore}
                 <span className="font-semibold text-ink-strong">
                   {categoryArchiveDialog.category.name}
                 </span>
-                . It will disappear from active lists but remain available in historical records.
+                {copy.archiveCategoryAfter}
               </p>
               <DialogActions
                 busy={saving}
-                confirmLabel={saving ? 'Archiving...' : 'Archive category'}
+                cancelLabel={shared.cancel}
+                confirmLabel={saving ? shared.archiving : copy.archiveCategoryTitle}
                 onCancel={() => setCategoryArchiveDialog(null)}
               />
             </form>
@@ -880,15 +893,15 @@ export function SettingsClient({
       ) : null}
 
       <section className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-ink-strong">Personal Information</h2>
+        <h2 className="text-2xl font-semibold text-ink-strong">{copy.personalInfo}</h2>
         <p className="mt-2 text-base text-ink-soft00">
-          Your identity across the Fairsplit platform.
+          {copy.personalInfoDescription}
         </p>
 
         <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          <h3 className="text-base font-semibold text-ink-strong">Invite Someone</h3>
+          <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
           <p className="mt-1 text-xs text-ink-muted">
-            Generate a one-time code so another person can join your household.
+            {copy.inviteDescription}
           </p>
           <button
             className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
@@ -896,12 +909,12 @@ export function SettingsClient({
             onClick={() => void onCreateInviteCode()}
             type="button"
           >
-            {inviteLoading ? 'Generating...' : 'Generate Invite Code'}
+            <span className="truncate">{inviteLoading ? copy.generating : copy.generateCode}</span>
           </button>
           {inviteCode ? (
             <div className="mt-3 rounded-lg border border-slate-300 bg-white/90 px-3 py-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft00">
-                Invite code
+                {copy.inviteCode}
               </p>
               <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-bold tracking-[0.15em] text-ink-strong">{inviteCode}</p>
@@ -910,12 +923,12 @@ export function SettingsClient({
                   onClick={() => void onCopyInviteCode()}
                   type="button"
                 >
-                  Copy
+                  {copy.copy}
                 </button>
               </div>
               {inviteExpiresAt ? (
                 <p className="mt-1 text-xs text-ink-soft00">
-                  Expires: {new Date(inviteExpiresAt).toLocaleString()}
+                  {copy.expires}: {new Date(inviteExpiresAt).toLocaleString(localeTags[resolvedLocale])}
                 </p>
               ) : null}
             </div>
@@ -942,34 +955,26 @@ export function SettingsClient({
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
-              <p className="text-xl font-semibold text-ink-base">Display Name</p>
+              <p className="text-xl font-semibold text-ink-base">{copy.displayName}</p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
-                  aria-label="Display name"
+                  aria-label={copy.displayName}
                   className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-ink-strong00 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onChange={(event) => setDisplayNameDraft(event.target.value)}
-                  placeholder="Your name"
+                  placeholder={copy.yourName}
                   value={displayNameDraft}
                 />
-                <button
-                  className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                  disabled={profileSaving || !currentUserId}
-                  onClick={() => void onUpdateDisplayName()}
-                  type="button"
-                >
-                  {profileSaving ? 'Updating...' : 'Update'}
-                </button>
               </div>
               <p className="mt-3 text-sm text-ink-soft00">
-                This is how your partner will see you in shared expenses.
+                {copy.displayNameHelp}
               </p>
             </div>
 
             <div className="min-w-0">
-              <p className="text-xl font-semibold text-ink-base">Email Address</p>
+              <p className="text-xl font-semibold text-ink-base">{shared.email}</p>
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-stroke bg-surface-muted px-4 py-3">
                 <span className="min-w-0 truncate text-base font-medium text-ink-soft00">
-                  {currentUserEmail ?? 'No email available in this session'}
+                  {currentUserEmail ?? copy.emailUnavailable}
                 </span>
                 <svg
                   aria-hidden="true"
@@ -982,14 +987,39 @@ export function SettingsClient({
               </div>
             </div>
           </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <label className="block text-sm font-medium text-ink-base" htmlFor="locale">
+              {copy.language}
+              <select
+                className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                id="locale"
+                onChange={(event) => setLocaleDraft(event.target.value as AppLocale)}
+                value={localeDraft}
+              >
+                {Object.entries(localeLabels).map(([locale, label]) => (
+                  <option key={locale} value={locale}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-brand-600 px-6 text-base font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              disabled={profileSaving || !currentUserId}
+              onClick={() => void onUpdateDisplayName()}
+              type="button"
+            >
+              <span className="truncate">{profileSaving ? copy.updating : copy.saveProfile}</span>
+            </button>
+          </div>
         </div>
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-ink-strong">Session</h3>
+              <h3 className="text-lg font-semibold text-ink-strong">{copy.session}</h3>
               <p className="mt-1 text-sm text-ink-soft00">
-                Sign out from this device when you are done.
+                {copy.sessionHelp}
               </p>
             </div>
             <form action="/logout" className="w-full sm:w-auto" method="post">
@@ -997,7 +1027,7 @@ export function SettingsClient({
                 className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
                 type="submit"
               >
-                Log out
+                {copy.logout}
               </button>
             </form>
           </div>
@@ -1022,9 +1052,9 @@ export function SettingsClient({
       </section>
 
       <section className="rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-ink-strong">Super Categories</h2>
+        <h2 className="text-2xl font-semibold text-ink-strong">{copy.superCategories}</h2>
         <p className="mt-2 text-base text-ink-soft00">
-          Default system groups for high-level tracking.
+          {copy.superCategoriesDescription}
         </p>
 
         {superCategoryError ? (
@@ -1041,13 +1071,13 @@ export function SettingsClient({
             <div className="flex flex-col gap-3 sm:flex-row">
               <div className="flex-1">
                 <label className="sr-only" htmlFor="new-super-category">
-                  New super category name
+                  {copy.newSuperCategoryLabel}
                 </label>
                 <input
                   id="new-super-category"
                   className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                   onChange={(event) => setSuperCategoryName(event.target.value)}
-                  placeholder="New super category name..."
+                  placeholder={copy.newSuperCategoryPlaceholder}
                   value={superCategoryName}
                 />
               </div>
@@ -1060,7 +1090,7 @@ export function SettingsClient({
                 <span aria-hidden="true" className="text-xl leading-none">
                   +
                 </span>
-                Add
+                {shared.add}
               </button>
             </div>
           </div>
@@ -1078,8 +1108,14 @@ export function SettingsClient({
                       {superCategory.name}
                     </p>
                     <p className="text-sm font-medium text-ink-soft sm:text-base">
-                      {formatCountLabel(superCategory.categoryCount, 'category', 'categories')} •{' '}
-                      {superCategory.isSystem ? 'System' : 'Custom'}
+                      {formatCountLabel(
+                        resolvedLocale,
+                        superCategory.categoryCount,
+                        copy.categorySingular,
+                        copy.categoryPlural,
+                      )}
+                      {' • '}
+                      {superCategory.isSystem ? copy.system : copy.custom}
                     </p>
                   </div>
                 </div>
@@ -1087,7 +1123,7 @@ export function SettingsClient({
                 <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
                   <ActionButton
                     action="rename"
-                    aria-label={`Rename ${superCategory.name}`}
+                    aria-label={copy.renameAria(superCategory.name)}
                     className="h-11 w-11 sm:hidden"
                     disabled={saving}
                     onClick={() => void onRenameSuperCategory(superCategory)}
@@ -1113,12 +1149,12 @@ export function SettingsClient({
                     disabled={saving}
                     onClick={() => void onRenameSuperCategory(superCategory)}
                   >
-                    Rename
+                    {shared.rename}
                   </ActionButton>
                   {!superCategory.isSystem ? (
                     <ActionButton
                       action="archive"
-                      aria-label={`Archive ${superCategory.name}`}
+                      aria-label={copy.archiveAria(superCategory.name)}
                       className="h-11 w-11 sm:hidden"
                       disabled={saving}
                       onClick={() => void onArchiveSuperCategory(superCategory)}
@@ -1148,7 +1184,7 @@ export function SettingsClient({
                       disabled={saving}
                       onClick={() => void onArchiveSuperCategory(superCategory)}
                     >
-                      Archive
+                      {shared.archive}
                     </ActionButton>
                   ) : null}
                 </div>
@@ -1161,13 +1197,13 @@ export function SettingsClient({
       <section className="mt-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-ink-strong">Detailed Categories</h2>
+            <h2 className="text-2xl font-semibold text-ink-strong">{copy.detailedCategories}</h2>
             <p className="mt-2 text-base text-ink-soft00">
-              Map specific spending labels to your super categories.
+              {copy.detailedCategoriesDescription}
             </p>
           </div>
           <span className="inline-flex w-fit items-center rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-sm font-bold text-amber-800">
-            {unassignedCategoryCount} UNASSIGNED
+            {copy.unassignedBadge(unassignedCategoryCount)}
           </span>
         </div>
 
@@ -1175,19 +1211,19 @@ export function SettingsClient({
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),220px,auto]">
             <div>
               <label className="sr-only" htmlFor="new-category-name">
-                Category name
+                {copy.categoryNameLabel}
               </label>
               <input
                 id="new-category-name"
                 className="w-full rounded-xl border border-slate-300 px-4 py-3 text-base text-ink-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                 onChange={(event) => setCategoryName(event.target.value)}
-                placeholder="Category name (e.g. Internet, Groceries)"
+                placeholder={copy.categoryNamePlaceholder}
                 value={categoryName}
               />
             </div>
             <div>
               <label className="sr-only" htmlFor="new-category-super-category">
-                Group for new category
+                {copy.groupForNewCategory}
               </label>
               <select
                 id="new-category-super-category"
@@ -1195,7 +1231,7 @@ export function SettingsClient({
                 onChange={(event) => setCategorySuperCategoryId(event.target.value)}
                 value={categorySuperCategoryId}
               >
-                <option value="unassigned">Unassigned</option>
+                <option value="unassigned">{shared.unassigned}</option>
                 {sortedActiveSuperCategories.map((superCategory) => (
                   <option key={superCategory.id} value={superCategory.id}>
                     {superCategory.name}
@@ -1209,7 +1245,7 @@ export function SettingsClient({
               onClick={() => void onCreateCategory()}
               type="button"
             >
-              Add Label
+              {copy.addLabel}
             </button>
           </div>
         </div>
@@ -1251,7 +1287,7 @@ export function SettingsClient({
                         <h3 className="text-lg font-semibold text-ink-strong00">{category.name}</h3>
                         {category.archivedAt ? (
                           <span className="rounded-full border border-stroke bg-stroke px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-ink-muted">
-                            Archived
+                            {copy.archived}
                           </span>
                         ) : null}
                       </div>
@@ -1265,7 +1301,12 @@ export function SettingsClient({
                           >
                             <path d="M5 2.5A2.5 2.5 0 0 0 2.5 5v10A2.5 2.5 0 0 0 5 17.5h10a2.5 2.5 0 0 0 2.5-2.5V5A2.5 2.5 0 0 0 15 2.5H5Zm1 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h8a1 1 0 1 1 0 2H6Zm0 4a1 1 0 1 1 0-2h6a1 1 0 1 1 0 2H6Z" />
                           </svg>
-                          {formatCountLabel(category.expenseCount, 'expense', 'expenses')}
+                          {formatCountLabel(
+                            resolvedLocale,
+                            category.expenseCount,
+                            copy.expenseSingular,
+                            copy.expensePlural,
+                          )}
                         </span>
                         <span aria-hidden="true" className="h-1 w-1 rounded-full bg-slate-300" />
                         <span className="inline-flex items-center gap-1">
@@ -1277,7 +1318,7 @@ export function SettingsClient({
                           >
                             <path d="M7 2.5a1 1 0 0 0 0 2h.5v4.07L4.56 12.4a1 1 0 0 0 .74 1.75H9v3.35a1 1 0 1 0 2 0V14.15h3.7a1 1 0 0 0 .74-1.75L12.5 8.57V4.5h.5a1 1 0 1 0 0-2H7Z" />
                           </svg>
-                          {category.fixedExpenseCount} fixed
+                          {copy.fixedCount(category.fixedExpenseCount)}
                         </span>
                       </div>
                     </div>
@@ -1288,7 +1329,7 @@ export function SettingsClient({
                         className="font-medium text-ink-soft00"
                         htmlFor={`group-${category.id}`}
                       >
-                        Map to:
+                        {copy.mapTo}
                       </label>
                       <select
                         id={`group-${category.id}`}
@@ -1296,9 +1337,9 @@ export function SettingsClient({
                         disabled={saving}
                         onChange={(event) => void onAssignCategory(category, event.target.value)}
                         value={category.superCategoryId ?? 'unassigned'}
-                        aria-label={`Group for ${category.name}`}
+                        aria-label={copy.groupForCategory(category.name)}
                       >
-                        <option value="unassigned">Unassigned</option>
+                        <option value="unassigned">{shared.unassigned}</option>
                         {sortedActiveSuperCategories.map((superCategory) => (
                           <option key={superCategory.id} value={superCategory.id}>
                             {superCategory.name}
@@ -1308,7 +1349,7 @@ export function SettingsClient({
                     </div>
                   ) : (
                     <p className="mt-2 text-sm text-ink-soft00">
-                      Group: {category.superCategoryName ?? 'Unassigned'}
+                      {copy.groupValue(category.superCategoryName ?? shared.unassigned)}
                     </p>
                   )}
                 </div>
@@ -1317,7 +1358,7 @@ export function SettingsClient({
                   <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
                     <ActionButton
                       action="rename"
-                      aria-label={`Rename ${category.name}`}
+                      aria-label={copy.renameAria(category.name)}
                       className="h-11 w-11 lg:hidden"
                       onClick={() => void onRenameCategory(category)}
                       size="icon"
@@ -1341,11 +1382,11 @@ export function SettingsClient({
                       className="hidden lg:inline-flex"
                       onClick={() => void onRenameCategory(category)}
                     >
-                      Rename
+                      {shared.rename}
                     </ActionButton>
                     <ActionButton
                       action="archive"
-                      aria-label={`Archive ${category.name}`}
+                      aria-label={copy.archiveAria(category.name)}
                       className="h-11 w-11 lg:hidden"
                       onClick={() => void onArchiveCategory(category)}
                       size="icon"
@@ -1371,14 +1412,14 @@ export function SettingsClient({
                       className="hidden lg:inline-flex"
                       onClick={() => void onArchiveCategory(category)}
                     >
-                      Archive
+                      {shared.archive}
                     </ActionButton>
                   </div>
                 ) : (
                   <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
                     <ActionButton
                       action="edit"
-                      aria-label={`Unarchive ${category.name}`}
+                      aria-label={copy.unarchiveAria(category.name)}
                       className="h-11 w-11 lg:hidden"
                       onClick={() => void onUnarchiveCategory(category)}
                       size="icon"
@@ -1403,7 +1444,7 @@ export function SettingsClient({
                       className="hidden lg:inline-flex"
                       onClick={() => void onUnarchiveCategory(category)}
                     >
-                      Unarchive
+                      {shared.unarchive}
                     </ActionButton>
                   </div>
                 )}

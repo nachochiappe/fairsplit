@@ -12,6 +12,7 @@ model User {
   name             String
   email            String?
   authUserId       String?
+  locale           String            @default("en") @db.VarChar(5)
   householdId      String?
   onboardingHouseholdDecisionAt DateTime?
   sessionRevokedAt DateTime?

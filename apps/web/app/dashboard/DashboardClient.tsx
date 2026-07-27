@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/currency';
-import { type Income, type SettlementResponse, type User } from '../../lib/api';
+import { type AppLocale, type Income, type SettlementResponse, type User } from '../../lib/api';
 import Link from 'next/link';
 import {
   MonthNavigationPendingProvider,
@@ -11,7 +11,9 @@ import {
 import { MonthSelector } from '../../components/MonthSelector';
 import { Nav } from '../../components/Nav';
 import { TitleMark } from '../../components/TitleMark';
+import { LocaleSync } from '../../components/LocaleSync';
 import { getSuperCategoryAccentColor } from '../../lib/theme';
+import { formatCountLabel, localeTags, t } from '../../lib/i18n';
 
 interface DashboardClientProps {
   month: string;
@@ -25,6 +27,7 @@ interface DashboardClientProps {
     superCategoryColor: string | null;
   }>;
   warning?: string | null;
+  locale: AppLocale;
 }
 
 export function DashboardClient({
@@ -34,6 +37,7 @@ export function DashboardClient({
   settlement,
   expenseCategorySlices = [],
   warning,
+  locale,
 }: DashboardClientProps) {
   return (
     <MonthNavigationPendingProvider>
@@ -44,6 +48,7 @@ export function DashboardClient({
         settlement={settlement}
         expenseCategorySlices={expenseCategorySlices}
         warning={warning}
+        locale={locale}
       />
     </MonthNavigationPendingProvider>
   );
@@ -56,9 +61,11 @@ function DashboardClientContent({
   settlement,
   expenseCategorySlices = [],
   warning,
+  locale,
 }: DashboardClientProps) {
   const [isCategoryChartExpanded, setIsCategoryChartExpanded] = useState(false);
   const { isPending } = useMonthNavigationPending();
+  const copy = t(locale).dashboard;
   const usersById = Object.fromEntries(users.map((user) => [user.id, user]));
   const incomeByUser: Record<string, number> = {};
   for (const income of incomes) {
@@ -79,18 +86,19 @@ function DashboardClientContent({
                 Fairsplit
               </p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink-strong md:text-5xl">
-                Settlement Dashboard
+                {copy.title}
               </h1>
               <p className="mt-2 max-w-2xl text-base text-ink-muted">
-                See fair monthly contributions and transfer recommendation
+                {copy.subtitle}
               </p>
             </div>
           </div>
-          <MonthSelector month={month} />
+          <MonthSelector month={month} locale={locale} />
         </div>
       </header>
 
-      <Nav month={month} />
+      <LocaleSync locale={locale} />
+      <Nav month={month} locale={locale} />
 
       <div
         aria-busy={isPending}
@@ -106,24 +114,24 @@ function DashboardClientContent({
                 className="font-semibold underline decoration-2 underline-offset-2"
                 href={`/incomes?month=${month}`}
               >
-                Open incomes
+                {copy.openIncomes}
               </Link>
             </p>
           </div>
         ) : null}
         <section className="grid gap-5 md:grid-cols-3">
-          <MetricCard label="Total income" value={formatMoney(settlement.totalIncome)} />
-          <MetricCard label="Total expenses" value={formatMoney(settlement.totalExpenses)} />
-          <MetricCard label="Expense ratio" value={formatPercent(settlement.expenseRatio)} />
+          <MetricCard label={copy.totalIncome} value={formatMoney(settlement.totalIncome, locale)} />
+          <MetricCard label={copy.totalExpenses} value={formatMoney(settlement.totalExpenses, locale)} />
+          <MetricCard label={copy.expenseRatio} value={formatPercent(settlement.expenseRatio, locale)} />
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-stroke/80 bg-surface shadow-sm">
           <div className="border-b border-stroke/60 p-6 md:p-8">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold text-ink-strong">Expenses by category</h2>
+                <h2 className="text-xl font-semibold text-ink-strong">{copy.expensesByCategory}</h2>
                 <p className="mt-1 text-sm text-ink-muted">
-                  Monthly distribution of expenses in ARS.
+                  {copy.categoryDistribution}
                 </p>
               </div>
               <button
@@ -133,13 +141,13 @@ function DashboardClientContent({
                 type="button"
                 onClick={() => setIsCategoryChartExpanded((current) => !current)}
               >
-                {isCategoryChartExpanded ? 'Hide chart' : 'Show chart'}
+                <span className="truncate">{isCategoryChartExpanded ? copy.hideChart : copy.showChart}</span>
               </button>
             </div>
           </div>
           {isCategoryChartExpanded ? (
             <div className="p-6 md:p-8" id="expense-category-chart-content">
-              <CategoryPieChart slices={expenseCategorySlices} />
+              <CategoryPieChart locale={locale} slices={expenseCategorySlices} />
             </div>
           ) : null}
         </section>
@@ -162,41 +170,41 @@ function DashboardClientContent({
                           : 'bg-rose-50 text-rose-700'
                       }`}
                     >
-                      {isPositiveDifference ? 'Overpaid' : 'Needs to send'}
+                      {isPositiveDifference ? copy.overpaid : copy.needsToSend}
                     </span>
                   </div>
                   <div className="rounded-2xl border border-stroke bg-surface-muted/70 px-4 py-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-soft">
-                      Difference
+                      {copy.difference}
                     </p>
                     <p
                       className={`mt-2 text-3xl font-semibold tabular-nums ${isPositiveDifference ? 'text-emerald-600' : 'text-rose-500'}`}
                     >
-                      {formatMoney(absoluteDifference)}
+                      {formatMoney(absoluteDifference, locale)}
                     </p>
                     <p className="mt-1 text-sm text-ink-muted">
                       {isPositiveDifference
-                        ? 'Covered more than fair share this month.'
-                        : 'Needs to send this month.'}
+                        ? copy.coveredMore
+                        : copy.needsToSendThisMonth}
                     </p>
                   </div>
                   <dl className="space-y-3 border-t border-stroke/60 pt-3 text-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Income</dt>
+                      <dt className="text-ink-muted">{copy.income}</dt>
                       <dd className="font-medium tabular-nums text-ink-strong">
-                        {formatMoney(incomeByUser[user.id] ?? 0)}
+                        {formatMoney(incomeByUser[user.id] ?? 0, locale)}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Paid</dt>
+                      <dt className="text-ink-muted">{copy.paid}</dt>
                       <dd className="font-medium tabular-nums text-ink-strong">
-                        {formatMoney(settlement.paidByUser[user.id] ?? 0)}
+                        {formatMoney(settlement.paidByUser[user.id] ?? 0, locale)}
                       </dd>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="text-ink-muted">Fair share</dt>
+                      <dt className="text-ink-muted">{copy.fairShare}</dt>
                       <dd className="font-medium tabular-nums text-ink-strong">
-                        {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
+                        {formatMoney(settlement.fairShareByUser[user.id] ?? 0, locale)}
                       </dd>
                     </div>
                   </dl>
@@ -206,38 +214,38 @@ function DashboardClientContent({
           </div>
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-left text-sm">
-              <caption className="sr-only">Monthly settlement by partner</caption>
+              <caption className="sr-only">{copy.caption}</caption>
               <thead className="bg-surface-muted/85 text-ink-soft">
                 <tr>
                   <th
                     className="px-5 py-4 text-xs font-bold uppercase tracking-[0.14em] md:px-8"
                     scope="col"
                   >
-                    Partner
+                    {copy.partner}
                   </th>
                   <th
                     className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
                     scope="col"
                   >
-                    Income
+                    {copy.income}
                   </th>
                   <th
                     className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
                     scope="col"
                   >
-                    Paid
+                    {copy.paid}
                   </th>
                   <th
                     className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
                     scope="col"
                   >
-                    Fair contribution
+                    {copy.fairContribution}
                   </th>
                   <th
                     className="px-5 py-4 text-right text-xs font-bold uppercase tracking-[0.14em] md:px-8"
                     scope="col"
                   >
-                    Difference
+                    {copy.difference}
                   </th>
                 </tr>
               </thead>
@@ -251,13 +259,13 @@ function DashboardClientContent({
                       {user.name}
                     </th>
                     <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-ink-strong md:px-8">
-                      {formatMoney(incomeByUser[user.id] ?? 0)}
+                      {formatMoney(incomeByUser[user.id] ?? 0, locale)}
                     </td>
                     <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-ink-strong md:px-8">
-                      {formatMoney(settlement.paidByUser[user.id] ?? 0)}
+                      {formatMoney(settlement.paidByUser[user.id] ?? 0, locale)}
                     </td>
                     <td className="px-5 py-5 text-right text-lg font-medium tabular-nums text-ink-strong md:px-8">
-                      {formatMoney(settlement.fairShareByUser[user.id] ?? 0)}
+                      {formatMoney(settlement.fairShareByUser[user.id] ?? 0, locale)}
                     </td>
                     <td
                       className={`px-5 py-5 text-right text-lg font-bold tabular-nums md:px-8 ${
@@ -266,7 +274,7 @@ function DashboardClientContent({
                           : 'text-rose-500'
                       }`}
                     >
-                      {formatMoney(settlement.differenceByUser[user.id] ?? 0)}
+                      {formatMoney(settlement.differenceByUser[user.id] ?? 0, locale)}
                     </td>
                   </tr>
                 ))}
@@ -277,25 +285,25 @@ function DashboardClientContent({
 
         <section className="rounded-3xl border border-brand-200 bg-brand-50 px-6 py-7 shadow-sm md:px-9">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">
-            Settlement
+            {copy.settlement}
           </h2>
           {settlement.transfer ? (
             <div className="mt-3 space-y-2">
               <p className="text-2xl font-semibold leading-snug text-ink-strong md:text-3xl">
-                {usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId}
-                {' sends '}
-                {formatMoney(settlement.transfer.amount)}
-                {' to '}
-                {usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId}
+                {copy.transferSentence(
+                  usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId,
+                  formatMoney(settlement.transfer.amount, locale),
+                  usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId,
+                )}
               </p>
-              <p className="text-sm text-ink-muted">One transfer balances this month.</p>
+              <p className="text-sm text-ink-muted">{copy.transferBalances}</p>
             </div>
           ) : (
             <div className="mt-3 space-y-2">
               <p className="text-2xl font-semibold text-ink-strong md:text-3xl">
-                No transfer needed
+                {copy.noTransferNeeded}
               </p>
-              <p className="text-sm text-ink-muted">This month is already balanced.</p>
+              <p className="text-sm text-ink-muted">{copy.alreadyBalanced}</p>
             </div>
           )}
         </section>
@@ -313,13 +321,11 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatCountLabel(count: number, singular: string, plural: string): string {
-  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
-}
-
 function CategoryPieChart({
+  locale,
   slices,
 }: {
+  locale: AppLocale;
   slices: Array<{
     categoryName: string;
     totalArs: number;
@@ -327,7 +333,12 @@ function CategoryPieChart({
     superCategoryColor: string | null;
   }>;
 }) {
-  const groups = useMemo(() => buildSuperCategoryGroups(slices), [slices]);
+  const copy = t(locale).dashboard;
+  const unassignedLabel = t(locale).common.unassigned;
+  const groups = useMemo(
+    () => buildSuperCategoryGroups(slices, unassignedLabel),
+    [slices, unassignedLabel],
+  );
   const [expandedGroupName, setExpandedGroupName] = useState<string | null>(
     groups[0]?.name ?? null,
   );
@@ -350,7 +361,7 @@ function CategoryPieChart({
   if (slices.length === 0) {
     return (
       <p className="mt-4 rounded-xl bg-surface-muted px-4 py-3 text-sm text-ink-muted">
-        No expenses available for this month.
+        {copy.noExpenses}
       </p>
     );
   }
@@ -378,15 +389,15 @@ function CategoryPieChart({
     .slice(0, 3);
   const leadSegment = topSegments[0];
   const chartSummary = leadSegment
-    ? `${leadSegment.categoryName} is the largest group at ${leadSegment.percentage.toFixed(1)}% of spending.`
-    : 'Expense groups are summarized below.';
+    ? copy.chartSummary(leadSegment.categoryName, leadSegment.percentage.toFixed(1))
+    : copy.fallbackChartSummary;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
         <div className="rounded-xl border border-stroke/60 bg-surface-muted/60 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
-            Text summary
+            {copy.chartSummaryLabel}
           </p>
           <p className="mt-2 text-sm leading-6 text-ink-base">{chartSummary}</p>
           <ol className="mt-3 space-y-2">
@@ -399,7 +410,7 @@ function CategoryPieChart({
                   <p className="font-semibold text-ink-strong">
                     {index + 1}. {segment.categoryName}
                   </p>
-                  <p className="text-ink-muted">{formatMoney(segment.totalArs)} spent</p>
+                  <p className="text-ink-muted">{copy.amountSpent(formatMoney(segment.totalArs, locale))}</p>
                 </div>
                 <span className="shrink-0 font-semibold tabular-nums text-ink-strong">
                   {segment.percentage.toFixed(1)}%
@@ -411,7 +422,7 @@ function CategoryPieChart({
         <div className="relative mx-auto w-full max-w-[320px]">
           <svg
             aria-describedby="expense-category-chart-summary"
-            aria-label="Pie chart showing expense groups"
+            aria-label={copy.chartAriaLabel}
             className="w-full"
             role="img"
             viewBox={`0 0 ${chartSize} ${chartSize}`}
@@ -425,10 +436,10 @@ function CategoryPieChart({
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-ink-muted">
-              Total spent
+              {copy.totalSpent}
             </p>
             <p className="mt-1 text-3xl font-bold leading-none text-ink-strong sm:text-5xl">
-              {formatCompactMoney(total)}
+              {formatCompactMoney(total, locale)}
             </p>
           </div>
         </div>
@@ -482,8 +493,8 @@ function CategoryPieChart({
                 <div>
                   <p className="text-xl font-semibold leading-tight text-ink-strong">{group.name}</p>
                   <p className="mt-1 text-sm text-ink-muted">
-                    {formatCountLabel(group.categories.length, 'category', 'categories')} •{' '}
-                    {formatMoney(group.totalArs)}
+                    {formatCountLabel(locale, group.categories.length, copy.categorySingular, copy.categoryPlural)}{' \u2022 '}
+                    {formatMoney(group.totalArs, locale)}
                   </p>
                 </div>
               </div>
@@ -520,7 +531,7 @@ function CategoryPieChart({
                           </span>
                         </div>
                         <span className="font-semibold tabular-nums text-ink-strong">
-                          {formatMoney(category.totalArs)}
+                          {formatMoney(category.totalArs, locale)}
                         </span>
                       </div>
                       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-stroke">
@@ -533,7 +544,7 @@ function CategoryPieChart({
                         />
                       </div>
                       <p className="mt-1 text-right text-xs font-medium text-ink-muted">
-                        {((category.totalArs / total) * 100).toFixed(1)}% of total
+                        {copy.percentOfTotal(((category.totalArs / total) * 100).toFixed(1))}
                       </p>
                     </li>
                   ))}
@@ -544,11 +555,10 @@ function CategoryPieChart({
         ))}
       </ul>
       <p className="text-sm text-ink-muted lg:col-span-2">
-        Showing data from{' '}
-        <span className="font-semibold text-ink-base">
-          {formatCountLabel(slices.length, 'category', 'categories')}
-        </span>{' '}
-        across <span className="font-semibold text-ink-base">{groups.length}</span> groups.
+        {copy.showingFrom(
+          formatCountLabel(locale, slices.length, copy.categorySingular, copy.categoryPlural),
+          groups.length,
+        )}
       </p>
     </div>
   );
@@ -561,6 +571,7 @@ function buildSuperCategoryGroups(
     superCategoryName: string | null;
     superCategoryColor: string | null;
   }>,
+  unassignedLabel: string,
 ): Array<{
   name: string;
   color: string;
@@ -578,7 +589,7 @@ function buildSuperCategoryGroups(
   >();
 
   for (const slice of slices) {
-    const superCategory = slice.superCategoryName ?? 'Unassigned';
+    const superCategory = slice.superCategoryName ?? unassignedLabel;
     const existing = grouped.get(superCategory) ?? {
       name: superCategory,
       color: getSuperCategoryAccentColor(superCategory, slice.superCategoryColor),
@@ -599,15 +610,11 @@ function buildSuperCategoryGroups(
     .sort((a, b) => b.totalArs - a.totalArs);
 }
 
-const compactMoneyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  notation: 'compact',
-  maximumFractionDigits: 1,
-});
-
-function formatCompactMoney(value: number): string {
-  return compactMoneyFormatter.format(value);
+function formatCompactMoney(value: number, locale: AppLocale): string {
+  return `$${new Intl.NumberFormat(localeTags[locale], {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)}`;
 }
 
 function SuperCategoryIcon({ name, color }: { name: string; color: string }) {

@@ -5,6 +5,7 @@ import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '..
 import { DEFAULT_MAX_ROWS_PER_SECTION, getSectionFetchBatchSize } from './pagination';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
+import { resolveLocaleForUser, t } from '../../lib/i18n';
 
 interface ExpensesPageProps {
   searchParams?: Promise<{ month?: string }>;
@@ -13,7 +14,6 @@ interface ExpensesPageProps {
 const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
 const INITIAL_EXPENSES_PAGE_SIZE = getSectionFetchBatchSize(DEFAULT_MAX_ROWS_PER_SECTION);
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
-const NO_INCOME_WARNING = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
 
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   const dedupedById = new Map<string, Expense>();
@@ -96,6 +96,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
         getExchangeRates(month, serverReadInit),
       ]),
   );
+  const locale = resolveLocaleForUser(users, sessionUserId);
   let totalExpensesArs = '0.00';
   let noIncomeWarning: string | null = null;
 
@@ -108,7 +109,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       throw error;
     }
 
-    noIncomeWarning = NO_INCOME_WARNING;
+    noIncomeWarning = t(locale).expenses.noIncomeWarning;
     const allExpensesForMonth = await withServerApiLogging(
       requestId,
       { month, route: '/expenses', step: 'fallback-expenses' },
@@ -160,6 +161,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       initialExchangeRates={exchangeRates}
       initialTotalExpensesArs={totalExpensesArs}
       initialTotals={totalsData.totals}
+      locale={locale}
     />
   );
 }

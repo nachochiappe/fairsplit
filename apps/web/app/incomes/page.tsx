@@ -3,6 +3,8 @@ import { IncomesClient } from './IncomesClient';
 import { getExchangeRates, getIncomes, getUsers } from '../../lib/api';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SESSION_COOKIE } from '../../lib/session';
+import { verifySessionCookieToken } from '../../lib/session-server';
+import { resolveLocaleForUser } from '../../lib/i18n';
 
 interface IncomesPageProps {
   searchParams?: Promise<{ month?: string }>;
@@ -14,6 +16,7 @@ export default async function IncomesPage({ searchParams }: IncomesPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = await verifySessionCookieToken(sessionToken);
   const requestId = await getServerRequestId();
   const serverReadInit = buildServerApiInit(
     requestId,
@@ -32,5 +35,13 @@ export default async function IncomesPage({ searchParams }: IncomesPageProps) {
       ]),
   );
 
-  return <IncomesClient month={month} initialUsers={users} initialIncomes={incomes} initialExchangeRates={exchangeRates} />;
+  return (
+    <IncomesClient
+      month={month}
+      initialUsers={users}
+      initialIncomes={incomes}
+      initialExchangeRates={exchangeRates}
+      locale={resolveLocaleForUser(users, session?.userId ?? null)}
+    />
+  );
 }

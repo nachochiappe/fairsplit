@@ -2,6 +2,9 @@ import { cookies } from 'next/headers';
 import { DashboardClient } from './DashboardClient';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SESSION_COOKIE } from '../../lib/session';
+import { verifySessionCookieToken } from '../../lib/session-server';
+import { resolveLocaleForUser, t } from '../../lib/i18n';
+import { LOCALE_COOKIE, parseLocaleCookie } from '../../lib/locale-cookie';
 import {
   getExpenses,
   getIncomes,
@@ -29,7 +32,12 @@ const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
-  const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
+  const session = await verifySessionCookieToken(sessionToken);
+  // The user's locale lives behind the API, so a backend outage has to fall
+  // back to the cookie mirror written on the last successful render.
+  const fallbackLocale = parseLocaleCookie(cookieStore.get(LOCALE_COOKIE)?.value) ?? 'en';
   const requestId = await getServerRequestId();
   const serverReadInit = buildServerApiInit(
     requestId,
@@ -69,11 +77,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         users={[]}
         settlement={settlement}
         incomes={[]}
-        warning={`Backend is unavailable. ${message}`}
+        warning={t(fallbackLocale).dashboard.backendUnavailable(message)}
+        locale={fallbackLocale}
       />
     );
   }
 
+  const locale = resolveLocaleForUser(users, session?.userId ?? null);
   let settlement: SettlementResponse;
   let warning: string | null = null;
 
@@ -81,7 +91,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     settlement = settlementResult;
   } else {
     settlement = buildNoIncomeSettlement(month, users, incomes, expensesResult);
-    warning = 'No incomes are set for this month yet. Add incomes to calculate a fair settlement.';
+    warning = t(locale).expenses.noIncomeWarning;
   }
 
   return (
@@ -92,6 +102,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       incomes={incomes}
       warning={warning}
       expenseCategorySlices={buildExpenseCategorySlices(expensesResult)}
+      locale={locale}
     />
   );
 }

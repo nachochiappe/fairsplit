@@ -3,44 +3,45 @@
 import { type TouchEvent, useEffect, useRef, useState } from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { formatMoney } from '../../lib/currency';
-import { type Expense } from '../../lib/api';
+import { type AppLocale, type Expense } from '../../lib/api';
+import { localeTags, t, type Translation } from '../../lib/i18n';
 
 const MOBILE_ACTION_RAIL_WIDTH = 168;
 const MOBILE_ACTION_OPEN_THRESHOLD = 56;
 
-function getExpenseKindLabel(expense: Expense): string {
+function getExpenseKindLabel(copy: Translation['expenses'], expense: Expense): string {
   if (expense.fixed.enabled) {
-    return 'Recurring';
+    return copy.kindRecurring;
   }
 
   if (expense.installment) {
-    return `Installment ${expense.installment.number}/${expense.installment.total}`;
+    return copy.kindInstallment(expense.installment.number, expense.installment.total);
   }
 
-  return 'One-time';
+  return copy.kindOneTime;
 }
 
-function formatMobileExpenseDate(value: string): string {
+function formatMobileExpenseDate(value: string, locale: AppLocale): string {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
 
   return date
-    .toLocaleDateString('en-US', {
+    .toLocaleDateString(localeTags[locale], {
       day: '2-digit',
       month: 'short',
     })
     .toUpperCase();
 }
 
-function formatMobileExpenseAmount(value: string): string {
+function formatMobileExpenseAmount(value: string, locale: AppLocale): string {
   const amount = Number(value);
   if (Number.isNaN(amount)) {
     return value;
   }
 
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat(localeTags[locale], {
     maximumFractionDigits: 0,
   }).format(amount);
 }
@@ -48,6 +49,7 @@ function formatMobileExpenseAmount(value: string): string {
 export interface MobileExpenseCardProps {
   expense: Expense;
   isOpen: boolean;
+  locale: AppLocale;
   onOpenChange: (nextOpen: boolean) => void;
   onEdit: () => void;
   onClone: () => void;
@@ -58,12 +60,14 @@ export interface MobileExpenseCardProps {
 export function MobileExpenseCard({
   expense,
   isOpen,
+  locale,
   onOpenChange,
   onEdit,
   onClone,
   onDelete,
   formatFxRate,
 }: MobileExpenseCardProps) {
+  const copy = t(locale);
   const touchStartXRef = useRef<number | null>(null);
   const startOffsetRef = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
@@ -116,13 +120,13 @@ export function MobileExpenseCard({
     >
       <div className="absolute inset-y-0 right-0 flex w-[168px] items-stretch">
         <ActionButton action="edit" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onEdit}>
-          Edit
+          {copy.common.edit}
         </ActionButton>
         <ActionButton action="clone" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onClone}>
-          Clone
+          {copy.common.clone}
         </ActionButton>
         <ActionButton action="delete" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onDelete}>
-          Delete
+          {copy.common.delete}
         </ActionButton>
       </div>
 
@@ -146,7 +150,7 @@ export function MobileExpenseCard({
             <div className="mt-3.5 flex flex-wrap gap-2">
               {showKindChip ? (
                 <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1.5 text-[12px] font-normal leading-4 text-slate-700">
-                  {getExpenseKindLabel(expense)}
+                  {getExpenseKindLabel(copy.expenses, expense)}
                 </span>
               ) : null}
               <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1.5 text-[12px] font-normal leading-4 text-slate-700">
@@ -159,7 +163,11 @@ export function MobileExpenseCard({
 
             {expense.currencyCode !== 'ARS' ? (
               <p className="mt-3 text-sm text-slate-600">
-                Original: {expense.currencyCode} {formatMoney(expense.amountOriginal)} @ {formatFxRate(expense.fxRateUsed)}
+                {copy.expenses.originalAmount(
+                  expense.currencyCode,
+                  formatMoney(expense.amountOriginal, locale),
+                  formatFxRate(expense.fxRateUsed),
+                )}
               </p>
             ) : null}
           </div>
@@ -167,10 +175,10 @@ export function MobileExpenseCard({
           <div className="shrink-0 pr-1.5 text-right">
             <div className="flex flex-col items-end gap-3">
               <p className="whitespace-nowrap text-[12px] font-normal uppercase tracking-[0.08em] text-slate-500">
-                {formatMobileExpenseDate(expense.date)}
+                {formatMobileExpenseDate(expense.date, locale)}
               </p>
               <p className="text-[18px] font-normal leading-[1.05] tabular-nums text-slate-900">
-                ${formatMobileExpenseAmount(expense.amountArs)}
+                ${formatMobileExpenseAmount(expense.amountArs, locale)}
               </p>
             </div>
           </div>

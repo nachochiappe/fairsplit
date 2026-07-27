@@ -1,8 +1,12 @@
 'use client';
 
+import { type AppLocale } from '../../lib/api';
+import { t } from '../../lib/i18n';
+
 export interface DesktopExpenseActionMenuProps {
   expenseId: string;
   isOpen: boolean;
+  locale: AppLocale;
   onOpenChange: (nextOpen: boolean) => void;
   onEdit: () => void;
   onClone: () => void;
@@ -15,12 +19,14 @@ const menuItemClass =
 export function DesktopExpenseActionMenu({
   expenseId,
   isOpen,
+  locale,
   onOpenChange,
   onEdit,
   onClone,
   onDelete,
 }: DesktopExpenseActionMenuProps) {
   const menuId = `expense-actions-${expenseId}`;
+  const copy = t(locale);
 
   return (
     <div className="relative inline-flex justify-end" data-expense-actions>
@@ -28,7 +34,7 @@ export function DesktopExpenseActionMenu({
         aria-controls={menuId}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        aria-label="Open expense actions"
+        aria-label={copy.expenses.openActions}
         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
         onClick={() => onOpenChange(!isOpen)}
         type="button"
@@ -59,7 +65,7 @@ export function DesktopExpenseActionMenu({
               <path d="M12 20h9" />
               <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
             </svg>
-            Edit
+            {copy.common.edit}
           </button>
           <button
             className={menuItemClass}
@@ -74,7 +80,7 @@ export function DesktopExpenseActionMenu({
               <rect height="13" rx="2" width="13" x="9" y="9" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
-            Clone
+            {copy.common.clone}
           </button>
           <button
             className={`${menuItemClass} text-red-700 hover:bg-red-50 hover:text-red-700`}
@@ -92,7 +98,7 @@ export function DesktopExpenseActionMenu({
               <path d="M10 11v6" />
               <path d="M14 11v6" />
             </svg>
-            Delete
+            {copy.common.delete}
           </button>
         </div>
       ) : null}

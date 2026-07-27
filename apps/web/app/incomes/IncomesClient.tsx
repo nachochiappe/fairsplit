@@ -11,9 +11,11 @@ import {
   replaceIncomesForUser,
   type ExchangeRate,
   type Income,
+  type AppLocale,
   type User,
 } from '../../lib/api';
 import { formatMoney } from '../../lib/currency';
+import { t } from '../../lib/i18n';
 
 type IncomeDraft = {
   id?: string;
@@ -137,6 +139,7 @@ interface IncomesClientProps {
   initialUsers: User[];
   initialIncomes: Income[];
   initialExchangeRates: ExchangeRate[];
+  locale: AppLocale;
 }
 
 interface PendingIncomeRemoval {
@@ -150,11 +153,15 @@ function ConfirmationDialog({
   message,
   onCancel,
   onConfirm,
+  confirmLabel,
+  cancelLabel,
 }: {
   title: string;
   message: string;
   onCancel: () => void;
   onConfirm: () => void;
+  confirmLabel: string;
+  cancelLabel: string;
 }) {
   return (
     <ViewportModal onDismiss={onCancel}>
@@ -170,10 +177,10 @@ function ConfirmationDialog({
         <p className="mt-2 text-sm text-slate-700">{message}</p>
         <div className="mt-4 flex gap-2">
           <button className={primaryButtonClass} onClick={onConfirm} type="button">
-            Remove income
+            {confirmLabel}
           </button>
           <button className={subtleButtonClass} onClick={onCancel} type="button">
-            Cancel
+            {cancelLabel}
           </button>
         </div>
       </div>
@@ -181,7 +188,9 @@ function ConfirmationDialog({
   );
 }
 
-export function IncomesClient({ month, initialUsers, initialIncomes, initialExchangeRates }: IncomesClientProps) {
+export function IncomesClient({ month, initialUsers, initialIncomes, initialExchangeRates, locale }: IncomesClientProps) {
+  const copy = t(locale).incomes;
+  const shared = t(locale).common;
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
   const [incomeDraftsByUser, setIncomeDraftsByUser] = useState<Record<string, IncomeDraft[]>>(
@@ -211,11 +220,11 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
       setBaselineIncomeDraftsByUser(nextDrafts);
       setExchangeRates(rates);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Failed to load incomes');
+      setError(loadError instanceof Error ? loadError.message : copy.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, [month, users]);
+  }, [copy.loadFailed, month, users]);
 
   useEffect(() => {
     const nextDrafts = buildIncomeDrafts(initialUsers, initialIncomes);
@@ -392,12 +401,12 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
         }
 
         if (description === '') {
-          setError(`Income description is required for ${user.name}.`);
+          setError(copy.descriptionRequired(user.name));
           return;
         }
 
         if (entry.amount.trim() === '') {
-          setError(`Income amount is required for ${user.name}.`);
+          setError(copy.amountRequired(user.name));
           return;
         }
 
@@ -405,13 +414,13 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
 
         const amount = Number(entry.amount);
         if (!Number.isFinite(amount)) {
-          setError(`Invalid income amount for ${user.name}.`);
+          setError(copy.amountInvalid(user.name));
           return;
         }
 
         const explicitFxRate = entry.fxRate.trim() === '' ? undefined : Number(entry.fxRate);
         if (currencyCode !== 'ARS' && explicitFxRate !== undefined && (!Number.isFinite(explicitFxRate) || explicitFxRate <= 0)) {
-          setError(`FX rate must be greater than 0 for ${user.name}.`);
+          setError(copy.fxRateInvalid(user.name));
           return;
         }
 
@@ -432,9 +441,9 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
           }),
         ),
       );
-      setMessage('Incomes saved');
+      setMessage(copy.incomeSaved);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Failed to save incomes');
+      setError(submitError instanceof Error ? submitError.message : copy.saveFailed);
       return;
     }
 
@@ -443,8 +452,8 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
     } catch (refreshError) {
       setError(
         refreshError instanceof Error
-          ? `Incomes were saved, but the page could not refresh automatically. ${refreshError.message}`
-          : 'Incomes were saved, but the page could not refresh automatically.',
+          ? `${copy.savedRefreshFailed} ${refreshError.message}`
+          : copy.savedRefreshFailed,
       );
     } finally {
       setSaving(false);
@@ -453,9 +462,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
 
   const copyFromPreviousMonth = useCallback(async () => {
     if (Object.values(incomeDraftsByUser).some((rows) => rows.length > 0)) {
-      const shouldOverwrite = window.confirm(
-        `This will replace the current draft with incomes from ${previousMonth}. Continue?`,
-      );
+      const shouldOverwrite = window.confirm(copy.overwriteConfirm(previousMonth));
       if (!shouldOverwrite) {
         return;
       }
@@ -468,38 +475,41 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
       const previousIncomes = await getIncomes(previousMonth);
 
       if (previousIncomes.length === 0) {
-        setMessage(`No incomes found for ${previousMonth}.`);
+        setMessage(copy.noPreviousIncomes(previousMonth));
         return;
       }
 
       setIncomeDraftsByUser(buildIncomeDrafts(users, previousIncomes));
-      setMessage(`Loaded incomes from ${previousMonth}. Click "Save incomes" to apply them to ${month}.`);
+      setMessage(copy.previousLoaded(previousMonth, month));
     } catch (copyError) {
-      setError(copyError instanceof Error ? copyError.message : 'Failed to load previous month incomes');
+      setError(copyError instanceof Error ? copyError.message : copy.previousLoadFailed);
     } finally {
       setCopyingPrevious(false);
     }
-  }, [incomeDraftsByUser, month, previousMonth, users]);
+  }, [copy, incomeDraftsByUser, month, previousMonth, users]);
 
   return (
     <AppShell
       month={month}
-      title="Monthly Incomes"
-      subtitle="Add one or more income entries per partner (foreign currency supported, converted to ARS)"
-      rightSlot={<MonthSelector month={month} />}
+      title={copy.title}
+      subtitle={copy.subtitle}
+      locale={locale}
+      rightSlot={<MonthSelector month={month} locale={locale} />}
     >
       {pendingIncomeRemoval ? (
         <ConfirmationDialog
-          message={`Remove "${pendingIncomeRemoval.description}" from this month?`}
+          cancelLabel={shared.cancel}
+          confirmLabel={copy.removeIncome}
+          message={copy.removeMessage(pendingIncomeRemoval.description)}
           onCancel={() => setPendingIncomeRemoval(null)}
           onConfirm={confirmRemoveIncomeDraft}
-          title="Confirm income removal"
+          title={copy.confirmRemoval}
         />
       ) : null}
       <form className="space-y-6" onSubmit={onSubmit}>
         {loading ? (
           <p aria-live="polite" className="text-sm text-slate-600">
-            Loading...
+            {shared.loading}
           </p>
         ) : null}
         {error ? (
@@ -530,17 +540,19 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
               />
               <path d="M4.17 3.33v2.55h2.55" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
             </svg>
-            {copyingPrevious ? 'Loading previous month...' : `Use incomes from ${previousMonth}`}
+            <span className="truncate">
+              {copyingPrevious ? copy.loadingPrevious : copy.usePrevious(previousMonth)}
+            </span>
           </button>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
           <div className={`${surfaceClass} p-6 md:p-8`}>
             <p className="text-sm font-semibold uppercase tracking-[0.09em] text-slate-500 md:text-base">
-              Total combined income (ARS)
+              {copy.totalCombinedIncome}
             </p>
             <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-              <p className="text-4xl font-bold tracking-tight text-brand-600">{formatMoney(total)}</p>
+              <p className="text-4xl font-bold tracking-tight text-brand-600">{formatMoney(total, locale)}</p>
             </div>
           </div>
 
@@ -549,10 +561,10 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-brand-600">
                 i
               </span>
-              Exchange Rates
+              {copy.exchangeRates}
             </div>
             <p className="text-sm leading-relaxed text-brand-100">
-              Existing month-start FX defaults are reused automatically. Enter FX once to save for this month.
+              {copy.exchangeRatesHelp}
             </p>
           </aside>
         </div>
@@ -573,7 +585,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                   <div className="min-w-0">
                     <h3 className="truncate text-lg font-bold leading-tight text-slate-800">{user.name}</h3>
                     <p className="text-xs text-slate-500">
-                      Total (ARS): <span className="font-semibold text-slate-800">{formatMoney(totalByUser[user.id] ?? 0)}</span>
+                      {copy.totalForUser}: <span className="font-semibold text-slate-800">{formatMoney(totalByUser[user.id] ?? 0, locale)}</span>
                     </p>
                   </div>
                 </div>
@@ -582,20 +594,20 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                   <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4">
                     <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
                   </svg>
-                  Add income
+                  {copy.addIncome}
                 </button>
               </div>
 
               <div className="hidden grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] border-b border-slate-200 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-ink-soft md:grid">
-                <span>Description</span>
-                <span>Amount</span>
-                <span>Currency</span>
-                <span>FX rate</span>
-                <span className="sr-only">Actions</span>
+                <span>{copy.description}</span>
+                <span>{copy.amount}</span>
+                <span>{copy.currency}</span>
+                <span>{copy.fxRate}</span>
+                <span className="sr-only">{shared.actions}</span>
               </div>
 
               {(incomeDraftsByUser[user.id] ?? []).length === 0 ? (
-                <p className="px-5 py-4 text-sm text-slate-500 md:px-6">No income entries yet.</p>
+                <p className="px-5 py-4 text-sm text-slate-500 md:px-6">{copy.noEntries}</p>
               ) : null}
 
               <div>
@@ -614,18 +626,18 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                           <input
                             type="text"
                             name={`income-description-${user.id}-${index}`}
-                            aria-label={`${user.name} income description ${index + 1}`}
+                            aria-label={copy.descriptionFor(user.name, index + 1)}
                             autoComplete="off"
                             value={row.description}
                             onChange={(event) => updateDraftDescription(user.id, index, event.target.value)}
                             className={`${fieldClass} ${descriptionToneClass}`}
-                            placeholder="Description"
+                            placeholder={copy.description}
                           />
                           <div className="relative shrink-0" data-mobile-income-menu>
                             <button
                               aria-expanded={openMobileActionMenuId === `${user.id}-${index}`}
                               aria-haspopup="menu"
-                              aria-label={`More actions for ${row.description || `income ${index + 1}`}`}
+                              aria-label={copy.moreActionsFor(row.description || copy.rowFallbackLabel(index + 1))}
                               className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
                               onClick={() =>
                                 setOpenMobileActionMenuId((current) =>
@@ -647,14 +659,14 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                               >
                                 <ActionButton
                                   action="remove"
-                                  aria-label="Remove income row"
+                                  aria-label={copy.removeIncomeRow}
                                   className="w-full justify-start"
                                   onClick={() => {
                                     setOpenMobileActionMenuId(null);
                                     requestRemoveIncomeDraft(user.id, index);
                                   }}
                                 >
-                                  Remove income
+                                  {copy.removeIncome}
                                 </ActionButton>
                               </div>
                             ) : null}
@@ -662,13 +674,13 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         </div>
 
                         <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">Amount</p>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">{copy.amount}</p>
                           <div className="relative mt-2">
                             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
                             <input
                               type="text"
                               name={`income-amount-${user.id}-${index}`}
-                              aria-label={`${user.name} income amount ${index + 1}`}
+                              aria-label={copy.amountFor(user.name, index + 1)}
                               autoComplete="off"
                               inputMode="decimal"
                               value={row.amount}
@@ -682,11 +694,11 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         <div className="flex flex-wrap gap-2">
                           <div className="min-w-[120px] flex-1">
                             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">
-                              Currency
+                              {copy.currency}
                             </label>
                             <select
                               name={`income-currency-${user.id}-${index}`}
-                              aria-label={`${user.name} income currency ${index + 1}`}
+                              aria-label={copy.currencyFor(user.name, index + 1)}
                               value={row.currencyCode}
                               onChange={(event) =>
                                 updateDraftCurrencyCode(user.id, index, event.target.value as SupportedCurrencyCode)
@@ -710,20 +722,20 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                           ) : (
                             <div className="min-w-[140px] flex-1">
                               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">
-                                FX to ARS
+                                {copy.fxRate}
                               </label>
                               <div className="relative">
                                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
                                 <input
                                   type="text"
                                   name={`income-fx-${user.id}-${index}`}
-                                  aria-label={`${user.name} income fx rate ${index + 1}`}
+                                  aria-label={copy.fxRateFor(user.name, index + 1)}
                                   autoComplete="off"
                                   inputMode="decimal"
                                   value={row.fxRate}
                                   onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
                                   className={moneyFieldClass}
-                                  placeholder="FX to ARS"
+                                  placeholder={copy.fxRate}
                                 />
                               </div>
                             </div>
@@ -735,12 +747,12 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         <input
                           type="text"
                           name={`income-description-${user.id}-${index}`}
-                          aria-label={`${user.name} income description ${index + 1}`}
+                          aria-label={copy.descriptionFor(user.name, index + 1)}
                           autoComplete="off"
                           value={row.description}
                           onChange={(event) => updateDraftDescription(user.id, index, event.target.value)}
                           className={`${fieldClass} ${descriptionToneClass}`}
-                          placeholder="Description"
+                          placeholder={copy.description}
                         />
                       </div>
 
@@ -749,7 +761,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         <input
                           type="text"
                           name={`income-amount-${user.id}-${index}`}
-                          aria-label={`${user.name} income amount ${index + 1}`}
+                          aria-label={copy.amountFor(user.name, index + 1)}
                           autoComplete="off"
                           inputMode="decimal"
                           value={row.amount}
@@ -763,7 +775,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                         <div>
                           <select
                             name={`income-currency-${user.id}-${index}`}
-                            aria-label={`${user.name} income currency ${index + 1}`}
+                            aria-label={copy.currencyFor(user.name, index + 1)}
                             value={row.currencyCode}
                             onChange={(event) =>
                               updateDraftCurrencyCode(user.id, index, event.target.value as SupportedCurrencyCode)
@@ -784,7 +796,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                             <input
                               type="text"
                               name={`income-fx-${user.id}-${index}`}
-                              aria-label={`${user.name} income fx rate ${index + 1}`}
+                              aria-label={copy.fxRateFor(user.name, index + 1)}
                               autoComplete="off"
                               inputMode="decimal"
                               value={row.currencyCode === 'ARS' ? '1' : row.fxRate}
@@ -795,7 +807,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                                   ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-ink-soft shadow-none disabled:opacity-100'
                                   : ''
                               }`}
-                              placeholder="FX to ARS"
+                              placeholder={copy.fxRate}
                             />
                           </div>
                         </div>
@@ -806,7 +818,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
                           action="remove"
                           onClick={() => requestRemoveIncomeDraft(user.id, index)}
                         >
-                          Remove
+                          {shared.remove}
                         </ActionButton>
                       </div>
                     </div>
@@ -825,7 +837,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
               disabled={saving}
               className={subtleButtonClass}
             >
-              Discard changes
+              {copy.discardChanges}
             </button>
           ) : (
             <span aria-hidden="true" />
@@ -835,7 +847,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
             disabled={saving}
             className={primaryButtonClass}
           >
-            {saving ? 'Saving...' : 'Save Incomes'}
+            {saving ? shared.saving : copy.saveIncomes}
           </button>
         </div>
       </form>

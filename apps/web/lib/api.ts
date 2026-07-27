@@ -4,8 +4,11 @@ export interface User {
   id: string;
   name: string;
   email: string | null;
+  locale: AppLocale;
   createdAt: string;
 }
+
+export type AppLocale = 'es' | 'en';
 
 export interface Income {
   id: string;
@@ -136,6 +139,7 @@ export interface AuthLinkResponse {
     name: string;
     email: string | null;
     authUserId: string | null;
+    locale: AppLocale;
     householdId: string | null;
     onboardingHouseholdDecisionAt: string | null;
     createdAt: string;
@@ -221,7 +225,7 @@ export async function getUser(id: string, init?: NextRequestInit): Promise<User>
   return parseResponse<User>(response);
 }
 
-export async function updateUser(id: string, payload: { name: string }): Promise<User> {
+export async function updateUser(id: string, payload: { name?: string; locale?: AppLocale }): Promise<User> {
   const endpoint =
     typeof window === 'undefined' ? `${API_BASE_URL}/users/${encodeURIComponent(id)}` : `/api/users/${encodeURIComponent(id)}`;
   const response = await fetchFromApi(endpoint, {
