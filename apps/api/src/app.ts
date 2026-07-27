@@ -89,8 +89,14 @@ function withExpenseTypeConstraint(
   }
   return where;
 }
-const createUserSchema = z.object({ name: z.string().min(1) });
-const updateUserSchema = z.object({ name: z.string().trim().min(1) });
+const localeSchema = z.enum(['es', 'en']);
+const createUserSchema = z.object({ name: z.string().min(1), locale: localeSchema.optional() });
+const updateUserSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  locale: localeSchema.optional(),
+}).refine((value) => value.name !== undefined || value.locale !== undefined, {
+  message: 'At least one profile field is required.',
+});
 const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
 const createCategorySchema = z.object({
   name: z.string().trim().min(1),
@@ -422,6 +428,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       name: string;
       email: string | null;
       authUserId: string | null;
+      locale: string;
       householdId: string | null;
       onboardingHouseholdDecisionAt: Date | null;
       createdAt: Date;
@@ -432,6 +439,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         name: user.name,
         email: user.email,
         authUserId: user.authUserId,
+        locale: user.locale,
         householdId: user.householdId,
         onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt?.toISOString() ?? null,
         createdAt: user.createdAt.toISOString(),
@@ -702,6 +710,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         name: result.name,
         email: result.email,
         authUserId: result.authUserId,
+        locale: result.locale,
         householdId: result.householdId,
         onboardingHouseholdDecisionAt: result.onboardingHouseholdDecisionAt?.toISOString() ?? null,
         createdAt: result.createdAt.toISOString(),
@@ -788,6 +797,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         name: result.name,
         email: result.email,
         authUserId: result.authUserId,
+        locale: result.locale,
         householdId: result.householdId,
         onboardingHouseholdDecisionAt: result.onboardingHouseholdDecisionAt?.toISOString() ?? null,
         createdAt: result.createdAt.toISOString(),
@@ -842,6 +852,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         id: user.id,
         name: user.name,
         email: user.id === auth.userId ? user.email : null,
+        locale: user.locale,
         createdAt: user.createdAt.toISOString(),
       })),
     );
@@ -873,6 +884,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       id: user.id,
       name: user.name,
       email: user.email,
+      locale: user.locale,
       createdAt: user.createdAt.toISOString(),
     });
   });
@@ -890,11 +902,13 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const user = await prisma.user.create({
-      data: { name: parsed.data.name, householdId: auth.householdId },
+      data: { name: parsed.data.name, locale: parsed.data.locale ?? 'en', householdId: auth.householdId },
     });
     return res.status(201).json({
       id: user.id,
       name: user.name,
+      email: user.email,
+      locale: user.locale,
       createdAt: user.createdAt.toISOString(),
     });
   });
@@ -928,13 +942,17 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: { name: parsed.data.name },
+      data: {
+        ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+        ...(parsed.data.locale !== undefined ? { locale: parsed.data.locale } : {}),
+      },
     });
 
     return res.json({
       id: updated.id,
       name: updated.name,
       email: updated.email,
+      locale: updated.locale,
       createdAt: updated.createdAt.toISOString(),
     });
   });
