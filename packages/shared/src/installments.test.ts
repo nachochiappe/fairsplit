@@ -39,10 +39,11 @@ describe('createExpenseSchema installment validation', () => {
       month: '2026-02',
       date: '2026-02-01',
       description: 'Test',
-      category: 'Test',
+      categoryId: 'category-id',
       paidByUserId: 'user-id',
     });
     expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.path.join('.'))).toContain('amount');
   });
 
   it('accepts installment payload with total mode', () => {
@@ -50,7 +51,7 @@ describe('createExpenseSchema installment validation', () => {
       month: '2026-02',
       date: '2026-02-01',
       description: 'Phone',
-      category: 'Tech',
+      categoryId: 'category-id',
       paidByUserId: 'user-id',
       installment: {
         enabled: true,
