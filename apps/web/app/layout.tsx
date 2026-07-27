@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
+import { cookies } from 'next/headers';
 import './globals.css';
+import { DEFAULT_LOCALE, localeTags } from '../lib/i18n';
+import { LOCALE_COOKIE, parseLocaleCookie } from '../lib/locale-cookie';
 
 const geist = localFont({
   src: './fonts/Geist-VariableFont_wght.ttf',
@@ -35,9 +38,11 @@ export const viewport: Viewport = {
   themeColor: '#f8faf9',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = parseLocaleCookie((await cookies()).get(LOCALE_COOKIE)?.value) ?? DEFAULT_LOCALE;
+
   return (
-    <html lang="en" className={geist.variable}>
+    <html lang={localeTags[locale]} className={geist.variable}>
       <body className="font-sans antialiased">
         <a
           href="#main-content"
