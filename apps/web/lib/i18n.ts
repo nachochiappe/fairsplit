@@ -800,8 +800,13 @@ const es: Translation = {
 
 const translations: Record<AppLocale, Translation> = { en, es };
 
+/**
+ * Falls back to the default table rather than trusting the argument: `locale`
+ * originates from API payloads, so at runtime it can be absent or unknown even
+ * though the type says otherwise.
+ */
 export function t(locale: AppLocale): Translation {
-  return translations[locale];
+  return translations[locale] ?? translations[DEFAULT_LOCALE];
 }
 
 export function formatCountLabel(

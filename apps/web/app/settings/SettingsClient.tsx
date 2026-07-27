@@ -21,7 +21,7 @@ import {
   updateSuperCategory,
   type AppLocale,
 } from '../../lib/api';
-import { formatCountLabel, localeLabels, localeTags, t } from '../../lib/i18n';
+import { formatCountLabel, localeLabels, localeTags, resolveLocale, t } from '../../lib/i18n';
 
 interface SettingsClientProps {
   month: string;
@@ -211,11 +211,13 @@ export function SettingsClient({
       setProfileError(null);
       setProfileSuccess(null);
       const updated = await updateUser(currentUserId, { name: nextName, locale: localeDraft });
+      // An API that predates the locale column omits it from the response.
+      const updatedLocale = resolveLocale(updated);
       setResolvedCurrentUserName(updated.name);
       setDisplayNameDraft(updated.name);
-      setResolvedLocale(updated.locale);
-      setLocaleDraft(updated.locale);
-      setProfileSuccess(t(updated.locale).settings.profileUpdated);
+      setResolvedLocale(updatedLocale);
+      setLocaleDraft(updatedLocale);
+      setProfileSuccess(t(updatedLocale).settings.profileUpdated);
     } catch (profileUpdateError) {
       setProfileError(
         profileUpdateError instanceof Error

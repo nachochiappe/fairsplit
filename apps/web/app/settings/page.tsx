@@ -5,6 +5,7 @@ import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '..
 import { SettingsClient } from './SettingsClient';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
+import { resolveLocale } from '../../lib/i18n';
 
 const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
 
@@ -36,7 +37,7 @@ export default async function SettingsPage() {
     <SettingsClient
       currentUserEmail={currentUser?.email ?? null}
       currentUserId={currentUser?.id ?? null}
-      currentUserLocale={currentUser?.locale ?? 'en'}
+      currentUserLocale={resolveLocale(currentUser)}
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}
       initialSuperCategories={superCategories}
