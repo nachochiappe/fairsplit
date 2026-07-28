@@ -1,23 +1,26 @@
 'use client';
 
-import { type AppLocale } from '../../lib/api';
+import { memo } from 'react';
+import { type AppLocale, type Expense } from '../../lib/api';
 import { t } from '../../lib/i18n';
 
 export interface DesktopExpenseActionMenuProps {
-  expenseId: string;
+  expense: Expense;
   isOpen: boolean;
   locale: AppLocale;
-  onOpenChange: (nextOpen: boolean) => void;
-  onEdit: () => void;
-  onClone: () => void;
-  onDelete: () => void;
+  // Handlers take the expense so the parent can pass stable callbacks instead of
+  // allocating a closure per row, which would defeat the memo below.
+  onOpenChange: (expense: Expense, nextOpen: boolean) => void;
+  onEdit: (expense: Expense) => void;
+  onClone: (expense: Expense) => void;
+  onDelete: (expense: Expense) => void;
 }
 
 const menuItemClass =
   'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
 
-export function DesktopExpenseActionMenu({
-  expenseId,
+function DesktopExpenseActionMenuComponent({
+  expense,
   isOpen,
   locale,
   onOpenChange,
@@ -25,7 +28,7 @@ export function DesktopExpenseActionMenu({
   onClone,
   onDelete,
 }: DesktopExpenseActionMenuProps) {
-  const menuId = `expense-actions-${expenseId}`;
+  const menuId = `expense-actions-${expense.id}`;
   const copy = t(locale);
 
   return (
@@ -36,7 +39,7 @@ export function DesktopExpenseActionMenu({
         aria-haspopup="menu"
         aria-label={copy.expenses.openActions}
         className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-        onClick={() => onOpenChange(!isOpen)}
+        onClick={() => onOpenChange(expense, !isOpen)}
         type="button"
       >
         <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -55,8 +58,8 @@ export function DesktopExpenseActionMenu({
           <button
             className={menuItemClass}
             onClick={() => {
-              onOpenChange(false);
-              onEdit();
+              onOpenChange(expense, false);
+              onEdit(expense);
             }}
             role="menuitem"
             type="button"
@@ -70,8 +73,8 @@ export function DesktopExpenseActionMenu({
           <button
             className={menuItemClass}
             onClick={() => {
-              onOpenChange(false);
-              onClone();
+              onOpenChange(expense, false);
+              onClone(expense);
             }}
             role="menuitem"
             type="button"
@@ -85,8 +88,8 @@ export function DesktopExpenseActionMenu({
           <button
             className={`${menuItemClass} text-red-700 hover:bg-red-50 hover:text-red-700`}
             onClick={() => {
-              onOpenChange(false);
-              onDelete();
+              onOpenChange(expense, false);
+              onDelete(expense);
             }}
             role="menuitem"
             type="button"
@@ -105,3 +108,5 @@ export function DesktopExpenseActionMenu({
     </div>
   );
 }
+
+export const DesktopExpenseActionMenu = memo(DesktopExpenseActionMenuComponent);

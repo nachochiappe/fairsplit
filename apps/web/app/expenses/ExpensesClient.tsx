@@ -2,11 +2,8 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { computeInstallmentAmounts } from '@fairsplit/shared';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { UseFormReturn } from 'react-hook-form';
-import { Controller, useForm, useWatch } from 'react-hook-form';
-import { z } from 'zod';
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { AppShell } from '../../components/AppShell';
 import { MonthSelector } from '../../components/MonthSelector';
 import { ViewportModal } from '../../components/ViewportModal';
@@ -28,7 +25,6 @@ import {
   Expense,
   ExpenseListResponse,
   type AppLocale,
-  getExpenseDescriptionSuggestions,
   getExchangeRates,
   getExpenses,
   getSettlement,
@@ -57,30 +53,32 @@ import {
   compactFieldClass,
   fieldClass,
   moneyInputClass,
-  pillToggleThumbClass,
-  pillToggleTrackClass,
   primaryButtonClass,
-  secondaryButtonClass,
   tableControlFieldClass,
   tableControlLabelClass,
   tableControlSearchFieldClass,
 } from './expense-styles';
+import { ExpenseComposerFields, MobileExpenseComposerFields } from './ExpenseComposerFields';
+import {
+  dateInputValueToMonth,
+  expenseSchema,
+  ExpenseForm,
+  getTodayDateInputValue,
+  supportedCurrencyCodes,
+  toSupportedCurrencyCode,
+  type SupportedCurrencyCode,
+} from './expense-form';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ScopeDialog } from './ScopeDialog';
 import { MobileExpenseCard } from './MobileExpenseCard';
-import { DesktopExpenseActionMenu } from './DesktopExpenseActionMenu';
+import { DesktopExpenseRow } from './DesktopExpenseRow';
 
 type ApplyScope = 'single' | 'future' | 'all';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
-const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
 const DEFAULT_SORT_FIELD: ExpenseSortField = 'date';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
-type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
-const currencyCodeSchema = z.enum(supportedCurrencyCodes);
-const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
 const SEARCH_DEBOUNCE_MS = 350;
-const DESCRIPTION_SUGGESTION_DEBOUNCE_MS = 200;
 
 type ExpensesCopy = Translation['expenses'];
 
@@ -107,254 +105,7 @@ function getSortFieldLabel(copy: ExpensesCopy, sortField: ExpenseSortField): str
   }
 }
 
-function getExpenseKindLabel(copy: ExpensesCopy, expense: Expense): string {
-  if (expense.fixed.enabled) {
-    return copy.kindRecurring;
-  }
-  if (expense.installment) {
-    return copy.kindInstallment(expense.installment.number, expense.installment.total);
-  }
-  return copy.kindOneTime;
-}
-
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
-
-function getTodayDateInputValue() {
-  const now = new Date();
-  const timezoneOffsetMs = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
-}
-
-function dateInputValueToMonth(value: string) {
-  return value.slice(0, 7);
-}
-
-function toSupportedCurrencyCode(value: string): SupportedCurrencyCode {
-  const normalizedValue = value.trim().toUpperCase();
-  return supportedCurrencyCodes.includes(normalizedValue as SupportedCurrencyCode)
-    ? (normalizedValue as SupportedCurrencyCode)
-    : DEFAULT_CURRENCY_CODE;
-}
-
-const expenseSchema = z
-  .object({
-    date: z.string().date(),
-    description: z.string().min(1),
-    categoryId: z.string().min(1),
-    amount: z.coerce.number().min(0).optional(),
-    currencyCode: currencyCodeSchema,
-    fxRate: z.coerce.number().gt(0).optional(),
-    paidByUserId: z.string().min(1),
-    fixedEnabled: z.boolean().default(false),
-    nextMonthExpense: z.boolean().default(false),
-    applyToFuture: z.boolean().default(true),
-    installmentEnabled: z.boolean().default(false),
-    installmentCount: z.coerce.number().int().min(2).optional(),
-    installmentEntryMode: z.enum(['perInstallment', 'total']).optional(),
-    totalAmount: z.coerce.number().min(0).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.installmentEnabled && value.amount === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Amount is required',
-        path: ['amount'],
-      });
-    }
-
-    if (!value.installmentEnabled) {
-      return;
-    }
-
-    if (!value.installmentCount) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Installment count is required',
-        path: ['installmentCount'],
-      });
-    }
-
-    if (!value.installmentEntryMode) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Entry mode is required',
-        path: ['installmentEntryMode'],
-      });
-      return;
-    }
-
-    if (value.installmentEntryMode === 'perInstallment' && value.amount === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Per-installment amount is required',
-        path: ['amount'],
-      });
-    }
-
-    if (value.installmentEntryMode === 'total' && value.totalAmount === undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Total amount is required',
-        path: ['totalAmount'],
-      });
-    }
-  });
-
-type ExpenseForm = z.infer<typeof expenseSchema>;
-
-interface ExpenseDescriptionFieldProps {
-  form: UseFormReturn<ExpenseForm>;
-  inputClassName: string;
-  label: string;
-  labelClassName: string;
-}
-
-function ExpenseDescriptionField({
-  form,
-  inputClassName,
-  label,
-  labelClassName,
-}: ExpenseDescriptionFieldProps) {
-  const listboxId = useId();
-  const description = useWatch({ control: form.control, name: 'description' }) ?? '';
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const registration = form.register('description');
-  const visibleSuggestions = suggestions.filter(
-    (suggestion) => suggestion.trim().toLocaleLowerCase() !== description.trim().toLocaleLowerCase(),
-  );
-
-  useEffect(() => {
-    const query = description.trim();
-    if (query.length < 2) {
-      setSuggestions([]);
-      setIsOpen(false);
-      setActiveIndex(-1);
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      getExpenseDescriptionSuggestions(query, { cache: 'no-store', signal: controller.signal })
-        .then((nextSuggestions) => {
-          setSuggestions(nextSuggestions);
-          setIsOpen(nextSuggestions.some((suggestion) => suggestion.trim().toLocaleLowerCase() !== query.toLocaleLowerCase()));
-          setActiveIndex(-1);
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === 'AbortError') {
-            return;
-          }
-          setSuggestions([]);
-          setIsOpen(false);
-          setActiveIndex(-1);
-        });
-    }, DESCRIPTION_SUGGESTION_DEBOUNCE_MS);
-
-    return () => {
-      controller.abort();
-      clearTimeout(timeout);
-    };
-  }, [description]);
-
-  useEffect(() => {
-    return () => {
-      if (blurTimeoutRef.current) {
-        clearTimeout(blurTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const selectSuggestion = (suggestion: string) => {
-    form.setValue('description', suggestion, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-    setIsOpen(false);
-    setActiveIndex(-1);
-  };
-
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (!isOpen || visibleSuggestions.length === 0) {
-      return;
-    }
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setActiveIndex((current) => (current + 1) % visibleSuggestions.length);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setActiveIndex((current) => (current <= 0 ? visibleSuggestions.length - 1 : current - 1));
-    } else if (event.key === 'Enter' && activeIndex >= 0) {
-      event.preventDefault();
-      selectSuggestion(visibleSuggestions[activeIndex]);
-    } else if (event.key === 'Escape') {
-      setIsOpen(false);
-      setActiveIndex(-1);
-    }
-  };
-
-  return (
-    <label className="relative block text-sm">
-      <span className={labelClassName}>{label}</span>
-      <input
-        className={inputClassName}
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={isOpen && visibleSuggestions.length > 0}
-        aria-autocomplete="list"
-        aria-controls={listboxId}
-        aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
-        {...registration}
-        onBlur={(event) => {
-          void registration.onBlur(event);
-          blurTimeoutRef.current = setTimeout(() => {
-            setIsOpen(false);
-            setActiveIndex(-1);
-          }, 120);
-        }}
-        onChange={(event) => {
-          void registration.onChange(event);
-        }}
-        onFocus={() => {
-          if (visibleSuggestions.length > 0) {
-            if (blurTimeoutRef.current) {
-              clearTimeout(blurTimeoutRef.current);
-              blurTimeoutRef.current = null;
-            }
-            setIsOpen(true);
-          }
-        }}
-        onKeyDown={handleKeyDown}
-      />
-      {isOpen && visibleSuggestions.length > 0 ? (
-        <div
-          id={listboxId}
-          role="listbox"
-          className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
-        >
-          {visibleSuggestions.map((suggestion, index) => (
-            <button
-              key={suggestion}
-              id={`${listboxId}-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              type="button"
-              className={`block w-full px-3 py-2 text-left text-sm text-slate-800 ${
-                index === activeIndex ? 'bg-blue-50 text-brand-700' : 'hover:bg-slate-50'
-              }`}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                selectSuggestion(suggestion);
-              }}
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </label>
-  );
-}
 
 interface ScopeDialogState {
   expense: Expense;
@@ -437,11 +188,6 @@ function makeSectionOpenMap(value: boolean): Record<ExpenseSectionKey, boolean> 
   };
 }
 
-
-function getDayFromDateInput(value: string): number | null {
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date.getDate();
-}
 
 function formatMonthHeading(value: string, locale: AppLocale): string {
   const date = new Date(`${value}-01T00:00:00`);
@@ -828,33 +574,6 @@ export function ExpensesClient({
     },
   });
 
-  const watchedInstallmentEnabled = useWatch({ control: form.control, name: 'installmentEnabled' });
-  const watchedInstallmentCount = useWatch({ control: form.control, name: 'installmentCount' });
-  const watchedInstallmentEntryMode = useWatch({ control: form.control, name: 'installmentEntryMode' });
-  const watchedAmount = useWatch({ control: form.control, name: 'amount' });
-  const watchedTotalAmount = useWatch({ control: form.control, name: 'totalAmount' });
-  const watchedCurrencyCode = useWatch({ control: form.control, name: 'currencyCode' });
-  const watchedFxRate = useWatch({ control: form.control, name: 'fxRate' });
-  const watchedApplyToFuture = useWatch({ control: form.control, name: 'applyToFuture' });
-  const watchedFixedEnabled = useWatch({ control: form.control, name: 'fixedEnabled' });
-  const watchedNextMonthExpense = useWatch({ control: form.control, name: 'nextMonthExpense' });
-  const watchedDate = useWatch({ control: form.control, name: 'date' });
-  useEffect(() => {
-    if (watchedInstallmentEnabled) {
-      return;
-    }
-
-    form.setValue('installmentCount', 2);
-    form.setValue('installmentEntryMode', 'perInstallment');
-    form.setValue('totalAmount', undefined);
-  }, [form, watchedInstallmentEnabled]);
-  const previousCurrencyRef = useRef<SupportedCurrencyCode>(DEFAULT_CURRENCY_CODE);
-
-  const monthlyRateForCurrency = useMemo(() => {
-    return exchangeRates.find((rate) => rate.currencyCode === watchedCurrencyCode)?.rateToArs;
-  }, [exchangeRates, watchedCurrencyCode]);
-
-  const effectiveFxRate = watchedCurrencyCode === 'ARS' ? 1 : Number(watchedFxRate ?? monthlyRateForCurrency ?? 0);
   const formatFxRate = useCallback(
     (value: string | number) =>
       `$${Number(value).toLocaleString(localeTags[locale], {
@@ -876,37 +595,6 @@ export function ExpensesClient({
     sectionFetchInFlightRef.current = makeSectionPromiseMap();
     sectionPrefetchTargetRef.current = makeSectionPrefetchTargetMap();
   }, []);
-
-  const projectedArsAmount = useMemo(() => {
-    const baseAmount = watchedInstallmentEntryMode === 'total' ? watchedTotalAmount : watchedAmount;
-    if (baseAmount === undefined || Number.isNaN(baseAmount)) {
-      return null;
-    }
-    if (!effectiveFxRate || Number.isNaN(effectiveFxRate)) {
-      return null;
-    }
-    return Number(baseAmount) * effectiveFxRate;
-  }, [effectiveFxRate, watchedAmount, watchedInstallmentEntryMode, watchedTotalAmount]);
-
-  const installmentPreview = useMemo(() => {
-    if (!watchedInstallmentEnabled || !watchedInstallmentCount || !watchedInstallmentEntryMode) {
-      return null;
-    }
-
-    try {
-      const schedule = computeInstallmentAmounts({
-        count: watchedInstallmentCount,
-        entryMode: watchedInstallmentEntryMode,
-        perInstallmentAmount: watchedInstallmentEntryMode === 'perInstallment' ? watchedAmount : undefined,
-        totalAmount: watchedInstallmentEntryMode === 'total' ? watchedTotalAmount : undefined,
-      });
-      const first = schedule.amounts[0] ?? '0.00';
-      const last = schedule.amounts[schedule.amounts.length - 1] ?? first;
-      return { first, last, total: schedule.totalAmount, count: watchedInstallmentCount };
-    } catch {
-      return null;
-    }
-  }, [watchedAmount, watchedInstallmentCount, watchedInstallmentEnabled, watchedInstallmentEntryMode, watchedTotalAmount]);
 
   const resetForm = useCallback(
     (defaultCategoryId: string) => {
@@ -1204,6 +892,12 @@ export function ExpensesClient({
     resetForm(sortedActiveCategories[0]?.id ?? '');
   }, [resetForm, sortedActiveCategories]);
 
+  const cancelEdit = useCallback(() => {
+    setEditingExpenseId(null);
+    resetForm(sortedActiveCategories[0]?.id ?? '');
+    setIsMobileAddExpenseOpen(false);
+  }, [resetForm, sortedActiveCategories]);
+
   const resetExpenseComposer = useCallback(
     (options?: { closeMobile?: boolean }) => {
       setEditingExpenseId(null);
@@ -1440,26 +1134,6 @@ export function ExpensesClient({
     subtotalTotalsRef.current = subtotalTotals;
     totalCombinedExpensesArsRef.current = totalCombinedExpensesArs;
   }, [exchangeRates, expenses, sectionPagination, subtotalTotals, totalCombinedExpensesArs, warnings]);
-
-  useEffect(() => {
-    const previousCurrencyCode = previousCurrencyRef.current;
-    const currencyChanged = previousCurrencyCode !== watchedCurrencyCode;
-    previousCurrencyRef.current = watchedCurrencyCode;
-
-    if (watchedCurrencyCode === 'ARS') {
-      form.setValue('fxRate', 1, { shouldDirty: true });
-      return;
-    }
-
-    if (monthlyRateForCurrency) {
-      form.setValue('fxRate', Number(monthlyRateForCurrency), { shouldDirty: true });
-      return;
-    }
-
-    if (currencyChanged && previousCurrencyCode === 'ARS' && Number(form.getValues('fxRate') ?? 0) === 1) {
-      form.setValue('fxRate', undefined, { shouldDirty: true });
-    }
-  }, [form, monthlyRateForCurrency, watchedCurrencyCode]);
 
   const rowsForSection = useCallback((sectionKey: ExpenseSectionKey, list: Expense[]) => {
     if (sectionKey === 'fixed') {
@@ -1812,7 +1486,7 @@ export function ExpensesClient({
     });
   }, [form]);
 
-  const startEdit = (expense: Expense) => {
+  const startEdit = useCallback((expense: Expense) => {
     if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
       setIsMobileAddExpenseOpen(true);
     }
@@ -1834,15 +1508,49 @@ export function ExpensesClient({
       totalAmount: undefined,
     });
     jumpToExpenseEditor();
-  };
+  }, [form, jumpToExpenseEditor]);
 
-  const removeExpense = async (expense: Expense) => {
+  const removeExpense = useCallback((expense: Expense) => {
     setConfirmationDialog({ action: 'delete', expense });
-  };
+  }, []);
 
-  const cloneExpense = async (expense: Expense) => {
+  const cloneExpense = useCallback((expense: Expense) => {
     setConfirmationDialog({ action: 'clone', expense });
-  };
+  }, []);
+
+  // Stable per-row handlers. Rows are memoized, so allocating a fresh closure per
+  // row on every render would make the memo a no-op.
+  const handleRowMenuOpenChange = useCallback((expense: Expense, nextOpen: boolean) => {
+    setOpenExpenseActionMenuId(nextOpen ? expense.id : null);
+  }, []);
+
+  // The desktop menu closes itself before invoking these; the mobile swipe rail
+  // does not, so its variants dismiss the open row first.
+  const handleRowEdit = startEdit;
+  const handleRowClone = cloneExpense;
+  const handleRowDelete = removeExpense;
+
+  const handleRowEditAndDismiss = useCallback(
+    (expense: Expense) => {
+      setOpenExpenseActionMenuId(null);
+      startEdit(expense);
+    },
+    [startEdit],
+  );
+  const handleRowCloneAndDismiss = useCallback(
+    (expense: Expense) => {
+      setOpenExpenseActionMenuId(null);
+      cloneExpense(expense);
+    },
+    [cloneExpense],
+  );
+  const handleRowDeleteAndDismiss = useCallback(
+    (expense: Expense) => {
+      setOpenExpenseActionMenuId(null);
+      removeExpense(expense);
+    },
+    [removeExpense],
+  );
 
   const confirmCloneExpense = async (expense: Expense) => {
     const today = getTodayDateInputValue();
@@ -2021,572 +1729,6 @@ export function ExpensesClient({
       },
     });
   };
-
-  const expenseFormFields = (
-    <>
-      <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.date}</span>
-        <input
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 [color-scheme:light] [&::-webkit-date-and-time-value]:text-left"
-          lang="en"
-          type="date"
-          {...form.register('date')}
-        />
-      </label>
-      <ExpenseDescriptionField
-        form={form}
-        inputClassName="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-        label={copy.form.description}
-        labelClassName="mb-1 block text-xs font-medium text-slate-600"
-      />
-      <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.category}</span>
-        <select
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-          {...form.register('categoryId')}
-        >
-          {sortedActiveCategories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.currency}</span>
-          <select
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-            {...form.register('currencyCode')}
-          >
-            {supportedCurrencyCodes.map((currencyCode) => (
-              <option key={currencyCode} value={currencyCode}>
-                {currencyCode}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.fxToArs}</span>
-          <div className="relative">
-            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
-              $
-            </span>
-            <input
-              className={`${moneyInputClass} rounded-lg disabled:bg-slate-100`}
-              disabled={watchedCurrencyCode === 'ARS'}
-              min="0"
-              step="0.000001"
-              type="number"
-              {...form.register('fxRate')}
-            />
-          </div>
-        </label>
-      </div>
-
-      <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-2.5">
-        <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-          <span>{copy.form.recurringExpense}</span>
-          <span className="relative inline-flex items-center">
-            <input
-              checked={watchedFixedEnabled}
-              className="peer sr-only"
-              onChange={(event) => {
-                form.setValue('fixedEnabled', event.target.checked, { shouldDirty: true, shouldTouch: true });
-              }}
-              type="checkbox"
-            />
-            <span aria-hidden="true" className={pillToggleTrackClass} />
-            <span aria-hidden="true" className={pillToggleThumbClass} />
-          </span>
-        </label>
-        <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-          <span>{copy.form.nextMonthExpense}</span>
-          <span className="relative inline-flex items-center">
-            <input
-              checked={watchedNextMonthExpense}
-              className="peer sr-only"
-              onChange={(event) => {
-                form.setValue('nextMonthExpense', event.target.checked, { shouldDirty: true, shouldTouch: true });
-              }}
-              type="checkbox"
-            />
-            <span aria-hidden="true" className={pillToggleTrackClass} />
-            <span aria-hidden="true" className={pillToggleThumbClass} />
-          </span>
-        </label>
-        {editingExpenseId && watchedFixedEnabled && !watchedInstallmentEnabled ? (
-          <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-            <span>{copy.form.applyToFuture}</span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={watchedApplyToFuture}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('applyToFuture', event.target.checked, { shouldDirty: true, shouldTouch: true });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-        ) : null}
-        <label className="flex items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-1 text-sm text-slate-700 transition hover:border-slate-200 hover:bg-slate-50">
-          <span>{copy.form.installments}</span>
-          <span className="relative inline-flex items-center">
-            <input
-              checked={watchedInstallmentEnabled}
-              className="peer sr-only"
-              onChange={(event) => {
-                form.setValue('installmentEnabled', event.target.checked, { shouldDirty: true, shouldTouch: true });
-              }}
-              type="checkbox"
-            />
-            <span aria-hidden="true" className={pillToggleTrackClass} />
-            <span aria-hidden="true" className={pillToggleThumbClass} />
-          </span>
-        </label>
-      </div>
-
-      {watchedInstallmentEnabled ? (
-        <>
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.installmentCount}</span>
-            <input className={fieldClass} min="2" type="number" {...form.register('installmentCount')} />
-          </label>
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.entryMode}</span>
-            <select className={fieldClass} {...form.register('installmentEntryMode')}>
-              <option value="perInstallment">{copy.form.perInstallmentOption}</option>
-              <option value="total">{copy.form.totalAmountOption}</option>
-            </select>
-          </label>
-          {watchedInstallmentEntryMode === 'total' ? (
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.totalAmount}</span>
-              <div className="relative">
-                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
-                  $
-                </span>
-                <Controller
-                  control={form.control}
-                  name="totalAmount"
-                  render={({ field }) => (
-                    <input
-                      className={moneyInputClass}
-                      min="0"
-                      step="0.01"
-                      type="number"
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                      }}
-                      name={field.name}
-                      ref={field.ref}
-                    />
-                  )}
-                />
-              </div>
-            </label>
-          ) : (
-            <label className="block text-sm">
-              <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.perInstallmentAmount}</span>
-              <div className="relative">
-                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
-                  $
-                </span>
-                <Controller
-                  control={form.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <input
-                      className={moneyInputClass}
-                      min="0"
-                      step="0.01"
-                      type="number"
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                      }}
-                      name={field.name}
-                      ref={field.ref}
-                    />
-                  )}
-                />
-              </div>
-            </label>
-          )}
-        </>
-      ) : (
-        <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.amount}</span>
-          <div className="relative">
-            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
-              $
-            </span>
-            <Controller
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <input
-                  className={moneyInputClass}
-                  min="0"
-                  step="0.01"
-                  type="number"
-                  value={field.value ?? ''}
-                  onBlur={field.onBlur}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                  }}
-                  name={field.name}
-                  ref={field.ref}
-                />
-              )}
-            />
-          </div>
-        </label>
-      )}
-
-      {installmentPreview ? (
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          {copy.form.installmentPreview(
-            installmentPreview.count,
-            formatMoney(installmentPreview.first, locale),
-            formatMoney(installmentPreview.last, locale),
-            formatMoney(installmentPreview.total, locale),
-          )}
-        </div>
-      ) : null}
-
-      {watchedCurrencyCode !== 'ARS' && projectedArsAmount !== null ? (
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          {copy.form.estimatedArs(formatMoney(projectedArsAmount.toFixed(2), locale))}
-        </div>
-      ) : null}
-
-      <label className="block text-sm">
-        <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.paidBy}</span>
-        <select
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-          {...form.register('paidByUserId')}
-        >
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <div className="flex gap-2">
-        <button
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-          type="submit"
-        >
-          <span aria-hidden="true" className="text-base leading-none">+</span>
-          {editingExpenseId ? copy.form.update : copy.form.add}
-        </button>
-        {editingExpenseId ? (
-          <button
-            className={secondaryButtonClass}
-            type="button"
-            onClick={() => {
-              setEditingExpenseId(null);
-              resetForm(sortedActiveCategories[0]?.id ?? '');
-              setIsMobileAddExpenseOpen(false);
-            }}
-          >
-            {shared.cancel}
-          </button>
-        ) : null}
-      </div>
-    </>
-  );
-
-  const mobileSectionClass =
-    'space-y-3.5 rounded-[24px] border border-slate-300/20 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]';
-  const mobileFieldLabelClass =
-    'mb-1 block text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-500';
-  const mobileInputClass =
-    'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-  const mobileToggleRowClass =
-    'flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3 text-sm text-slate-800';
-
-  const mobileExpenseFormFields = (
-    <>
-      <section className={mobileSectionClass}>
-        <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.expenseDetails}</h3>
-
-        <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>{copy.form.date}</span>
-          <input
-            className={`${mobileInputClass} appearance-none [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
-            lang="en"
-            type="date"
-            {...form.register('date')}
-          />
-        </label>
-
-        <ExpenseDescriptionField
-          form={form}
-          inputClassName={mobileInputClass}
-          label={copy.form.description}
-          labelClassName={mobileFieldLabelClass}
-        />
-
-        <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>{copy.form.category}</span>
-          <select className={mobileInputClass} {...form.register('categoryId')}>
-            {sortedActiveCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="grid grid-cols-[8.75rem_minmax(0,1fr)] gap-3">
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.currency}</span>
-            <select className={mobileInputClass} {...form.register('currencyCode')}>
-              {supportedCurrencyCodes.map((currencyCode) => (
-                <option key={currencyCode} value={currencyCode}>
-                  {currencyCode}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.amount}</span>
-            <div className="relative">
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
-                $
-              </span>
-              <Controller
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <input
-                    className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={field.value ?? ''}
-                    onBlur={field.onBlur}
-                    onChange={(event) => {
-                      const nextValue = event.target.value;
-                      field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                    }}
-                    name={field.name}
-                    ref={field.ref}
-                  />
-                )}
-              />
-            </div>
-          </label>
-        </div>
-
-        {watchedCurrencyCode !== 'ARS' ? (
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.fxToArs}</span>
-            <div className="relative">
-              <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
-                $
-              </span>
-              <input
-                className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                min="0"
-                step="0.000001"
-                type="number"
-                {...form.register('fxRate')}
-              />
-            </div>
-          </label>
-        ) : null}
-
-        {watchedCurrencyCode !== 'ARS' && projectedArsAmount !== null ? (
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            {copy.form.estimatedArs(formatMoney(projectedArsAmount.toFixed(2), locale))}
-          </div>
-        ) : null}
-
-        <label className="block text-sm">
-          <div className="flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3">
-            <div className="min-w-0">
-              <span className="block font-semibold text-slate-900">{copy.form.paidBy}</span>
-              <span className="block text-[13px] leading-4 text-slate-500">{copy.form.whoCovered}</span>
-            </div>
-            <div className="relative shrink-0">
-              <select
-                className="rounded-full border border-slate-300/50 bg-white px-4 py-2 text-[13px] font-bold text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                {...form.register('paidByUserId')}
-              >
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </label>
-      </section>
-
-      <section className={mobileSectionClass}>
-        <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.behavior}</h3>
-        <div className="space-y-2.5">
-          <label className={mobileToggleRowClass}>
-            <span className="font-medium">{copy.form.recurringExpense}</span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={watchedFixedEnabled}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('fixedEnabled', event.target.checked, { shouldDirty: true, shouldTouch: true });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-
-          <label className={mobileToggleRowClass}>
-            <span className="font-medium">{copy.form.nextMonthExpense}</span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={watchedNextMonthExpense}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('nextMonthExpense', event.target.checked, { shouldDirty: true, shouldTouch: true });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-
-          <label className={mobileToggleRowClass}>
-            <span className="min-w-0">
-              <span className="block font-medium">{copy.form.installments}</span>
-              <span className="block text-[13px] leading-4 text-slate-500">{copy.form.installmentsHelp}</span>
-            </span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={watchedInstallmentEnabled}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('installmentEnabled', event.target.checked, { shouldDirty: true, shouldTouch: true });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-        </div>
-      </section>
-
-      {watchedInstallmentEnabled ? (
-        <section className={mobileSectionClass}>
-          <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.installmentSetup}</h3>
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.installmentCount}</span>
-            <input className={mobileInputClass} min="2" type="number" {...form.register('installmentCount')} />
-          </label>
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.entryMode}</span>
-            <select className={mobileInputClass} {...form.register('installmentEntryMode')}>
-              <option value="perInstallment">{copy.form.perInstallmentOption}</option>
-              <option value="total">{copy.form.totalAmountOption}</option>
-            </select>
-          </label>
-          {watchedInstallmentEntryMode === 'total' ? (
-            <label className="block text-sm">
-              <span className={mobileFieldLabelClass}>{copy.form.totalAmount}</span>
-              <div className="relative">
-                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500">
-                  $
-                </span>
-                <Controller
-                  control={form.control}
-                  name="totalAmount"
-                  render={({ field }) => (
-                    <input
-                      className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                      min="0"
-                      step="0.01"
-                      type="number"
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                      }}
-                      name={field.name}
-                      ref={field.ref}
-                    />
-                  )}
-                />
-              </div>
-            </label>
-          ) : null}
-          {installmentPreview ? (
-            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              {copy.form.installmentPreview(
-                installmentPreview.count,
-                formatMoney(installmentPreview.first, locale),
-                formatMoney(installmentPreview.last, locale),
-                formatMoney(installmentPreview.total, locale),
-              )}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {watchedFixedEnabled ? (
-        <section className="space-y-3 rounded-[24px] border border-indigo-200/30 bg-gradient-to-br from-slate-50 to-indigo-50/50 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.recurringSchedule}</h3>
-              <p className="text-[14px] leading-5 text-slate-600">
-                {copy.form.repeatsOnDay(getDayFromDateInput(watchedDate ?? getTodayDateInputValue()))}
-              </p>
-            </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm">↺</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">{copy.form.startsThisMonth}</span>
-            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">{copy.form.editableLater}</span>
-          </div>
-        </section>
-      ) : null}
-
-      <div className="space-y-2.5">
-        <button
-          className="inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[18px] bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-3 text-base font-extrabold text-white shadow-[0_14px_28px_rgba(99,102,241,0.25)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-          type="submit"
-        >
-          {editingExpenseId ? copy.form.saveChanges : copy.form.saveExpense}
-        </button>
-        <button
-          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-300/40 bg-white px-4 py-3 text-sm font-bold text-slate-700"
-          onClick={closeMobileComposer}
-          type="button"
-        >
-          {shared.cancel}
-        </button>
-      </div>
-    </>
-  );
 
   const fxRatePills = (
     <div className="mt-2 flex flex-wrap gap-2">
@@ -2779,7 +1921,17 @@ export function ExpensesClient({
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} ref={expenseFormRef}>
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
                 <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-4">
-                  {mobileExpenseFormFields}
+                  <MobileExpenseComposerFields
+                    categories={sortedActiveCategories}
+                    copy={copy}
+                    editingExpenseId={editingExpenseId}
+                    exchangeRates={exchangeRates}
+                    form={form}
+                    locale={locale}
+                    onCancel={closeMobileComposer}
+                    shared={shared}
+                    users={users}
+                  />
                 </div>
               </div>
             </form>
@@ -2835,7 +1987,17 @@ export function ExpensesClient({
                   </h2>
                 </div>
                 <div className="space-y-4" id="add-expense-panel">
-                  {expenseFormFields}
+                  <ExpenseComposerFields
+                    categories={sortedActiveCategories}
+                    copy={copy}
+                    editingExpenseId={editingExpenseId}
+                    exchangeRates={exchangeRates}
+                    form={form}
+                    locale={locale}
+                    onCancel={cancelEdit}
+                    shared={shared}
+                    users={users}
+                  />
                 </div>
               </form>
             ) : null}
@@ -3263,19 +2425,10 @@ export function ExpensesClient({
                             formatFxRate={formatFxRate}
                             locale={locale}
                             isOpen={openExpenseActionMenuId === expense.id}
-                            onClone={() => {
-                              setOpenExpenseActionMenuId(null);
-                              void cloneExpense(expense);
-                            }}
-                            onDelete={() => {
-                              setOpenExpenseActionMenuId(null);
-                              void removeExpense(expense);
-                            }}
-                            onEdit={() => {
-                              setOpenExpenseActionMenuId(null);
-                              startEdit(expense);
-                            }}
-                            onOpenChange={(nextOpen) => setOpenExpenseActionMenuId(nextOpen ? expense.id : null)}
+                            onClone={handleRowCloneAndDismiss}
+                            onDelete={handleRowDeleteAndDismiss}
+                            onEdit={handleRowEditAndDismiss}
+                            onOpenChange={handleRowMenuOpenChange}
                           />
                         ))}
                         {section.rows.length === 0 ? (
@@ -3345,40 +2498,18 @@ export function ExpensesClient({
                           </thead>
                           <tbody className="divide-y divide-slate-100">
                             {section.rows.map((expense) => (
-                              <tr key={expense.id} className="hover:bg-slate-50/80">
-                                <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
-                                <td className="px-4 py-3">
-                                  <div className="truncate font-medium text-slate-900" title={expense.description}>
-                                    {expense.description}
-                                  </div>
-                                  <div className="truncate text-xs text-slate-500">{getExpenseKindLabel(copy, expense)}</div>
-                                </td>
-                                <td className="px-4 py-3">{expense.categoryName}</td>
-                                <td className="px-4 py-3 tabular-nums">
-                                  <div>ARS {formatMoney(expense.amountArs, locale)}</div>
-                                  {expense.currencyCode !== 'ARS' ? (
-                                    <div className="text-xs text-slate-500">
-                                      {copy.originalAmount(
-                                        expense.currencyCode,
-                                        formatMoney(expense.amountOriginal, locale),
-                                        formatFxRate(expense.fxRateUsed),
-                                      )}
-                                    </div>
-                                  ) : null}
-                                </td>
-                                <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
-                                <td className="whitespace-nowrap px-4 py-3 text-right">
-                                  <DesktopExpenseActionMenu
-                                    expenseId={expense.id}
-                                    isOpen={openExpenseActionMenuId === expense.id}
-                                    locale={locale}
-                                    onClone={() => void cloneExpense(expense)}
-                                    onDelete={() => void removeExpense(expense)}
-                                    onEdit={() => startEdit(expense)}
-                                    onOpenChange={(nextOpen) => setOpenExpenseActionMenuId(nextOpen ? expense.id : null)}
-                                  />
-                                </td>
-                              </tr>
+                              <DesktopExpenseRow
+                                key={expense.id}
+                                copy={copy}
+                                expense={expense}
+                                formatFxRate={formatFxRate}
+                                isOpen={openExpenseActionMenuId === expense.id}
+                                locale={locale}
+                                onClone={handleRowClone}
+                                onDelete={handleRowDelete}
+                                onEdit={handleRowEdit}
+                                onOpenChange={handleRowMenuOpenChange}
+                              />
                             ))}
                             {section.rows.length === 0 ? (
                               <tr>
