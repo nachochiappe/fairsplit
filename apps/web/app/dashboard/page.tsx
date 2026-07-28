@@ -6,11 +6,12 @@ import { verifySessionCookieToken } from '../../lib/session-server';
 import { resolveLocaleForUser, t } from '../../lib/i18n';
 import { LOCALE_COOKIE, parseLocaleCookie } from '../../lib/locale-cookie';
 import {
-  getExpenses,
+  getExpenseTotals,
   getIncomes,
   getSettlement,
   getUsers,
-  type Expense,
+  type ExpenseCategoryTotal,
+  type ExpenseTotalsResponse,
   type Income,
   type SettlementResponse,
   type User,
@@ -47,30 +48,38 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   let users: User[] = [];
   let incomes: Income[] = [];
   let settlementResult: SettlementResponse | null = null;
-  let expensesResult: Expense[] = [];
+  let expenseTotals: ExpenseTotalsResponse | null = null;
 
   try {
-    [users, incomes, settlementResult, expensesResult] = await withServerApiLogging(
+    // Two tiers, not one: the `hydrate: true` read generates this month's recurring
+    // and installment rows, and settlement has to observe them or it reports a
+    // short month total on the first visit to a month.
+    [users, incomes, expenseTotals] = await withServerApiLogging(
       requestId,
-      { month, route: '/dashboard' },
+      { month, route: '/dashboard', step: 'bootstrap' },
       async () =>
         Promise.all([
           getUsers(serverReadInit),
           getIncomes(month, serverReadInit),
-          getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : 'Failed to load settlement';
-            if (message.includes('Cannot calculate settlement when total income is non-positive')) {
-              return null;
-            }
-
-            throw error;
-          }),
-          getExpenses(month, undefined, serverReadInit).then((result) => result.expenses),
+          getExpenseTotals(month, serverReadInit, { hydrate: true }),
         ]),
+    );
+    settlementResult = await withServerApiLogging(
+      requestId,
+      { month, route: '/dashboard', step: 'settlement' },
+      () =>
+        getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to load settlement';
+          if (message.includes('Cannot calculate settlement when total income is non-positive')) {
+            return null;
+          }
+
+          throw error;
+        }),
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to connect to API';
-    const settlement = buildNoIncomeSettlement(month, [], [], []);
+    const settlement = buildNoIncomeSettlement(month, [], [], {});
     return (
       <DashboardClient
         month={month}
@@ -90,7 +99,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (settlementResult) {
     settlement = settlementResult;
   } else {
-    settlement = buildNoIncomeSettlement(month, users, incomes, expensesResult);
+    settlement = buildNoIncomeSettlement(month, users, incomes, expenseTotals?.byUser ?? {});
     warning = t(locale).expenses.noIncomeWarning;
   }
 
@@ -101,7 +110,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       settlement={settlement}
       incomes={incomes}
       warning={warning}
-      expenseCategorySlices={buildExpenseCategorySlices(expensesResult)}
+      expenseCategorySlices={buildExpenseCategorySlices(expenseTotals?.byCategory ?? [])}
       locale={locale}
     />
   );
@@ -111,7 +120,7 @@ function buildNoIncomeSettlement(
   month: string,
   users: User[],
   incomes: Income[],
-  expenses: Expense[],
+  paidByUserTotals: Record<string, string>,
 ): SettlementResponse {
   const paidByUser: Record<string, number> = {};
   const incomeByUser: Record<string, number> = {};
@@ -125,8 +134,8 @@ function buildNoIncomeSettlement(
     incomeByUser[income.userId] = (incomeByUser[income.userId] ?? 0) + Number(income.amountArs);
   }
 
-  for (const expense of expenses) {
-    paidByUser[expense.paidByUserId] = (paidByUser[expense.paidByUserId] ?? 0) + Number(expense.amountArs);
+  for (const [userId, total] of Object.entries(paidByUserTotals)) {
+    paidByUser[userId] = (paidByUser[userId] ?? 0) + Number(total);
   }
 
   const totalIncome = Object.values(incomeByUser).reduce((sum, value) => sum + value, 0);
@@ -146,26 +155,16 @@ function buildNoIncomeSettlement(
   };
 }
 
-function buildExpenseCategorySlices(expenses: Expense[]): ExpenseCategorySlice[] {
-  const totals = new Map<string, ExpenseCategorySlice>();
-
-  for (const expense of expenses) {
-    const existing = totals.get(expense.categoryName);
-    if (!existing) {
-      totals.set(expense.categoryName, {
-        categoryName: expense.categoryName,
-        totalArs: Number(expense.amountArs),
-        superCategoryName: expense.superCategoryName,
-        superCategoryColor: expense.superCategoryColor,
-      });
-      continue;
-    }
-
-    existing.totalArs += Number(expense.amountArs);
-  }
-
-  return Array.from(totals.entries())
-    .map(([, slice]) => slice)
+function buildExpenseCategorySlices(byCategory: ExpenseCategoryTotal[]): ExpenseCategorySlice[] {
+  // The API already groups and orders these; the pie chart only shows positive
+  // slices, and expenses are allowed to be negative.
+  return byCategory
+    .map((entry) => ({
+      categoryName: entry.categoryName,
+      totalArs: Number(entry.totalArs),
+      superCategoryName: entry.superCategoryName,
+      superCategoryColor: entry.superCategoryColor,
+    }))
     .filter((entry) => entry.totalArs > 0)
     .sort((a, b) => b.totalArs - a.totalArs);
 }

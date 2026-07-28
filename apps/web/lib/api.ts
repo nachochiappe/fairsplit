@@ -128,6 +128,23 @@ export interface SettlementResponse {
   transfer: null | { fromUserId: string; toUserId: string; amount: string };
 }
 
+export interface ExpenseCategoryTotal {
+  categoryId: string;
+  categoryName: string;
+  superCategoryId: string | null;
+  superCategoryName: string | null;
+  superCategoryColor: string | null;
+  totalArs: string;
+}
+
+export interface ExpenseTotalsResponse {
+  month: string;
+  warnings: string[];
+  totalArs: string;
+  byCategory: ExpenseCategoryTotal[];
+  byUser: Record<string, string>;
+}
+
 export interface HouseholdSetupStatus {
   needsHouseholdSetup: boolean;
   decisionLocked: boolean;
@@ -575,6 +592,22 @@ export async function getSettlement(
     init ?? { cache: 'no-store' },
   );
   return parseResponse<SettlementResponse>(response);
+}
+
+export async function getExpenseTotals(
+  month: string,
+  init?: NextRequestInit,
+  options?: { hydrate?: boolean },
+): Promise<ExpenseTotalsResponse> {
+  const params = new URLSearchParams({ month });
+  if (options?.hydrate !== undefined) {
+    params.set('hydrate', String(options.hydrate));
+  }
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/expense-totals?${params.toString()}`,
+    init ?? { cache: 'no-store' },
+  );
+  return parseResponse<ExpenseTotalsResponse>(response);
 }
 
 export async function getHouseholdSetupStatus(init?: NextRequestInit): Promise<HouseholdSetupStatus> {

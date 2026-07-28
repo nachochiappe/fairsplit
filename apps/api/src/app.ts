@@ -2056,6 +2056,77 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.status(204).send();
   });
 
+  // Aggregates for the dashboard, which needs per-category and per-user sums but
+  // not the rows themselves. Fetching the whole month's expenses just to reduce
+  // them in the page grows with account age; these sums do not.
+  app.get('/api/expense-totals', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = monthQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const month = parsed.data.month;
+    const shouldHydrate = parsed.data.hydrate ?? true;
+    const warnings: string[] = [];
+    if (shouldHydrate) {
+      warnings.push(...(await ensureFixedExpensesForMonth(month, auth.householdId)));
+      await ensureInstallmentsForMonth(month, auth.householdId);
+    }
+
+    const where = { month, householdId: auth.householdId };
+    const [categoryGroups, userGroups] = await Promise.all([
+      prisma.expense.groupBy({ by: ['categoryId'], where, _sum: { amountArs: true } }),
+      prisma.expense.groupBy({ by: ['paidByUserId'], where, _sum: { amountArs: true } }),
+    ]);
+
+    const categories = categoryGroups.length
+      ? await prisma.category.findMany({
+          where: { id: { in: categoryGroups.map((group) => group.categoryId) } },
+          select: {
+            id: true,
+            name: true,
+            superCategory: { select: { id: true, name: true, color: true } },
+          },
+        })
+      : [];
+    const categoryById = new Map(categories.map((category) => [category.id, category]));
+
+    let total = new Decimal(0);
+    const byCategory = categoryGroups
+      .map((group) => {
+        const groupSum = new Decimal((group._sum.amountArs ?? 0).toString());
+        total = total.plus(groupSum);
+        const category = categoryById.get(group.categoryId);
+        return {
+          categoryId: group.categoryId,
+          categoryName: category?.name ?? '',
+          superCategoryId: category?.superCategory?.id ?? null,
+          superCategoryName: category?.superCategory?.name ?? null,
+          superCategoryColor: category?.superCategory?.color ?? null,
+          totalArs: toMoneyString(groupSum),
+        };
+      })
+      .sort((a, b) => Number(b.totalArs) - Number(a.totalArs));
+
+    const byUser: Record<string, string> = {};
+    for (const group of userGroups) {
+      byUser[group.paidByUserId] = toMoneyString(group._sum.amountArs ?? 0);
+    }
+
+    return res.json({
+      month,
+      warnings,
+      totalArs: toMoneyString(total),
+      byCategory,
+      byUser,
+    });
+  });
+
   app.get('/api/settlement', async (req: Request, res: Response) => {
     const auth = await requireAuthContext(req, res);
     if (!auth) {
