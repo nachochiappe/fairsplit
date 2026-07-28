@@ -6,6 +6,7 @@ node_modules
 .next
 dist
 coverage
+*.tsbuildinfo
 apps/api/test-results
 
 # Environment and local config

@@ -34,16 +34,16 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
     SERVER_READ_CACHE,
     sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
   );
-  const users = await withServerApiLogging(requestId, { month, route: '/expenses', step: 'users' }, () =>
-    getUsers(serverReadInit),
-  );
-  const sessionUserId = session?.userId ?? null;
-  const currentUserId = sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
-  const [fixedData, oneTimeData, installmentData, totalsData, categories, exchangeRates] = await withServerApiLogging(
+  // Two tiers, not one: the `hydrate: true` read is what generates this month's
+  // recurring and installment rows, so anything that counts or sums the month has
+  // to wait for it. Everything that doesn't depend on generation rides along in
+  // tier one instead of blocking behind its own round trip.
+  const [users, fixedData, categories, exchangeRates] = await withServerApiLogging(
     requestId,
     { month, route: '/expenses', step: 'bootstrap' },
     async () =>
       Promise.all([
+        getUsers(serverReadInit),
         getExpenses(
           month,
           {
@@ -56,6 +56,18 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
           },
           serverReadInit,
         ),
+        getCategories(serverReadInit),
+        getExchangeRates(month, serverReadInit),
+      ]),
+  );
+  const sessionUserId = session?.userId ?? null;
+  const currentUserId = sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
+  const locale = resolveLocaleForUser(users, sessionUserId);
+  const [oneTimeData, installmentData, totalsData, settlement] = await withServerApiLogging(
+    requestId,
+    { month, route: '/expenses', step: 'month-totals' },
+    async () =>
+      Promise.all([
         getExpenses(
           month,
           {
@@ -92,37 +104,22 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
           },
           serverReadInit,
         ),
-        getCategories(serverReadInit),
-        getExchangeRates(month, serverReadInit),
+        // Settlement throws when the household has expenses but no income. That is a
+        // legitimate state on the expenses screen, so it resolves to null and the
+        // month total falls back to the unfiltered subtotal we already asked for.
+        getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to load settlement';
+          if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
+            return null;
+          }
+
+          throw error;
+        }),
       ]),
   );
-  const locale = resolveLocaleForUser(users, sessionUserId);
-  let totalExpensesArs = '0.00';
-  let noIncomeWarning: string | null = null;
 
-  try {
-    const settlement = await getSettlement(month, serverReadInit, { hydrate: false });
-    totalExpensesArs = settlement.totalExpenses;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load settlement';
-    if (!message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
-      throw error;
-    }
-
-    noIncomeWarning = t(locale).expenses.noIncomeWarning;
-    const allExpensesForMonth = await withServerApiLogging(
-      requestId,
-      { month, route: '/expenses', step: 'fallback-expenses' },
-      () =>
-        getExpenses(
-          month,
-          { sortBy: 'date', sortDir: 'desc', hydrate: false, includeCount: false },
-          serverReadInit,
-        ),
-    );
-    const total = allExpensesForMonth.expenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0);
-    totalExpensesArs = total.toFixed(2);
-  }
+  const noIncomeWarning = settlement === null ? t(locale).expenses.noIncomeWarning : null;
+  const totalExpensesArs = settlement?.totalExpenses ?? totalsData.totals?.filteredSubtotalArs ?? '0.00';
 
   const initialWarnings = Array.from(
     new Set([

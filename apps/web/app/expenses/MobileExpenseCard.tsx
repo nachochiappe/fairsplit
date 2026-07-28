@@ -1,6 +1,6 @@
 'use client';
 
-import { type TouchEvent, useEffect, useRef, useState } from 'react';
+import { memo, type TouchEvent, useEffect, useRef, useState } from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { formatMoney } from '../../lib/currency';
 import { type AppLocale, type Expense } from '../../lib/api';
@@ -50,14 +50,16 @@ export interface MobileExpenseCardProps {
   expense: Expense;
   isOpen: boolean;
   locale: AppLocale;
-  onOpenChange: (nextOpen: boolean) => void;
-  onEdit: () => void;
-  onClone: () => void;
-  onDelete: () => void;
+  // Handlers take the expense so the parent can pass stable callbacks instead of
+  // allocating a closure per row, which would defeat the memo below.
+  onOpenChange: (expense: Expense, nextOpen: boolean) => void;
+  onEdit: (expense: Expense) => void;
+  onClone: (expense: Expense) => void;
+  onDelete: (expense: Expense) => void;
   formatFxRate: (value: string | number) => string;
 }
 
-export function MobileExpenseCard({
+function MobileExpenseCardComponent({
   expense,
   isOpen,
   locale,
@@ -107,7 +109,7 @@ export function MobileExpenseCard({
       : translatedOffset <= -MOBILE_ACTION_OPEN_THRESHOLD;
     setDragOffset(0);
     touchStartXRef.current = null;
-    onOpenChange(nextOpen);
+    onOpenChange(expense, nextOpen);
   };
 
   return (
@@ -119,13 +121,13 @@ export function MobileExpenseCard({
       onTouchStart={handleTouchStart}
     >
       <div className="absolute inset-y-0 right-0 flex w-[168px] items-stretch">
-        <ActionButton action="edit" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onEdit}>
+        <ActionButton action="edit" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={() => onEdit(expense)}>
           {copy.common.edit}
         </ActionButton>
-        <ActionButton action="clone" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onClone}>
+        <ActionButton action="clone" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={() => onClone(expense)}>
           {copy.common.clone}
         </ActionButton>
-        <ActionButton action="delete" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={onDelete}>
+        <ActionButton action="delete" className="h-full min-h-0 flex-1 rounded-none border-0 shadow-none" onClick={() => onDelete(expense)}>
           {copy.common.delete}
         </ActionButton>
       </div>
@@ -187,3 +189,5 @@ export function MobileExpenseCard({
     </div>
   );
 }
+
+export const MobileExpenseCard = memo(MobileExpenseCardComponent);
