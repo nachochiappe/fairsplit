@@ -1,14 +1,13 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { randomBytes } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { REQUEST_ID_HEADER } from '@fairsplit/logging';
 import { CSRF_COOKIE, SESSION_COOKIE } from '../../../lib/session';
 import { appendRequestId, getOrCreateRequestId, withRequestId } from '../../../lib/request-id';
 import { webLogger } from '../../../lib/server-logger';
+import { applySessionCookies, isSameOrigin, readSessionToken, sanitizeJsonBody } from './auth-cookies';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 interface ProxyMutationOptions {
   upstreamPath: string;
@@ -17,35 +16,6 @@ interface ProxyMutationOptions {
 }
 
 const BODYLESS_STATUS_CODES = new Set([204, 205, 304]);
-
-function secureCookies(): boolean {
-  return process.env.NODE_ENV === 'production';
-}
-
-function generateCsrfToken(): string {
-  return randomBytes(32).toString('base64url');
-}
-
-function sanitizeJsonBody(body: string): string {
-  try {
-    const parsed = JSON.parse(body) as { sessionToken?: unknown };
-    if (Object.prototype.hasOwnProperty.call(parsed, 'sessionToken')) {
-      delete parsed.sessionToken;
-      return JSON.stringify(parsed);
-    }
-    return body;
-  } catch {
-    return body;
-  }
-}
-
-function isSameOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (!origin) {
-    return false;
-  }
-  return origin === new URL(request.url).origin;
-}
 
 export async function proxyMutation(request: Request, options: ProxyMutationOptions): Promise<Response> {
   const requestId = getOrCreateRequestId(new Headers(request.headers));
@@ -138,30 +108,9 @@ export async function proxyMutation(request: Request, options: ProxyMutationOpti
       });
 
   if (upstreamResponse.ok && isJsonResponse) {
-    try {
-      const parsed = JSON.parse(responseBody) as { sessionToken?: unknown };
-      if (typeof parsed.sessionToken === 'string' && parsed.sessionToken.length > 0) {
-        response.cookies.set({
-          name: SESSION_COOKIE,
-          value: parsed.sessionToken,
-          path: '/',
-          maxAge: SESSION_MAX_AGE_SECONDS,
-          sameSite: 'lax',
-          secure: secureCookies(),
-          httpOnly: true,
-        });
-        response.cookies.set({
-          name: CSRF_COOKIE,
-          value: generateCsrfToken(),
-          path: '/',
-          maxAge: SESSION_MAX_AGE_SECONDS,
-          sameSite: 'lax',
-          secure: secureCookies(),
-          httpOnly: false,
-        });
-      }
-    } catch {
-      // Ignore non-JSON response bodies.
+    const rotatedSessionToken = readSessionToken(responseBody);
+    if (rotatedSessionToken) {
+      applySessionCookies(response, rotatedSessionToken);
     }
   }
 

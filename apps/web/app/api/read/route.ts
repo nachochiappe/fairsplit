@@ -17,6 +17,7 @@ const ALLOWED_READ_PATH_PREFIXES = [
   '/exchange-rates',
   '/settlement',
   '/household/setup-status',
+  '/auth/passkeys',
 ] as const;
 
 function isAllowedPath(path: string): boolean {

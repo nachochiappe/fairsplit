@@ -45,16 +45,23 @@ export function issueSessionToken(
     id: string;
     householdId: string | null;
     onboardingHouseholdDecisionAt: Date | null;
+    sessionRevokedAt?: Date | null;
   },
   secret: string,
 ): string {
   const now = Math.floor(Date.now() / 1000);
+  // Logout invalidates every session issued at or before `sessionRevokedAt`.
+  // A passkey sign-in can land in the same second as the logout that preceded
+  // it, so nudge `iat` past the revocation rather than handing back a token the
+  // very next request would reject.
+  const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
+  const issuedAt = revokedAt !== null ? Math.max(now, revokedAt + 1) : now;
   const claims: SessionClaims = {
     v: 1,
     userId: user.id,
     needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
-    iat: now,
-    exp: now + SESSION_TTL_SECONDS,
+    iat: issuedAt,
+    exp: issuedAt + SESSION_TTL_SECONDS,
   };
   const payload = JSON.stringify(claims);
   const payloadB64 = toBase64Url(payload);

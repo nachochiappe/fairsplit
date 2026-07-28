@@ -23,9 +23,49 @@ model User {
   fixedTemplates   ExpenseTemplate[] @relation("TemplatePaidByUser")
   createdInvites   HouseholdInvite[] @relation("InviteCreatedBy")
   consumedInvites  HouseholdInvite[] @relation("InviteConsumedBy")
+  passkeys         UserPasskey[]
 
   @@unique([authUserId])
   @@index([householdId])
+}
+
+/// A WebAuthn credential registered by a user as a secondary sign-in method.
+model UserPasskey {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Base64url-encoded credential ID as reported by the authenticator.
+  credentialId String
+  publicKey    Bytes
+  /// Authenticator signature counter. Many passkeys always report 0.
+  counter      BigInt   @default(0)
+  transports   String[] @default([])
+  /// 'singleDevice' or 'multiDevice' as reported during registration.
+  deviceType   String   @db.VarChar(16)
+  backedUp     Boolean  @default(false)
+  /// User-supplied name so multiple passkeys stay distinguishable.
+  label        String   @db.VarChar(60)
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+
+  @@unique([credentialId])
+  @@index([userId])
+}
+
+/// Single-use WebAuthn challenge. Persisted rather than held in memory so the
+/// stateless API can be scaled horizontally, and deleted on consumption so a
+/// captured registration or assertion cannot be replayed.
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  challenge String   @unique
+  /// 'registration' or 'authentication'.
+  purpose   String   @db.VarChar(16)
+  /// Set for registration (which requires a session); null for usernameless login.
+  userId    String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 model MonthlyIncome {

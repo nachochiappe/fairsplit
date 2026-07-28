@@ -54,6 +54,15 @@ Uses Next.js App Router. `middleware.ts` guards all protected routes, checking s
 2. Middleware validates session on each request
 3. Backend verifies Supabase JWT on every API call
 
+Passkeys (WebAuthn) are a secondary sign-in method, implemented with
+`@simplewebauthn/*` and no Supabase involvement: a verified assertion is traded
+for the same app-issued session token the magic-link flow produces. Enrolment
+happens in `/settings` and requires an existing session; sign-in is usernameless
+(discoverable credentials, no `allowCredentials`). Challenges live in
+`WebAuthnChallenge` and are deleted on consumption so they are single-use.
+Requires `FAIRSPLIT_WEBAUTHN_RP_ID` and `FAIRSPLIT_WEBAUTHN_ORIGINS` — the RP ID
+scopes credentials, so changing it invalidates every registered passkey.
+
 ### Database
 Prisma with PostgreSQL. Key models: `User`, `Household`, `MonthlyIncome`, `Expense`, `ExpenseTemplate` (recurring), `Category`/`SuperCategory`, `MonthlyExchangeRate`. The `packages/db` singleton pattern ensures a single Prisma client instance in development.
 
