@@ -33,6 +33,11 @@ import {
 } from './lib/fixed-expenses';
 import { createApiHttpLogger, createApiLogger } from './lib/logger';
 import { getSessionSecret, issueSessionToken, verifySessionToken } from './lib/session';
+import {
+  getCachedUserContext,
+  invalidateUserContext,
+  setCachedUserContext,
+} from './lib/user-context-cache';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
 
 const monthQuerySchema = z.object({
@@ -324,15 +329,22 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
     return null;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: {
-      id: true,
-      householdId: true,
-      onboardingHouseholdDecisionAt: true,
-      sessionRevokedAt: true,
-    },
-  });
+  // A single page load fans out into several authenticated calls, each of which
+  // would otherwise repeat this identical lookup. See user-context-cache for the
+  // revocation-staleness bound this accepts.
+  let user = getCachedUserContext(session.userId);
+  if (user === undefined) {
+    user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: {
+        id: true,
+        householdId: true,
+        onboardingHouseholdDecisionAt: true,
+        sessionRevokedAt: true,
+      },
+    });
+    setCachedUserContext(session.userId, user);
+  }
   if (!user) {
     res.status(401);
     logWarnAndDisableAutoLog(req, res, 'Rejected API request for missing user');
@@ -566,6 +578,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       where: { id: user.userId },
       data: { sessionRevokedAt: new Date(Date.now() + 1000) },
     });
+    // Revocation has to take effect on the very next request, not after the TTL.
+    invalidateUserContext(user.userId);
 
     res.status(204).send();
   });
@@ -698,6 +712,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     if (result === 'LOCKED') {
       return res.status(409).json({ error: 'Household setup has already been completed.' });
     }
+    // The user just gained a household, so the cached pre-onboarding context is stale.
+    invalidateUserContext(auth.userId);
 
     let sessionSecret: string;
     try {
@@ -785,6 +801,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     if (!result) {
       return res.status(409).json({ error: 'Household setup has already been completed.' });
     }
+    // The user just gained a household, so the cached pre-onboarding context is stale.
+    invalidateUserContext(auth.userId);
 
     let sessionSecret: string;
     try {
@@ -1696,29 +1714,46 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       include: { paidByUser: true, category: { include: { superCategory: true } } },
     } as const;
     const shouldIncludeTotals = parsed.data.includeTotals ?? false;
+    // One grouped scan instead of four overlapping aggregates. Section membership
+    // mirrors withExpenseTypeConstraint: "fixed" is any templated row and
+    // "installment" is any instalment row, so a row can belong to both. Each
+    // bucket is therefore summed independently rather than derived from the others.
     const totalsPromise = shouldIncludeTotals
-      ? Promise.all([
-          prisma.expense.aggregate({ where: baseWhere, _sum: { amountArs: true } }),
-          prisma.expense.aggregate({
-            where: withExpenseTypeConstraint(baseWhere, 'fixed'),
+      ? prisma.expense
+          .groupBy({
+            by: ['templateId', 'isInstallment'],
+            where: baseWhere,
             _sum: { amountArs: true },
-          }),
-          prisma.expense.aggregate({
-            where: withExpenseTypeConstraint(baseWhere, 'oneTime'),
-            _sum: { amountArs: true },
-          }),
-          prisma.expense.aggregate({
-            where: withExpenseTypeConstraint(baseWhere, 'installment'),
-            _sum: { amountArs: true },
-          }),
-        ]).then(([filteredTotal, fixedTotal, oneTimeTotal, installmentTotal]) => ({
-          filteredSubtotalArs: toMoneyString(filteredTotal._sum.amountArs ?? 0),
-          bySection: {
-            fixedArs: toMoneyString(fixedTotal._sum.amountArs ?? 0),
-            oneTimeArs: toMoneyString(oneTimeTotal._sum.amountArs ?? 0),
-            installmentArs: toMoneyString(installmentTotal._sum.amountArs ?? 0),
-          },
-        }))
+          })
+          .then((groups) => {
+            let filtered = new Decimal(0);
+            let fixed = new Decimal(0);
+            let oneTime = new Decimal(0);
+            let installment = new Decimal(0);
+
+            for (const group of groups) {
+              const groupSum = new Decimal((group._sum.amountArs ?? 0).toString());
+              filtered = filtered.plus(groupSum);
+              if (group.templateId !== null) {
+                fixed = fixed.plus(groupSum);
+              }
+              if (group.isInstallment) {
+                installment = installment.plus(groupSum);
+              }
+              if (group.templateId === null && !group.isInstallment) {
+                oneTime = oneTime.plus(groupSum);
+              }
+            }
+
+            return {
+              filteredSubtotalArs: toMoneyString(filtered),
+              bySection: {
+                fixedArs: toMoneyString(fixed),
+                oneTimeArs: toMoneyString(oneTime),
+                installmentArs: toMoneyString(installment),
+              },
+            };
+          })
       : Promise.resolve(null);
 
     if (parsed.data.limit) {
