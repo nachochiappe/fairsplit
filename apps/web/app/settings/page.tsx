@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { getCategories, getSuperCategories, getUser } from '../../lib/api';
+import { getCategories, getPasskeys, getSuperCategories, getUser } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SettingsClient } from './SettingsClient';
@@ -22,7 +22,7 @@ export default async function SettingsPage() {
 
   const sessionUserId = session?.userId ?? null;
 
-  const [categories, superCategories, currentUser] = await withServerApiLogging(
+  const [categories, superCategories, currentUser, passkeys] = await withServerApiLogging(
     requestId,
     { month, route: '/settings' },
     async () =>
@@ -30,6 +30,7 @@ export default async function SettingsPage() {
         getCategories(serverReadInit),
         getSuperCategories(serverReadInit),
         sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
+        getPasskeys(serverReadInit),
       ]),
   );
 
@@ -40,8 +41,10 @@ export default async function SettingsPage() {
       currentUserLocale={resolveLocale(currentUser)}
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}
+      initialPasskeys={passkeys.passkeys}
       initialSuperCategories={superCategories}
       month={month}
+      passkeysConfigured={passkeys.configured}
     />
   );
 }

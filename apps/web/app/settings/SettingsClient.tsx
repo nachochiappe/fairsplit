@@ -15,6 +15,7 @@ import {
   getCategories,
   getSuperCategories,
   renameCategory,
+  type Passkey,
   SuperCategory,
   unarchiveCategory,
   updateUser,
@@ -22,6 +23,7 @@ import {
   type AppLocale,
 } from '../../lib/api';
 import { formatCountLabel, localeLabels, localeTags, resolveLocale, t } from '../../lib/i18n';
+import { PasskeysCard } from './PasskeysCard';
 
 interface SettingsClientProps {
   month: string;
@@ -31,6 +33,8 @@ interface SettingsClientProps {
   currentUserName: string | null;
   currentUserEmail: string | null;
   currentUserLocale: AppLocale;
+  initialPasskeys: Passkey[];
+  passkeysConfigured: boolean;
 }
 
 type CategoryRenameDialogState = {
@@ -108,6 +112,8 @@ export function SettingsClient({
   currentUserName,
   currentUserEmail,
   currentUserLocale,
+  initialPasskeys,
+  passkeysConfigured,
 }: SettingsClientProps) {
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [superCategories, setSuperCategories] = useState<SuperCategory[]>(initialSuperCategories);
@@ -1013,6 +1019,8 @@ export function SettingsClient({
             </button>
           </div>
         </div>
+
+        <PasskeysCard configured={passkeysConfigured} initialPasskeys={initialPasskeys} locale={resolvedLocale} />
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

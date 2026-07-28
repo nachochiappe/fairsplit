@@ -171,6 +171,20 @@ export interface HouseholdInvite {
   expiresAt: string;
 }
 
+export interface Passkey {
+  id: string;
+  label: string;
+  deviceType: string;
+  backedUp: boolean;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface PasskeyListResponse {
+  configured: boolean;
+  passkeys: Passkey[];
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 const OPTIMISTIC_EXPENSE_ID_PREFIX = 'optimistic:expense:';
 type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
@@ -636,6 +650,23 @@ export async function joinHouseholdWithCode(code: string, init?: NextRequestInit
     body: JSON.stringify({ code }),
   });
   return parseResponse<AuthLinkResponse>(response);
+}
+
+export async function getPasskeys(init?: NextRequestInit): Promise<PasskeyListResponse> {
+  const response = await fetchFromApi(`${API_BASE_URL}/auth/passkeys`, init ?? { cache: 'no-store' });
+  return parseResponse<PasskeyListResponse>(response);
+}
+
+export async function deletePasskey(id: string): Promise<void> {
+  const endpoint =
+    typeof window === 'undefined'
+      ? `${API_BASE_URL}/auth/passkeys/${id}`
+      : `/api/auth/passkeys/${encodeURIComponent(id)}`;
+  const response = await fetchFromApi(endpoint, { method: 'DELETE' });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: 'Failed to remove passkey' }));
+    throw new Error(payload.error ?? 'Failed to remove passkey');
+  }
 }
 
 export async function skipHouseholdSetup(init?: NextRequestInit): Promise<AuthLinkResponse> {

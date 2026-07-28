@@ -39,6 +39,30 @@ import {
   setCachedUserContext,
 } from './lib/user-context-cache';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
+import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from '@simplewebauthn/server';
+import type {
+  AuthenticationResponseJSON,
+  AuthenticatorTransportFuture,
+  RegistrationResponseJSON,
+} from '@simplewebauthn/server';
+import {
+  MAX_PASSKEYS_PER_USER,
+  PASSKEY_LABEL_MAX_LENGTH,
+  consumeChallenge,
+  defaultPasskeyLabel,
+  getWebAuthnConfig,
+  isPasskeysConfigured,
+  sanitizeTransports,
+  storeChallenge,
+  toCredentialPublicKey,
+  userHandleToUserId,
+  userIdToUserHandle,
+} from './lib/webauthn';
 
 const monthQuerySchema = z.object({
   month: monthSchema,
@@ -138,6 +162,23 @@ const authLinkSchema = z.object({
 });
 const joinHouseholdWithCodeSchema = z.object({
   code: z.string().trim().min(4).max(64),
+});
+// The WebAuthn response envelopes are validated by @simplewebauthn/server, so
+// Zod only has to confirm we were handed an object of the right rough shape.
+const webauthnResponseSchema = z.object({
+  id: z.string().min(1),
+  rawId: z.string().min(1),
+  type: z.literal('public-key'),
+  response: z.record(z.unknown()),
+  clientExtensionResults: z.record(z.unknown()).optional(),
+  authenticatorAttachment: z.string().optional(),
+});
+const passkeyRegistrationVerifySchema = z.object({
+  response: webauthnResponseSchema,
+  label: z.string().trim().min(1).max(PASSKEY_LABEL_MAX_LENGTH).optional(),
+});
+const passkeyAuthenticationVerifySchema = z.object({
+  response: webauthnResponseSchema,
 });
 
 type ExpenseWithRelations = Awaited<
@@ -260,6 +301,48 @@ function defaultNameFromEmail(email: string): string {
     .split(/\s+/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
+}
+
+interface AuthSessionUser {
+  id: string;
+  name: string;
+  email: string | null;
+  authUserId: string | null;
+  locale: string;
+  householdId: string | null;
+  onboardingHouseholdDecisionAt: Date | null;
+  sessionRevokedAt?: Date | null;
+  createdAt: Date;
+  household: { id: string; name: string; createdAt: Date } | null;
+}
+
+/**
+ * Shared by every sign-in path (magic link and passkey) so both hand the web
+ * layer the same payload and the same freshly minted session token.
+ */
+function buildAuthSessionResponse(user: AuthSessionUser, created: boolean, sessionSecret: string) {
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      authUserId: user.authUserId,
+      locale: user.locale,
+      householdId: user.householdId,
+      onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt?.toISOString() ?? null,
+      createdAt: user.createdAt.toISOString(),
+    },
+    household: user.household
+      ? {
+          id: user.household.id,
+          name: user.household.name,
+          createdAt: user.household.createdAt.toISOString(),
+        }
+      : null,
+    created,
+    needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
+    sessionToken: issueSessionToken(user, sessionSecret),
+  };
 }
 
 interface RequestAuthContext {
@@ -439,38 +522,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     }
 
-    const toResponse = (user: {
-      id: string;
-      name: string;
-      email: string | null;
-      authUserId: string | null;
-      locale: string;
-      householdId: string | null;
-      onboardingHouseholdDecisionAt: Date | null;
-      createdAt: Date;
-      household: { id: string; name: string; createdAt: Date } | null;
-    }, created: boolean) => ({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        authUserId: user.authUserId,
-        locale: user.locale,
-        householdId: user.householdId,
-        onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt?.toISOString() ?? null,
-        createdAt: user.createdAt.toISOString(),
-      },
-      household: user.household
-        ? {
-            id: user.household.id,
-            name: user.household.name,
-            createdAt: user.household.createdAt.toISOString(),
-          }
-        : null,
-      created,
-      needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
-      sessionToken: issueSessionToken(user, sessionSecret),
-    });
+    const toResponse = (user: AuthSessionUser, created: boolean) =>
+      buildAuthSessionResponse(user, created, sessionSecret);
 
     try {
       const linkedByAuthId = await prisma.user.findUnique({
@@ -582,6 +635,305 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     invalidateUserContext(user.userId);
 
     res.status(204).send();
+  });
+
+  const resolveWebAuthnConfig = (req: Request, res: Response) => {
+    try {
+      return getWebAuthnConfig();
+    } catch (error) {
+      res.status(503);
+      logErrorAndDisableAutoLog(req, res, error, 'Passkeys are not configured');
+      res.status(503).json({ error: 'Passkey sign-in is not configured on this server.' });
+      return null;
+    }
+  };
+
+  app.get('/api/auth/passkeys', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+
+    const passkeys = await prisma.userPasskey.findMany({
+      where: { userId: user.userId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        label: true,
+        deviceType: true,
+        backedUp: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+    });
+
+    return res.json({
+      configured: isPasskeysConfigured(),
+      passkeys: passkeys.map((passkey) => ({
+        id: passkey.id,
+        label: passkey.label,
+        deviceType: passkey.deviceType,
+        backedUp: passkey.backedUp,
+        createdAt: passkey.createdAt.toISOString(),
+        lastUsedAt: passkey.lastUsedAt?.toISOString() ?? null,
+      })),
+    });
+  });
+
+  app.post('/api/auth/passkeys/registration/options', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+    const config = resolveWebAuthnConfig(req, res);
+    if (!config) {
+      return;
+    }
+
+    const record = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { id: true, name: true, email: true },
+    });
+    if (!record) {
+      return res.status(401).json({ error: 'Invalid authentication context.' });
+    }
+
+    const existing = await prisma.userPasskey.findMany({
+      where: { userId: user.userId },
+      select: { credentialId: true, transports: true },
+    });
+    if (existing.length >= MAX_PASSKEYS_PER_USER) {
+      return res.status(409).json({ error: 'Passkey limit reached. Remove one before adding another.' });
+    }
+
+    const options = await generateRegistrationOptions({
+      rpName: config.rpName,
+      rpID: config.rpId,
+      userName: record.email ?? record.name,
+      userDisplayName: record.name,
+      userID: userIdToUserHandle(record.id),
+      attestationType: 'none',
+      // Stops the same authenticator from being enrolled twice.
+      excludeCredentials: existing.map((passkey) => ({
+        id: passkey.credentialId,
+        transports: passkey.transports as AuthenticatorTransportFuture[],
+      })),
+      authenticatorSelection: {
+        // A discoverable credential is what makes the usernameless sign-in
+        // button work: the browser can offer the account without an email.
+        residentKey: 'required',
+        userVerification: 'preferred',
+      },
+    });
+
+    await storeChallenge(options.challenge, 'registration', user.userId);
+    return res.json(options);
+  });
+
+  app.post('/api/auth/passkeys/registration/verify', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+    const parsed = passkeyRegistrationVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    const config = resolveWebAuthnConfig(req, res);
+    if (!config) {
+      return;
+    }
+
+    let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
+    try {
+      verification = await verifyRegistrationResponse({
+        response: parsed.data.response as unknown as RegistrationResponseJSON,
+        expectedChallenge: (challenge) => consumeChallenge(challenge, 'registration', user.userId),
+        expectedOrigin: config.origins,
+        expectedRPID: config.rpId,
+        // Registration asks for user verification but does not demand it, so
+        // security keys without a PIN can still be enrolled.
+        requireUserVerification: false,
+      });
+    } catch (error) {
+      res.status(400);
+      logWarnAndDisableAutoLog(req, res, 'Rejected passkey registration', {
+        reason: error instanceof Error ? error.message : 'unknown',
+      });
+      return res.status(400).json({ error: 'Could not verify this passkey. Please try again.' });
+    }
+
+    if (!verification.verified) {
+      res.status(400);
+      logWarnAndDisableAutoLog(req, res, 'Rejected unverified passkey registration');
+      return res.status(400).json({ error: 'Could not verify this passkey. Please try again.' });
+    }
+
+    const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+    const label = parsed.data.label ?? defaultPasskeyLabel(credentialDeviceType);
+
+    try {
+      const created = await prisma.userPasskey.create({
+        data: {
+          userId: user.userId,
+          credentialId: credential.id,
+          publicKey: Buffer.from(credential.publicKey),
+          counter: BigInt(credential.counter),
+          transports: sanitizeTransports(credential.transports),
+          deviceType: credentialDeviceType,
+          backedUp: credentialBackedUp,
+          label,
+        },
+        select: {
+          id: true,
+          label: true,
+          deviceType: true,
+          backedUp: true,
+          createdAt: true,
+          lastUsedAt: true,
+        },
+      });
+
+      return res.status(201).json({
+        id: created.id,
+        label: created.label,
+        deviceType: created.deviceType,
+        backedUp: created.backedUp,
+        createdAt: created.createdAt.toISOString(),
+        lastUsedAt: created.lastUsedAt?.toISOString() ?? null,
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === 'P2002') {
+        return res.status(409).json({ error: 'This passkey is already registered.' });
+      }
+      throw error;
+    }
+  });
+
+  app.delete('/api/auth/passkeys/:id', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+
+    const rawPasskeyId = req.params.id;
+    const passkeyId = Array.isArray(rawPasskeyId) ? rawPasskeyId[0]?.trim() : rawPasskeyId?.trim();
+    if (!passkeyId) {
+      return res.status(400).json({ error: 'Passkey id is required' });
+    }
+
+    // Scoped by userId so one household member cannot delete another's passkey.
+    const deleted = await prisma.userPasskey.deleteMany({
+      where: { id: passkeyId, userId: user.userId },
+    });
+    if (deleted.count === 0) {
+      return res.status(404).json({ error: 'Passkey not found.' });
+    }
+
+    return res.status(204).send();
+  });
+
+  app.post('/api/auth/passkeys/authentication/options', async (req: Request, res: Response) => {
+    const config = resolveWebAuthnConfig(req, res);
+    if (!config) {
+      return;
+    }
+
+    // No `allowCredentials`: the browser picks a discoverable credential, which
+    // keeps the flow usernameless and avoids revealing whether an account or a
+    // passkey exists for any given email.
+    const options = await generateAuthenticationOptions({
+      rpID: config.rpId,
+      userVerification: 'preferred',
+    });
+
+    await storeChallenge(options.challenge, 'authentication', null);
+    return res.json(options);
+  });
+
+  app.post('/api/auth/passkeys/authentication/verify', async (req: Request, res: Response) => {
+    const parsed = passkeyAuthenticationVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    const config = resolveWebAuthnConfig(req, res);
+    if (!config) {
+      return;
+    }
+    let sessionSecret: string;
+    try {
+      sessionSecret = getSessionSecret();
+    } catch (error) {
+      res.status(500);
+      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during passkey sign-in');
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+    }
+
+    const response = parsed.data.response as unknown as AuthenticationResponseJSON;
+    const rejectSignIn = (reason: string) => {
+      res.status(401);
+      logWarnAndDisableAutoLog(req, res, 'Rejected passkey sign-in', { reason });
+      return res.status(401).json({ error: 'Could not sign in with this passkey.' });
+    };
+
+    const passkey = await prisma.userPasskey.findUnique({
+      where: { credentialId: response.id },
+      include: { user: { include: { household: true } } },
+    });
+    if (!passkey) {
+      return rejectSignIn('unknown-credential');
+    }
+
+    // The user handle is the account the authenticator believes this credential
+    // belongs to. If it disagrees with our record, something is wrong.
+    const userHandle = response.response.userHandle;
+    if (userHandle && userHandleToUserId(userHandle) !== passkey.userId) {
+      return rejectSignIn('user-handle-mismatch');
+    }
+
+    const storedCounter = Number(passkey.counter);
+    let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response,
+        expectedChallenge: (challenge) => consumeChallenge(challenge, 'authentication', null),
+        expectedOrigin: config.origins,
+        expectedRPID: config.rpId,
+        requireUserVerification: false,
+        credential: {
+          id: passkey.credentialId,
+          publicKey: toCredentialPublicKey(passkey.publicKey),
+          counter: storedCounter,
+          transports: passkey.transports as AuthenticatorTransportFuture[],
+        },
+      });
+    } catch (error) {
+      return rejectSignIn(error instanceof Error ? error.message : 'verification-threw');
+    }
+
+    if (!verification.verified) {
+      return rejectSignIn('unverified');
+    }
+
+    const { newCounter, credentialBackedUp, credentialDeviceType } = verification.authenticationInfo;
+    // Authenticators that keep a signature counter must advance it. A counter
+    // that stands still or goes backwards suggests a cloned credential. Many
+    // passkeys report 0 forever, which is why 0 is exempt.
+    if (newCounter > 0 && newCounter <= storedCounter) {
+      return rejectSignIn('counter-did-not-advance');
+    }
+
+    await prisma.userPasskey.update({
+      where: { id: passkey.id },
+      data: {
+        counter: BigInt(newCounter),
+        backedUp: credentialBackedUp,
+        deviceType: credentialDeviceType,
+        lastUsedAt: new Date(),
+      },
+    });
+
+    return res.json(buildAuthSessionResponse(passkey.user, false, sessionSecret));
   });
 
   app.get('/api/household/setup-status', async (req: Request, res: Response) => {
