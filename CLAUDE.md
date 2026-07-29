@@ -138,6 +138,12 @@ global system super categories and household onboarding for five months (0018,
 0019). Neither was caught, because the test database had never received the
 script and so did not match production.
 
+`.github/workflows/ci.yml` runs `db:verify`, `db:reset-test`, lint, an API
+typecheck and the suite on every PR, against a throwaway Postgres. It sets only
+`TEST_DATABASE_URL` and deliberately leaves `DATABASE_URL` unset, so nothing in
+CI can reach production. The web build is not duplicated there — Vercel already
+builds every PR.
+
 `DATABASE_URL` points at **production** — local development reads and writes live
 data. Only `TEST_DATABASE_URL` uses the docker Postgres, and it names the database
 `fairsplit`, not `fairsplit_test`. `pnpm db:reset-test` rebuilds it from the

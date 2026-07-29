@@ -28,14 +28,17 @@ note() { printf '  %s\n' "$*"; }
 # offer, so migrations are replayed with psql. A shadow database only needs to
 # reach head; the supabase_migrations ledger is irrelevant off the real remote.
 require_psql() {
-  command -v psql >/dev/null 2>&1 || die 'psql not found. brew install postgresql@17'
+  command -v psql >/dev/null 2>&1 || die 'psql not found (brew install postgresql@17, or apt install postgresql-client)'
 }
 
+# The environment wins so CI, which has no packages/db/.env, can supply it.
 test_url() {
-  local url
-  url=$(grep -E '^TEST_DATABASE_URL=' packages/db/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"'' | sed -E 's/\?.*$//')
-  [ -n "$url" ] || die 'TEST_DATABASE_URL missing from packages/db/.env'
-  printf '%s' "$url"
+  local url="${TEST_DATABASE_URL:-}"
+  if [ -z "$url" ]; then
+    url=$(grep -E '^TEST_DATABASE_URL=' packages/db/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'"'"'')
+  fi
+  [ -n "$url" ] || die 'set TEST_DATABASE_URL, or put it in packages/db/.env'
+  printf '%s' "$url" | sed -E 's/\?.*$//'
 }
 
 # Same server, `postgres` database — needed to CREATE/DROP another database.
