@@ -66,9 +66,22 @@ Uses Next.js App Router. `middleware.ts` guards all protected routes, checking s
 `/onboarding/household`, where they either redeem an invite code
 (`join-with-code`) or take a household of their own (`skip-setup`).
 
-Do not give a new user a household at link time. Both onboarding endpoints
-refuse a caller that already has one, so doing that makes invite codes
-unredeemable — which is what happened between 2af6022 and 0019.
+Do not give a new user a household at link time. It decides for them, and the
+page leads with "Create my household" precisely so that choosing is one click.
+
+`join-with-code` also accepts a caller who already has a household, provided they
+are its only member and it holds no expenses, income or templates. Both partners
+signing up separately before either sent a code is the ordinary way a couple
+arrives here; refusing it made invite codes usable only in the window before the
+second person's first sign-in. `/settings` offers the same thing, shown only
+while nobody else is in the household.
+
+Joining that way deletes the household left behind, and it must delete the
+dependent rows first. Every `householdId` is NOT NULL behind an
+`ON DELETE SET NULL` foreign key, so deleting a household that still owns rows
+raises a not-null violation — except `SuperCategory`, whose column *is* nullable,
+where it would instead null the owner and silently promote a private super
+category to a global one.
 
 `requireUserContext` tolerates a user without a household;
 `requireAuthContext` 403s. Data endpoints use the latter.

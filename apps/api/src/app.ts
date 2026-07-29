@@ -1085,13 +1085,42 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     if (!auth) {
       return;
     }
-    if (auth.householdId || auth.onboardingHouseholdDecisionAt) {
-      return res.status(409).json({ error: 'Household setup has already been completed.' });
-    }
-
     const parsed = joinHouseholdWithCodeSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    // A user may redeem a code either before choosing a household at all, or from
+    // a household they are alone in and have not put anything into. Both people
+    // signing up separately before either thought to send a code is the ordinary
+    // way a couple arrives here, and refusing that left the invite feature usable
+    // only in the window before the second person's first sign-in.
+    const joiner = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { id: true, householdId: true },
+    });
+    if (!joiner) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (joiner.householdId) {
+      const [members, expenses, incomes, templates] = await Promise.all([
+        prisma.user.count({ where: { householdId: joiner.householdId } }),
+        prisma.expense.count({ where: { householdId: joiner.householdId } }),
+        prisma.monthlyIncome.count({ where: { householdId: joiner.householdId } }),
+        prisma.expenseTemplate.count({ where: { householdId: joiner.householdId } }),
+      ]);
+      if (members > 1) {
+        return res.status(409).json({
+          error: 'Leave your current household before joining another one.',
+        });
+      }
+      if (expenses > 0 || incomes > 0 || templates > 0) {
+        return res.status(409).json({
+          error:
+            'Your household already has expenses or income recorded. Joining another household would leave them behind.',
+        });
+      }
     }
 
     const normalizedCode = normalizeInviteCode(parsed.data.code);
@@ -1105,14 +1134,20 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     if (invite.isRevoked || invite.consumedAt || invite.expiresAt.getTime() <= Date.now()) {
       return res.status(410).json({ error: 'Invite code is no longer valid.' });
     }
+    if (invite.householdId === joiner.householdId) {
+      return res.status(409).json({ error: 'You are already in that household.' });
+    }
 
     const decisionAt = new Date();
+    const vacatedHouseholdId = joiner.householdId;
     const result = await prisma.$transaction(async (tx) => {
+      // Matching on the household read a moment ago keeps this safe against a
+      // concurrent second attempt: whichever transaction lands first moves the
+      // user, and the other one sees no rows and gives up.
       const updatedUser = await tx.user.updateMany({
         where: {
           id: auth.userId,
-          householdId: null,
-          onboardingHouseholdDecisionAt: null,
+          householdId: vacatedHouseholdId,
         },
         data: {
           householdId: invite.householdId,
@@ -1136,6 +1171,20 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       });
       if (consumed.count !== 1) {
         throw new Error('Invite code is no longer valid.');
+      }
+
+      if (vacatedHouseholdId) {
+        // Every dependent row has to go explicitly. The foreign keys say
+        // `ON DELETE SET NULL` while the columns are NOT NULL, so deleting the
+        // household outright would raise a not-null violation — and for
+        // `SuperCategory`, whose column *is* nullable, it would silently null the
+        // owner and promote a private super category to a global system one.
+        // Expenses, income and templates cannot exist here: joining is refused
+        // above when any are present.
+        await tx.monthlyExchangeRate.deleteMany({ where: { householdId: vacatedHouseholdId } });
+        await tx.category.deleteMany({ where: { householdId: vacatedHouseholdId } });
+        await tx.superCategory.deleteMany({ where: { householdId: vacatedHouseholdId } });
+        await tx.household.delete({ where: { id: vacatedHouseholdId } });
       }
 
       return tx.user.findUniqueOrThrow({
