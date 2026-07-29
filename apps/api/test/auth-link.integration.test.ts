@@ -10,7 +10,6 @@ const householdId = `hh-auth-link-${suffix}`;
 let candidateUserId = '';
 let claimedUserId = '';
 let createdUserId = '';
-let createdHouseholdId = '';
 
 function toBase64Url(input: string): string {
   return Buffer.from(input, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -64,9 +63,6 @@ describe('POST /api/auth/link', () => {
     if (candidateUserId && claimedUserId !== candidateUserId) {
       await prisma.user.deleteMany({ where: { id: candidateUserId } });
     }
-    if (createdHouseholdId) {
-      await prisma.household.deleteMany({ where: { id: createdHouseholdId } });
-    }
     await prisma.household.deleteMany({ where: { id: householdId } });
     await prisma.$disconnect();
   });
@@ -89,7 +85,7 @@ describe('POST /api/auth/link', () => {
     expect(persisted.authUserId).toBe(authUserId);
   });
 
-  it('creates a new household + participant when no email mapping exists', async () => {
+  it('leaves a brand-new participant without a household so onboarding can decide', async () => {
     const authUserId = `supabase-new-user-${suffix}`;
     const email = `brand.new.${suffix}@example.com`;
     const response = await request(app).post('/api/auth/link').send({
@@ -100,14 +96,17 @@ describe('POST /api/auth/link', () => {
     expect(response.status).toBe(201);
     expect(response.body.created).toBe(true);
     expect(response.body.user.authUserId).toBe(authUserId);
-    expect(response.body.household).toBeTruthy();
-    expect(response.body.needsHouseholdSetup).toBe(false);
+    // No household yet: picking one here would decide for the user and make an
+    // invite code unredeemable, since join-with-code refuses a user who has one.
+    expect(response.body.household).toBeNull();
+    expect(response.body.user.householdId).toBeNull();
+    expect(response.body.needsHouseholdSetup).toBe(true);
 
     createdUserId = response.body.user.id;
-    createdHouseholdId = response.body.household.id;
 
     const createdUser = await prisma.user.findUniqueOrThrow({ where: { id: createdUserId } });
-    expect(createdUser.householdId).toBe(createdHouseholdId);
+    expect(createdUser.householdId).toBeNull();
+    expect(createdUser.onboardingHouseholdDecisionAt).toBeNull();
     expect(createdUser.email).toBe(email);
   });
 });

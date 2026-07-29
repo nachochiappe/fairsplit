@@ -54,6 +54,20 @@ Uses Next.js App Router. `middleware.ts` guards all protected routes, checking s
 2. Middleware validates session on each request
 3. Backend verifies Supabase JWT on every API call
 
+### Household Onboarding
+`POST /api/auth/link` creates a new user with `householdId: null` and
+`onboardingHouseholdDecisionAt: null` on purpose. Those two nulls are what
+`needsHouseholdSetup` means, and they route the user to
+`/onboarding/household`, where they either redeem an invite code
+(`join-with-code`) or take a household of their own (`skip-setup`).
+
+Do not give a new user a household at link time. Both onboarding endpoints
+refuse a caller that already has one, so doing that makes invite codes
+unredeemable — which is what happened between 2af6022 and 0019.
+
+`requireUserContext` tolerates a user without a household;
+`requireAuthContext` 403s. Data endpoints use the latter.
+
 Passkeys (WebAuthn) are a secondary sign-in method, implemented with
 `@simplewebauthn/*` and no Supabase involvement: a verified assertion is traded
 for the same app-issued session token the magic-link flow produces. Enrolment
