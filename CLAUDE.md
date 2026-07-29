@@ -114,6 +114,18 @@ pnpm db:generate                      # refresh the client
 re-diffs to prove it lands. Read what it generated and add a comment saying
 why before committing.
 
+For a change `schema.prisma` cannot express — RLS, a partial index, a data
+backfill, dropping something Prisma never knew about — write the SQL by hand:
+
+```bash
+supabase migration new describe_the_change   # timestamped empty file
+# write the SQL, then check it replays and changes nothing unexpected
+pnpm db:reset-test && pnpm db:verify
+```
+
+Make hand-written migrations idempotent (`IF EXISTS`, `IF NOT EXISTS`) where the
+statement might meet a database that has already diverged.
+
 `pnpm db:verify` fails if `schema.prisma` and the history disagree. The
 exceptions live in `packages/db/prisma/known-drift.sql`, one entry, for a partial
 index Prisma cannot express. Add to that file only when Prisma genuinely cannot
