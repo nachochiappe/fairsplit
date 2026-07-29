@@ -1,0 +1,25 @@
+-- Lets a user exist before they have a household, which is what onboarding needs.
+--
+-- `requireAuthContext` already 403s on a user without a household, and
+-- `needsHouseholdSetup` is defined as `householdId === null &&
+-- onboardingHouseholdDecisionAt === null` — the API was written for a nullable
+-- column. `harden-household-auth-link.sql` (run by hand 2026-02-18, deleted in
+-- 9726927) made it NOT NULL along with every other household-scoped table, so
+-- inserting a pre-onboarding user started failing.
+--
+-- 2af6022 ("Fix magic link onboarding flow", 2026-02-28) worked around that by
+-- creating a household inline at link time and stamping
+-- `onboardingHouseholdDecisionAt`. That stopped the crash but left every new user
+-- already onboarded, so `needsHouseholdSetup` was never true, `/onboarding/household`
+-- was unreachable, and `join-with-code` and `skip-setup` returned 409 on their
+-- opening guard. Invite codes have not worked since: three were issued and none
+-- could be redeemed.
+--
+-- `NOT NULL` remains correct on the other household-scoped tables. Their rows are
+-- only ever written behind `requireAuthContext`, which guarantees a household.
+-- `User` is the one table whose rows legitimately predate one.
+--
+-- The FK is already `ON DELETE SET NULL`, which this makes coherent: deleting a
+-- household would previously have raised a not-null violation instead of nulling.
+
+ALTER TABLE "User" ALTER COLUMN "householdId" DROP NOT NULL;

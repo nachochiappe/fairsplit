@@ -634,24 +634,20 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         return res.json(toResponse(linked, false));
       }
 
-      const decisionAt = new Date();
-      const created = await prisma.$transaction(async (tx) => {
-        const household = await tx.household.create({
-          data: {
-            name: `${displayName}'s Household`,
-          },
-        });
-
-        return tx.user.create({
-          data: {
-            name: displayName,
-            email,
-            authUserId,
-            householdId: household.id,
-            onboardingHouseholdDecisionAt: decisionAt,
-          },
-          include: { household: true },
-        });
+      // Deliberately left without a household: `needsHouseholdSetup` turns true,
+      // the web middleware routes to `/onboarding/household`, and the user picks
+      // between redeeming an invite code and starting their own household. Creating
+      // one here instead would decide for them and make invite codes unredeemable,
+      // since both onboarding endpoints refuse a user who already has a household.
+      const created = await prisma.user.create({
+        data: {
+          name: displayName,
+          email,
+          authUserId,
+          householdId: null,
+          onboardingHouseholdDecisionAt: null,
+        },
+        include: { household: true },
       });
 
       return res.status(201).json(toResponse(created, true));
