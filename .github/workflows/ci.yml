@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A newer push to the same branch makes the in-flight run redundant.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+          # No password, deliberately. The container is reachable only from this
+          # job, and a `user:password@` connection string — even an obviously
+          # throwaway one — is a hardcoded-credential finding for secret scanning.
+          # Do not add POSTGRES_PASSWORD back.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The suite refuses to run unless TEST_DATABASE_URL is set and differs from
+      # DATABASE_URL, so DATABASE_URL is left unset here. Nothing in CI should be
+      # able to reach production.
+      TEST_DATABASE_URL: postgresql://postgres@localhost:5432/fairsplit_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm db:generate
+
+      # Fails when schema.prisma and supabase/migrations disagree beyond what
+      # packages/db/prisma/known-drift.sql documents. This is the check that would
+      # have caught the drift behind 0018 and 0019 in minutes rather than months.
+      - name: Verify schema matches the migration history
+        run: pnpm db:verify
+
+      # Creates the database as well as filling it, so nothing needs to exist first.
+      - name: Build the test database from the migration history
+        run: pnpm db:reset-test
+
+      - run: pnpm lint
+
+      - name: Typecheck the API
+        run: pnpm --filter @fairsplit/api exec tsc --noEmit -p tsconfig.json
+
+      - run: pnpm --filter @fairsplit/api test
