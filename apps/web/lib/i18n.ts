@@ -344,8 +344,9 @@ const en = {
     updating: 'Updating...',
     saveProfile: 'Save profile',
     session: 'Session',
-    sessionHelp: 'Sign out from this device when you are done.',
+    sessionHelp: 'Signing out only affects this device. Your other devices stay signed in.',
     logout: 'Log out',
+    logoutEverywhere: 'Log out everywhere',
     passkeys: {
       title: 'Passkeys',
       description:
@@ -749,8 +750,9 @@ const es: Translation = {
     updating: 'Actualizando...',
     saveProfile: 'Guardar perfil',
     session: 'Sesión',
-    sessionHelp: 'Cerrá sesión en este dispositivo cuando termines.',
+    sessionHelp: 'Cerrar sesión afecta solo a este dispositivo. Los demás siguen conectados.',
     logout: 'Cerrar sesión',
+    logoutEverywhere: 'Cerrar sesión en todos los dispositivos',
     passkeys: {
       title: 'Passkeys',
       description:

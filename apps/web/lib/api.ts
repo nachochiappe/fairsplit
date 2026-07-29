@@ -1,4 +1,4 @@
-import { getCsrfCookieValueFromBrowser } from './session';
+import { getCsrfCookieValueFromBrowser, SESSION_EXPIRED_PATH } from './session';
 
 export interface User {
   id: string;
@@ -201,6 +201,40 @@ export function isOptimisticExpenseId(id: string): boolean {
   return id.startsWith(OPTIMISTIC_EXPENSE_ID_PREFIX);
 }
 
+/** An API response that carried a status, so callers can react to 401 specifically. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+/**
+ * True when the API rejected our session token. The cookie can still be
+ * signature-valid and unexpired at this point — logging out anywhere revokes
+ * every session for the account — so the only recovery is to sign in again.
+ */
+export function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
+}
+
+let sessionExpiredRedirectStarted = false;
+
+/**
+ * Browser half of 401 recovery. `/session-expired` clears the cookies the
+ * middleware would otherwise keep trusting and sends the user to sign in.
+ */
+function startSessionExpiredRedirect(): void {
+  if (typeof window === 'undefined' || sessionExpiredRedirectStarted) {
+    return;
+  }
+  sessionExpiredRedirectStarted = true;
+  window.location.replace(SESSION_EXPIRED_PATH);
+}
+
 async function fetchFromApi(input: string, init?: RequestInit): Promise<Response> {
   try {
     const headers = new Headers(init?.headers ?? {});
@@ -237,10 +271,26 @@ async function fetchFromApi(input: string, init?: RequestInit): Promise<Response
   }
 }
 
+/**
+ * Turns a failed response into an `ApiError`. The status has to survive the
+ * throw: a 401 means the session is gone and the caller should send the user to
+ * sign in again, which is indistinguishable from a backend outage once the
+ * status is dropped.
+ */
+async function throwApiError(response: Response, fallbackMessage: string): Promise<never> {
+  const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+  const message = typeof payload?.error === 'string' ? payload.error : fallbackMessage;
+
+  if (response.status === 401) {
+    startSessionExpiredRedirect();
+  }
+
+  throw new ApiError(message, response.status);
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(payload.error ?? 'Request failed');
+    await throwApiError(response, 'Request failed');
   }
 
   return response.json() as Promise<T>;
@@ -427,8 +477,7 @@ export async function deleteExpense(id: string, applyScope?: 'single' | 'future'
     body: JSON.stringify(applyScope ? { applyScope } : {}),
   });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: 'Delete failed' }));
-    throw new Error(payload.error ?? 'Delete failed');
+    await throwApiError(response, 'Delete failed');
   }
 }
 
@@ -472,8 +521,7 @@ export async function archiveCategory(id: string, payload?: { replacementCategor
   });
 
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({ error: 'Archive failed' }));
-    throw new Error(errorPayload.error ?? 'Archive failed');
+    await throwApiError(response, 'Archive failed');
   }
 }
 
@@ -489,8 +537,7 @@ export async function unarchiveCategory(id: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({ error: 'Unarchive failed' }));
-    throw new Error(errorPayload.error ?? 'Unarchive failed');
+    await throwApiError(response, 'Unarchive failed');
   }
 }
 
@@ -564,8 +611,7 @@ export async function archiveSuperCategory(
   });
 
   if (!response.ok) {
-    const errorPayload = await response.json().catch(() => ({ error: 'Archive failed' }));
-    throw new Error(errorPayload.error ?? 'Archive failed');
+    await throwApiError(response, 'Archive failed');
   }
 }
 
@@ -664,8 +710,7 @@ export async function deletePasskey(id: string): Promise<void> {
       : `/api/auth/passkeys/${encodeURIComponent(id)}`;
   const response = await fetchFromApi(endpoint, { method: 'DELETE' });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({ error: 'Failed to remove passkey' }));
-    throw new Error(payload.error ?? 'Failed to remove passkey');
+    await throwApiError(response, 'Failed to remove passkey');
   }
 }
 

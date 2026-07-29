@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { getCategories, getPasskeys, getSuperCategories, getUser } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
-import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
+import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
 import { SettingsClient } from './SettingsClient';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -22,16 +22,15 @@ export default async function SettingsPage() {
 
   const sessionUserId = session?.userId ?? null;
 
-  const [categories, superCategories, currentUser, passkeys] = await withServerApiLogging(
-    requestId,
-    { month, route: '/settings' },
-    async () =>
+  const [categories, superCategories, currentUser, passkeys] = await withSessionRecovery(() =>
+    withServerApiLogging(requestId, { month, route: '/settings' }, async () =>
       Promise.all([
         getCategories(serverReadInit),
         getSuperCategories(serverReadInit),
         sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
         getPasskeys(serverReadInit),
       ]),
+    ),
   );
 
   return (

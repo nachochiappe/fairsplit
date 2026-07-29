@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { IncomesClient } from './IncomesClient';
 import { getExchangeRates, getIncomes, getUsers } from '../../lib/api';
-import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
+import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
 import { resolveLocaleForUser } from '../../lib/i18n';
@@ -24,15 +24,14 @@ export default async function IncomesPage({ searchParams }: IncomesPageProps) {
     sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
   );
 
-  const [users, incomes, exchangeRates] = await withServerApiLogging(
-    requestId,
-    { month, route: '/incomes' },
-    async () =>
+  const [users, incomes, exchangeRates] = await withSessionRecovery(() =>
+    withServerApiLogging(requestId, { month, route: '/incomes' }, async () =>
       Promise.all([
         getUsers(serverReadInit),
         getIncomes(month, serverReadInit),
         getExchangeRates(month, serverReadInit),
       ]),
+    ),
   );
 
   return (

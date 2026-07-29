@@ -6,8 +6,8 @@
  * is cheap against a local Postgres but not against a pooled remote one, where
  * each repeat is a network round trip.
  *
- * The cached fields include `sessionRevokedAt`, so this trades a bounded amount of
- * revocation staleness for those round trips. Two things keep that bound tight:
+ * The cached fields include the revocation state, so this trades a bounded amount
+ * of revocation staleness for those round trips. Two things keep that bound tight:
  * the TTL is deliberately small, and every route that revokes a session or moves a
  * user between households calls `invalidateUserContext`, which makes revocation
  * exact within a process. Only additional API instances can observe a stale entry,
@@ -17,7 +17,10 @@ export interface CachedUserContext {
   id: string;
   householdId: string | null;
   onboardingHouseholdDecisionAt: Date | null;
+  /** Account-wide revocation: every session issued at or before this is dead. */
   sessionRevokedAt: Date | null;
+  /** `sid`s signed out individually and not yet past their own expiry. */
+  revokedSessionIds: string[];
 }
 
 interface CacheEntry {

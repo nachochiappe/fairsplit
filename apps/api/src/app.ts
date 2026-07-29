@@ -32,11 +32,12 @@ import {
   resolveFxRateForMonth,
 } from './lib/fixed-expenses';
 import { createApiHttpLogger, createApiLogger } from './lib/logger';
-import { getSessionSecret, issueSessionToken, verifySessionToken } from './lib/session';
+import { getSessionSecret, issueSessionToken, verifySessionToken, type SessionClaims } from './lib/session';
 import {
   getCachedUserContext,
   invalidateUserContext,
   setCachedUserContext,
+  type CachedUserContext,
 } from './lib/user-context-cache';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
 import {
@@ -354,6 +355,10 @@ interface RequestUserContext {
   userId: string;
   householdId: string | null;
   onboardingHouseholdDecisionAt: Date | null;
+  /** `sid` of the session that made this request, so logout can revoke just it. */
+  sessionId: string;
+  /** When that session's token expires, which bounds how long a revocation row matters. */
+  sessionExpiresAt: Date;
 }
 
 interface CreateAppOptions {
@@ -387,6 +392,52 @@ function logErrorAndDisableAutoLog(req: Request, res: Response, error: unknown, 
   );
 }
 
+/** Reads the revocation-relevant user state and refreshes the cache entry. */
+async function loadUserContext(userId: string): Promise<CachedUserContext | null> {
+  const record = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      householdId: true,
+      onboardingHouseholdDecisionAt: true,
+      sessionRevokedAt: true,
+      // Lapsed rows are ignored here rather than relied on being pruned: the
+      // token they revoke has expired on its own by then.
+      revokedSessions: {
+        where: { expiresAt: { gt: new Date() } },
+        select: { sessionId: true },
+      },
+    },
+  });
+  const context: CachedUserContext | null = record
+    ? {
+        id: record.id,
+        householdId: record.householdId,
+        onboardingHouseholdDecisionAt: record.onboardingHouseholdDecisionAt,
+        sessionRevokedAt: record.sessionRevokedAt,
+        revokedSessionIds: record.revokedSessions.map((revoked) => revoked.sessionId),
+      }
+    : null;
+  setCachedUserContext(userId, context);
+  return context;
+}
+
+/**
+ * Returns the log message for why this session is no longer valid, or null when
+ * it still is. Two independent mechanisms: `sid` for the device that signed out,
+ * `sessionRevokedAt` for a whole-account sign-out.
+ */
+function findRevocation(user: CachedUserContext, session: SessionClaims): string | null {
+  if (user.revokedSessionIds.includes(session.sid)) {
+    return 'Rejected API request for a signed-out session';
+  }
+  const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
+  if (revokedAt !== null && session.iat <= revokedAt) {
+    return 'Rejected API request for revoked session';
+  }
+  return null;
+}
+
 async function requireUserContext(req: Request, res: Response): Promise<RequestUserContext | null> {
   let sessionSecret: string;
   try {
@@ -415,29 +466,33 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
   // A single page load fans out into several authenticated calls, each of which
   // would otherwise repeat this identical lookup. See user-context-cache for the
   // revocation-staleness bound this accepts.
-  let user = getCachedUserContext(session.userId);
-  if (user === undefined) {
-    user = await prisma.user.findUnique({
-      where: { id: session.userId },
-      select: {
-        id: true,
-        householdId: true,
-        onboardingHouseholdDecisionAt: true,
-        sessionRevokedAt: true,
-      },
-    });
-    setCachedUserContext(session.userId, user);
-  }
+  const cached = getCachedUserContext(session.userId);
+  let user = cached === undefined ? await loadUserContext(session.userId) : cached;
   if (!user) {
     res.status(401);
     logWarnAndDisableAutoLog(req, res, 'Rejected API request for missing user');
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
-  const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
-  if (revokedAt !== null && session.iat <= revokedAt) {
+
+  let rejection = findRevocation(user, session);
+  // A cached entry can be stale in the direction that matters here: a session
+  // signed in moments ago on one instance looks revoked to another instance still
+  // holding pre-sign-in state. Confirm against the database before rejecting,
+  // which costs a query only on the path that was about to fail anyway.
+  if (rejection && cached !== undefined) {
+    user = await loadUserContext(session.userId);
+    if (!user) {
+      res.status(401);
+      logWarnAndDisableAutoLog(req, res, 'Rejected API request for missing user');
+      res.status(401).json({ error: 'Invalid authentication context.' });
+      return null;
+    }
+    rejection = findRevocation(user, session);
+  }
+  if (rejection) {
     res.status(401);
-    logWarnAndDisableAutoLog(req, res, 'Rejected API request for revoked session');
+    logWarnAndDisableAutoLog(req, res, rejection);
     res.status(401).json({ error: 'Invalid authentication context.' });
     return null;
   }
@@ -446,6 +501,8 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
     userId: user.id,
     householdId: user.householdId,
     onboardingHouseholdDecisionAt: user.onboardingHouseholdDecisionAt,
+    sessionId: session.sid,
+    sessionExpiresAt: new Date(session.exp * 1000),
   };
 }
 
@@ -621,17 +678,58 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
   });
 
+  /**
+   * Signs out the calling device only. The user's other sessions — phone,
+   * partner's tablet, another browser — keep working, which is what people
+   * expect of a logout link. `/api/auth/logout-all` is the account-wide option.
+   */
   app.post('/api/auth/logout', async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
     if (!user) {
       return;
     }
 
-    await prisma.user.update({
-      where: { id: user.userId },
-      data: { sessionRevokedAt: new Date(Date.now() + 1000) },
+    await prisma.revokedSession.upsert({
+      where: { sessionId: user.sessionId },
+      create: {
+        userId: user.userId,
+        sessionId: user.sessionId,
+        expiresAt: user.sessionExpiresAt,
+      },
+      update: {},
+    });
+    // Opportunistic pruning, scoped to this user so it rides the
+    // (userId, expiresAt) index: rows stop mattering once the token they revoke
+    // would have expired anyway.
+    await prisma.revokedSession.deleteMany({
+      where: { userId: user.userId, expiresAt: { lte: new Date() } },
     });
     // Revocation has to take effect on the very next request, not after the TTL.
+    invalidateUserContext(user.userId);
+
+    res.status(204).send();
+  });
+
+  /**
+   * Signs out every device, for a lost or stolen one. `sessionRevokedAt` kills
+   * every token issued up to now in a single write, which makes the per-session
+   * rows redundant.
+   */
+  app.post('/api/auth/logout-all', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: user.userId },
+        // A sign-in landing in this same second would otherwise receive a token
+        // the next request rejects; `issueSessionToken` advances `iat` past it.
+        data: { sessionRevokedAt: new Date(Date.now() + 1000) },
+      }),
+      prisma.revokedSession.deleteMany({ where: { userId: user.userId } }),
+    ]);
     invalidateUserContext(user.userId);
 
     res.status(204).send();

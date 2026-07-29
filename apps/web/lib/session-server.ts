@@ -1,4 +1,4 @@
-import type { SessionPayload } from './session';
+import { SESSION_CLAIMS_VERSION, type SessionPayload } from './session';
 
 function fromBase64Url(value: string): string | null {
   if (!value || /[^A-Za-z0-9\-_]/.test(value)) {
@@ -95,7 +95,8 @@ export async function verifySessionCookieToken(token: string | undefined): Promi
 
   const claims = parsed as Partial<SessionPayload>;
   if (
-    claims.v !== 1 ||
+    claims.v !== SESSION_CLAIMS_VERSION ||
+    typeof claims.sid !== 'string' ||
     typeof claims.userId !== 'string' ||
     typeof claims.iat !== 'number' ||
     typeof claims.exp !== 'number'
@@ -109,7 +110,8 @@ export async function verifySessionCookieToken(token: string | undefined): Promi
   }
 
   return {
-    v: 1,
+    v: SESSION_CLAIMS_VERSION,
+    sid: claims.sid,
     userId: claims.userId,
     needsHouseholdSetup: Boolean(claims.needsHouseholdSetup),
     iat: claims.iat,

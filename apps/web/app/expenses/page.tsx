@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { ExpensesClient } from './ExpensesClient';
 import { Expense, getCategories, getExchangeRates, getExpenses, getSettlement, getUsers } from '../../lib/api';
-import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
+import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
 import { DEFAULT_MAX_ROWS_PER_SECTION, getSectionFetchBatchSize } from './pagination';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -38,10 +38,8 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   // recurring and installment rows, so anything that counts or sums the month has
   // to wait for it. Everything that doesn't depend on generation rides along in
   // tier one instead of blocking behind its own round trip.
-  const [users, fixedData, categories, exchangeRates] = await withServerApiLogging(
-    requestId,
-    { month, route: '/expenses', step: 'bootstrap' },
-    async () =>
+  const [users, fixedData, categories, exchangeRates] = await withSessionRecovery(() =>
+    withServerApiLogging(requestId, { month, route: '/expenses', step: 'bootstrap' }, async () =>
       Promise.all([
         getUsers(serverReadInit),
         getExpenses(
@@ -59,14 +57,13 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
         getCategories(serverReadInit),
         getExchangeRates(month, serverReadInit),
       ]),
+    ),
   );
   const sessionUserId = session?.userId ?? null;
   const currentUserId = sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
   const locale = resolveLocaleForUser(users, sessionUserId);
-  const [oneTimeData, installmentData, totalsData, settlement] = await withServerApiLogging(
-    requestId,
-    { month, route: '/expenses', step: 'month-totals' },
-    async () =>
+  const [oneTimeData, installmentData, totalsData, settlement] = await withSessionRecovery(() =>
+    withServerApiLogging(requestId, { month, route: '/expenses', step: 'month-totals' }, async () =>
       Promise.all([
         getExpenses(
           month,
@@ -116,6 +113,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
           throw error;
         }),
       ]),
+    ),
   );
 
   const noIncomeWarning = settlement === null ? t(locale).expenses.noIncomeWarning : null;

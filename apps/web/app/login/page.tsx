@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [passkeySubmitting, setPasskeySubmitting] = useState(false);
   // Resolved after mount so the button is not rendered during SSR, where
   // `navigator.credentials` is unavailable and support cannot be detected.
@@ -28,6 +29,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     setPasskeySupported(isPasskeySupported());
+  }, []);
+
+  // Read after mount rather than through `useSearchParams` so the page keeps
+  // prerendering. Set by /session-expired when the API rejected the session.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('reason') === 'session-expired') {
+      setNotice('Your session ended. Sign in again to continue.');
+    }
   }, []);
 
   const onPasskeySignIn = async () => {
@@ -100,6 +109,12 @@ export default function LoginPage() {
             <p className="mt-2 text-sm text-slate-600">Enter your email to receive a magic link.</p>
           </div>
         </div>
+
+        {notice ? (
+          <p className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
+            {notice}
+          </p>
+        ) : null}
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <label className="block text-sm font-medium text-slate-700" htmlFor="email">
