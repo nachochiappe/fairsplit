@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { getCategories, getPasskeys, getSuperCategories, getUser } from '../../lib/api';
+import { getCategories, getPasskeys, getSuperCategories, getUser, getUsers } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
 import { SettingsClient } from './SettingsClient';
@@ -22,13 +22,14 @@ export default async function SettingsPage() {
 
   const sessionUserId = session?.userId ?? null;
 
-  const [categories, superCategories, currentUser, passkeys] = await withSessionRecovery(() =>
+  const [categories, superCategories, currentUser, passkeys, householdUsers] = await withSessionRecovery(() =>
     withServerApiLogging(requestId, { month, route: '/settings' }, async () =>
       Promise.all([
         getCategories(serverReadInit),
         getSuperCategories(serverReadInit),
         sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
         getPasskeys(serverReadInit),
+        getUsers(serverReadInit),
       ]),
     ),
   );
@@ -42,6 +43,7 @@ export default async function SettingsPage() {
       initialCategories={categories}
       initialPasskeys={passkeys.passkeys}
       initialSuperCategories={superCategories}
+      isOnlyHouseholdMember={householdUsers.length <= 1}
       month={month}
       passkeysConfigured={passkeys.configured}
     />

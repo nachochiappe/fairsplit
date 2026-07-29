@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useMemo, useState } from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
 import { ViewportModal } from '../../components/ViewportModal';
@@ -11,6 +11,7 @@ import {
   Category,
   createCategory,
   createHouseholdInvite,
+  joinHouseholdWithCode,
   createSuperCategory,
   getCategories,
   getSuperCategories,
@@ -23,6 +24,7 @@ import {
   type AppLocale,
 } from '../../lib/api';
 import { formatCountLabel, localeLabels, localeTags, resolveLocale, t } from '../../lib/i18n';
+import { useRouter } from 'next/navigation';
 import { PasskeysCard } from './PasskeysCard';
 
 interface SettingsClientProps {
@@ -35,6 +37,8 @@ interface SettingsClientProps {
   currentUserLocale: AppLocale;
   initialPasskeys: Passkey[];
   passkeysConfigured: boolean;
+  /** Joining another household is only offered while nobody else is here. */
+  isOnlyHouseholdMember: boolean;
 }
 
 type CategoryRenameDialogState = {
@@ -114,6 +118,7 @@ export function SettingsClient({
   currentUserLocale,
   initialPasskeys,
   passkeysConfigured,
+  isOnlyHouseholdMember,
 }: SettingsClientProps) {
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [superCategories, setSuperCategories] = useState<SuperCategory[]>(initialSuperCategories);
@@ -135,6 +140,10 @@ export function SettingsClient({
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joinLoading, setJoinLoading] = useState(false);
+  const router = useRouter();
   const [categoryRenameDialog, setCategoryRenameDialog] =
     useState<CategoryRenameDialogState | null>(null);
   const [superCategoryRenameDialog, setSuperCategoryRenameDialog] =
@@ -232,6 +241,30 @@ export function SettingsClient({
       );
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  /**
+   * The API refuses this once the household holds expenses or income, or once
+   * someone else is in it, and says why — so the failure is surfaced rather than
+   * pre-empted here.
+   */
+  const onJoinHousehold = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedCode = joinCode.trim();
+    if (!normalizedCode) {
+      setJoinError(copy.joinCodeRequired);
+      return;
+    }
+    try {
+      setJoinLoading(true);
+      setJoinError(null);
+      await joinHouseholdWithCode(normalizedCode);
+      router.replace('/dashboard');
+    } catch (error) {
+      setJoinError(error instanceof Error ? error.message : copy.joinFailed);
+    } finally {
+      setJoinLoading(false);
     }
   };
 
@@ -940,6 +973,41 @@ export function SettingsClient({
             </div>
           ) : null}
         </div>
+
+        {isOnlyHouseholdMember ? (
+          <div className="mt-4 rounded-xl border border-stroke/80 bg-surface-soft p-4">
+            <h3 className="text-base font-semibold text-ink-strong">{copy.joinHousehold}</h3>
+            <p className="mt-1 text-xs text-ink-muted">{copy.joinDescription}</p>
+            <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void onJoinHousehold(event)}>
+              <label className="sr-only" htmlFor="join-household-code">
+                {copy.inviteCode}
+              </label>
+              <input
+                id="join-household-code"
+                autoComplete="off"
+                className="min-h-11 w-full rounded-md border border-stroke bg-surface px-3 py-2 text-sm text-ink-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                placeholder={copy.joinCodePlaceholder}
+                value={joinCode}
+              />
+              <button
+                className="inline-flex min-h-11 items-center justify-center rounded-md border border-stroke bg-surface px-4 py-2.5 text-sm font-semibold text-ink-base shadow-sm hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:shrink-0"
+                disabled={joinLoading}
+                type="submit"
+              >
+                <span className="truncate">{joinLoading ? copy.joining : copy.joinAction}</span>
+              </button>
+            </form>
+            {joinError ? (
+              <div
+                aria-live="assertive"
+                className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+              >
+                {joinError}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         {inviteError ? (
           <div

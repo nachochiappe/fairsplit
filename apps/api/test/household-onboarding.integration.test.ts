@@ -79,8 +79,18 @@ describe('Household onboarding', () => {
     createdUserIds.push(inviter.id);
   });
 
+  // Order matters. Every householdId here is NOT NULL behind an ON DELETE SET NULL
+  // foreign key, so deleting a household that still owns rows raises a not-null
+  // violation instead of cascading.
   afterAll(async () => {
-    await prisma.householdInvite.deleteMany({ where: { householdId: { in: createdHouseholdIds } } });
+    const where = { householdId: { in: createdHouseholdIds } };
+    await prisma.householdInvite.deleteMany({ where });
+    await prisma.expense.deleteMany({ where });
+    await prisma.monthlyIncome.deleteMany({ where });
+    await prisma.expenseTemplate.deleteMany({ where });
+    await prisma.monthlyExchangeRate.deleteMany({ where });
+    await prisma.category.deleteMany({ where });
+    await prisma.superCategory.deleteMany({ where });
     await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     await prisma.household.deleteMany({ where: { id: { in: createdHouseholdIds } } });
     await prisma.$disconnect();
@@ -123,7 +133,7 @@ describe('Household onboarding', () => {
       expect(response.body.user.householdId).toBe(inviterHouseholdId);
     });
 
-    it('refuses a user who already settled their household', async () => {
+    it('refuses a code for the household the caller is already in', async () => {
       const invite = await createInvite();
       const settled = await prisma.user.create({
         data: {
@@ -184,6 +194,124 @@ describe('Household onboarding', () => {
         .send({ code: invite.code });
 
       expect(response.status).toBe(410);
+    });
+  });
+
+  /**
+   * Both partners signing up separately, before either thought to send a code, is
+   * the ordinary way a couple arrives here. Refusing that made invite codes
+   * usable only in the window before the second person's first sign-in.
+   */
+  describe('joining from a household of one', () => {
+    async function createSoloUser(label: string) {
+      seq += 1;
+      const household = await prisma.household.create({ data: { name: `${label} HH ${suffix}` } });
+      createdHouseholdIds.push(household.id);
+      const user = await prisma.user.create({
+        data: {
+          name: `${label} ${suffix}`,
+          authUserId: `auth-${label}-${suffix}-${seq}`,
+          householdId: household.id,
+          onboardingHouseholdDecisionAt: new Date(),
+        },
+      });
+      createdUserIds.push(user.id);
+      return { user, household };
+    }
+
+    it('moves the user across and removes the household they left', async () => {
+      const invite = await createInvite();
+      const { user, household } = await createSoloUser('solo-joiner');
+
+      const response = await request(app)
+        .post('/api/household/join-with-code')
+        .set('x-fairsplit-session', sessionFor(user))
+        .send({ code: invite.code });
+
+      expect(response.status).toBe(200);
+      expect(response.body.user.householdId).toBe(inviterHouseholdId);
+      expect(await prisma.household.count({ where: { id: household.id } })).toBe(0);
+    });
+
+    it('deletes the vacated household\'s super categories rather than making them global', async () => {
+      const invite = await createInvite();
+      const { user, household } = await createSoloUser('solo-config');
+      const own = await prisma.superCategory.create({
+        data: { name: `Mine ${suffix}`, slug: `mine-${suffix}`, householdId: household.id, isSystem: false },
+      });
+      await prisma.category.create({
+        data: { name: `Cat ${suffix}`, householdId: household.id },
+      });
+
+      const response = await request(app)
+        .post('/api/household/join-with-code')
+        .set('x-fairsplit-session', sessionFor(user))
+        .send({ code: invite.code });
+
+      expect(response.status).toBe(200);
+      // The foreign key is ON DELETE SET NULL and the column is nullable, so
+      // deleting the household without clearing this first would null the owner —
+      // and a null householdId is what marks a super category global to everyone.
+      expect(await prisma.superCategory.count({ where: { id: own.id } })).toBe(0);
+      expect(
+        await prisma.superCategory.count({ where: { householdId: null, isSystem: false } }),
+      ).toBe(0);
+      expect(await prisma.category.count({ where: { householdId: household.id } })).toBe(0);
+    });
+
+    it('refuses when the household has expenses, leaving everything untouched', async () => {
+      const invite = await createInvite();
+      const { user, household } = await createSoloUser('solo-with-data');
+      const category = await prisma.category.create({
+        data: { name: `Cat ${suffix}-x`, householdId: household.id },
+      });
+      await prisma.expense.create({
+        data: {
+          householdId: household.id,
+          categoryId: category.id,
+          paidByUserId: user.id,
+          description: 'Coffee',
+          month: '2026-07',
+          date: new Date(),
+          amountOriginal: '10.00',
+          amountArs: '10.00',
+        },
+      });
+
+      const response = await request(app)
+        .post('/api/household/join-with-code')
+        .set('x-fairsplit-session', sessionFor(user))
+        .send({ code: invite.code });
+
+      expect(response.status).toBe(409);
+      const persisted = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+      expect(persisted.householdId).toBe(household.id);
+      expect(await prisma.household.count({ where: { id: household.id } })).toBe(1);
+      const untouched = await prisma.householdInvite.findUniqueOrThrow({ where: { id: invite.id } });
+      expect(untouched.consumedAt).toBeNull();
+    });
+
+    it('refuses when someone else is in the household', async () => {
+      const invite = await createInvite();
+      const { user, household } = await createSoloUser('solo-with-partner');
+      seq += 1;
+      const partner = await prisma.user.create({
+        data: {
+          name: `Partner ${suffix}`,
+          authUserId: `auth-partner-${suffix}-${seq}`,
+          householdId: household.id,
+          onboardingHouseholdDecisionAt: new Date(),
+        },
+      });
+      createdUserIds.push(partner.id);
+
+      const response = await request(app)
+        .post('/api/household/join-with-code')
+        .set('x-fairsplit-session', sessionFor(user))
+        .send({ code: invite.code });
+
+      expect(response.status).toBe(409);
+      expect(await prisma.household.count({ where: { id: household.id } })).toBe(1);
     });
   });
 
