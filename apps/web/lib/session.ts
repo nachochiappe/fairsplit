@@ -1,8 +1,18 @@
 export const SESSION_COOKIE = 'fairsplit_session';
 export const CSRF_COOKIE = 'fairsplit_csrf';
 
+/**
+ * Route that clears the auth cookies and sends the user to sign in. Reached
+ * whenever the API rejects a session the middleware still considers valid.
+ */
+export const SESSION_EXPIRED_PATH = '/session-expired';
+
+export const SESSION_CLAIMS_VERSION = 2;
+
 export interface SessionPayload {
-  v: 1;
+  v: typeof SESSION_CLAIMS_VERSION;
+  /** Identifies this one session; the API revokes logouts by `sid`. */
+  sid: string;
   userId: string;
   needsHouseholdSetup: boolean;
   iat: number;
@@ -39,7 +49,8 @@ export function parseSessionToken(sessionToken: string | undefined): SessionPayl
   try {
     const parsed = JSON.parse(payloadJson) as Partial<SessionPayload>;
     if (
-      parsed.v !== 1 ||
+      parsed.v !== SESSION_CLAIMS_VERSION ||
+      typeof parsed.sid !== 'string' ||
       typeof parsed.userId !== 'string' ||
       typeof parsed.iat !== 'number' ||
       typeof parsed.exp !== 'number'
@@ -51,7 +62,8 @@ export function parseSessionToken(sessionToken: string | undefined): SessionPayl
       return null;
     }
     return {
-      v: 1,
+      v: SESSION_CLAIMS_VERSION,
+      sid: parsed.sid,
       userId: parsed.userId,
       needsHouseholdSetup: Boolean(parsed.needsHouseholdSetup),
       iat: parsed.iat,

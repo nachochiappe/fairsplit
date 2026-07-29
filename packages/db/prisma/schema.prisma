@@ -24,9 +24,31 @@ model User {
   createdInvites   HouseholdInvite[] @relation("InviteCreatedBy")
   consumedInvites  HouseholdInvite[] @relation("InviteConsumedBy")
   passkeys         UserPasskey[]
+  revokedSessions  RevokedSession[]
 
   @@unique([authUserId])
   @@index([householdId])
+}
+
+/// A single session signed out before its token would have expired.
+///
+/// Sessions are stateless, so only the exceptions are stored: logging out adds
+/// one row and leaves the user's other devices alone. `User.sessionRevokedAt`
+/// still exists for the account-wide case ("sign out everywhere"), which is a
+/// deliberate action rather than what an ordinary logout does.
+model RevokedSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The `sid` claim of the revoked token.
+  sessionId String
+  createdAt DateTime @default(now())
+  /// Mirrors the token's `exp`: once past, the token is dead on its own and the
+  /// row can be pruned.
+  expiresAt DateTime
+
+  @@unique([sessionId])
+  @@index([userId, expiresAt])
 }
 
 /// A WebAuthn credential registered by a user as a secondary sign-in method.

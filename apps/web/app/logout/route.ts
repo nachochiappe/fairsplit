@@ -10,6 +10,19 @@ function secureCookies(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
+/**
+ * Reads the logout scope off the submitted form. Defaults to this device: an
+ * account-wide sign-out has to be asked for explicitly, never inferred.
+ */
+async function readUpstreamPath(request: Request): Promise<'/auth/logout' | '/auth/logout-all'> {
+  try {
+    const form = await request.formData();
+    return form.get('scope') === 'all' ? '/auth/logout-all' : '/auth/logout';
+  } catch {
+    return '/auth/logout';
+  }
+}
+
 export async function POST(request: Request) {
   const requestId = getOrCreateRequestId(new Headers(request.headers));
   const cookieHeader = request.headers.get('cookie') ?? '';
@@ -19,10 +32,11 @@ export async function POST(request: Request) {
     .map((part) => part.trim())
     .find((part) => part.startsWith(sessionCookiePrefix))
     ?.slice(sessionCookiePrefix.length);
+  const upstreamPath = await readUpstreamPath(request);
 
   if (sessionToken) {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+      const response = await fetch(`${API_BASE_URL}${upstreamPath}`, {
         method: 'POST',
         headers: withRequestId(
           {
@@ -37,7 +51,7 @@ export async function POST(request: Request) {
           {
             method: 'POST',
             requestId: response.headers.get(REQUEST_ID_HEADER) ?? requestId,
-            route: '/auth/logout',
+            route: upstreamPath,
             upstreamStatus: response.status,
           },
           'Logout route received API 5xx response',
@@ -49,14 +63,16 @@ export async function POST(request: Request) {
           err: error,
           method: 'POST',
           requestId,
-          route: '/auth/logout',
+          route: upstreamPath,
         },
         'Logout route failed to reach API',
       );
     }
   }
 
-  const response = NextResponse.redirect(new URL('/login', request.url));
+  // 303, not the default 307: this is the response to a form POST, and a 307
+  // would make the browser re-POST to /login, which has no POST handler.
+  const response = NextResponse.redirect(new URL('/login', request.url), 303);
   response.cookies.set({
     name: SESSION_COOKIE,
     value: '',

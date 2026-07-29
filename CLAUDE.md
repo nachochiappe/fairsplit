@@ -63,6 +63,16 @@ happens in `/settings` and requires an existing session; sign-in is usernameless
 Requires `FAIRSPLIT_WEBAUTHN_RP_ID` and `FAIRSPLIT_WEBAUTHN_ORIGINS` — the RP ID
 scopes credentials, so changing it invalidates every registered passkey.
 
+### Session Revocation
+Session tokens carry a `sid` (claims version 2). Logout revokes only the calling
+session by inserting a `RevokedSession` row; other devices stay signed in.
+`User.sessionRevokedAt` is the account-wide escape hatch behind "log out
+everywhere" (`POST /api/auth/logout-all`), invalidating every token issued at or
+before it. The web middleware validates only the cookie's signature and expiry,
+so a revoked session still reaches a page: SSR reads that get a 401 redirect to
+`/session-expired`, which clears the cookies and returns to `/login`. Client
+fetches do the same via `ApiError` in `lib/api.ts`.
+
 ### Database
 Prisma with PostgreSQL. Key models: `User`, `Household`, `MonthlyIncome`, `Expense`, `ExpenseTemplate` (recurring), `Category`/`SuperCategory`, `MonthlyExchangeRate`. The `packages/db` singleton pattern ensures a single Prisma client instance in development.
 

@@ -1030,14 +1030,25 @@ export function SettingsClient({
                 {copy.sessionHelp}
               </p>
             </div>
-            <form action="/logout" className="w-full sm:w-auto" method="post">
-              <button
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
-                type="submit"
-              >
-                {copy.logout}
-              </button>
-            </form>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <form action="/logout" className="w-full sm:w-auto" method="post">
+                <button
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-base font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+                  type="submit"
+                >
+                  {copy.logout}
+                </button>
+              </form>
+              <form action="/logout" className="w-full sm:w-auto" method="post">
+                <input name="scope" type="hidden" value="all" />
+                <button
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl px-5 py-3 text-base font-semibold text-ink-soft underline decoration-slate-300 underline-offset-4 hover:text-ink-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+                  type="submit"
+                >
+                  {copy.logoutEverywhere}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 

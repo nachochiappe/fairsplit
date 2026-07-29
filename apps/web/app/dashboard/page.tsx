@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { DashboardClient } from './DashboardClient';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
-import { SESSION_COOKIE } from '../../lib/session';
+import { SESSION_COOKIE, SESSION_EXPIRED_PATH } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
 import { resolveLocaleForUser, t } from '../../lib/i18n';
 import { LOCALE_COOKIE, parseLocaleCookie } from '../../lib/locale-cookie';
@@ -10,6 +11,7 @@ import {
   getIncomes,
   getSettlement,
   getUsers,
+  isSessionExpiredError,
   type ExpenseCategoryTotal,
   type ExpenseTotalsResponse,
   type Income,
@@ -78,6 +80,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         }),
     );
   } catch (error) {
+    // A revoked session is not an outage: the middleware cleared this request on
+    // signature alone, so recovery is to drop the cookie and sign in again.
+    if (isSessionExpiredError(error)) {
+      redirect(SESSION_EXPIRED_PATH);
+    }
     const message = error instanceof Error ? error.message : 'Failed to connect to API';
     const settlement = buildNoIncomeSettlement(month, [], [], {});
     return (

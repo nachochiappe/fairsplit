@@ -1,6 +1,9 @@
 import 'server-only';
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { REQUEST_ID_HEADER } from '@fairsplit/logging';
+import { isSessionExpiredError } from './api';
+import { SESSION_EXPIRED_PATH } from './session';
 import { webLogger } from './server-logger';
 
 type ServerRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
@@ -27,6 +30,25 @@ export function buildServerApiInit(
     ...(init ?? {}),
     headers,
   };
+}
+
+/**
+ * Sends the user to sign in when the API rejects the session cookie, instead of
+ * letting a 401 surface as a backend outage on a page the middleware already
+ * let through. Anything else propagates untouched.
+ *
+ * `redirect` throws, so this must wrap the API reads directly rather than sit
+ * inside another `catch`.
+ */
+export async function withSessionRecovery<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (isSessionExpiredError(error)) {
+      redirect(SESSION_EXPIRED_PATH);
+    }
+    throw error;
+  }
 }
 
 export async function withServerApiLogging<T>(

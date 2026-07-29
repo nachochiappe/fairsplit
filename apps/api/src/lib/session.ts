@@ -1,9 +1,20 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
+/**
+ * Bumped to 2 when sessions gained a `sid`, which is what lets logout revoke one
+ * device instead of the whole account. Version 1 tokens carry no `sid` and are
+ * rejected outright rather than grandfathered — there is no way to sign one out
+ * individually, so honouring them would keep the old all-or-nothing behaviour
+ * alive indefinitely.
+ */
+export const SESSION_CLAIMS_VERSION = 2;
+
 export interface SessionClaims {
-  v: 1;
+  v: typeof SESSION_CLAIMS_VERSION;
+  /** Identifies this one session, so it can be revoked on its own. */
+  sid: string;
   userId: string;
   needsHouseholdSetup: boolean;
   iat: number;
@@ -57,7 +68,8 @@ export function issueSessionToken(
   const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
   const issuedAt = revokedAt !== null ? Math.max(now, revokedAt + 1) : now;
   const claims: SessionClaims = {
-    v: 1,
+    v: SESSION_CLAIMS_VERSION,
+    sid: randomBytes(16).toString('base64url'),
     userId: user.id,
     needsHouseholdSetup: user.householdId === null && user.onboardingHouseholdDecisionAt === null,
     iat: issuedAt,
@@ -105,7 +117,9 @@ export function verifySessionToken(token: string, secret: string): SessionClaims
   const claims = parsed as Partial<SessionClaims>;
   const now = Math.floor(Date.now() / 1000);
   if (
-    claims.v !== 1 ||
+    claims.v !== SESSION_CLAIMS_VERSION ||
+    typeof claims.sid !== 'string' ||
+    claims.sid.length === 0 ||
     typeof claims.userId !== 'string' ||
     typeof claims.iat !== 'number' ||
     typeof claims.exp !== 'number' ||
@@ -115,7 +129,8 @@ export function verifySessionToken(token: string, secret: string): SessionClaims
   }
 
   return {
-    v: 1,
+    v: SESSION_CLAIMS_VERSION,
+    sid: claims.sid,
     userId: claims.userId,
     needsHouseholdSetup: Boolean(claims.needsHouseholdSetup),
     iat: claims.iat,
