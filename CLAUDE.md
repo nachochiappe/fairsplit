@@ -29,8 +29,13 @@ pnpm lint
 pnpm format
 
 # Database
-pnpm db:migrate       # Run Prisma migrations
-pnpm db:generate      # Regenerate Prisma client
+pnpm db:generate               # Regenerate Prisma client
+pnpm db:new-migration <name>   # Author a migration from schema.prisma
+pnpm db:verify                 # Check schema.prisma matches the migration history
+pnpm db:reset-test             # Rebuild the local test database
+
+# Migrations reach production by merging to main; the Supabase GitHub
+# integration deploys them. No command applies them to production.
 
 # Run API tests only (Vitest integration tests)
 cd apps/api && pnpm test
@@ -91,24 +96,52 @@ fetches do the same via `ApiError` in `lib/api.ts`.
 Prisma with PostgreSQL. Key models: `User`, `Household`, `MonthlyIncome`, `Expense`, `ExpenseTemplate` (recurring), `Category`/`SuperCategory`, `MonthlyExchangeRate`. The `packages/db` singleton pattern ensures a single Prisma client instance in development.
 
 ### Migrations
-Two histories describe the same database and must stay in step:
-`packages/db/prisma/migrations` (Prisma, the applier) and `supabase/migrations`
-(the same SQL, timestamp-prefixed, for the Supabase CLI and preview branches).
-Add a migration to both. `supabase migration list` should show Local and Remote
-matching on every row.
+`supabase/migrations` is the only migration history, and merging to `main` is the
+only thing that applies it — the Supabase GitHub integration deploys on merge.
+Nothing in this repo applies migrations to production, and `prisma migrate
+deploy` is no longer wired up anywhere. Prisma's job is the typed client
+(`prisma generate`) and being the authoring surface.
+
+To change the schema: edit `schema.prisma`, then
+
+```bash
+pnpm db:new-migration add_something   # diffs the schema, writes the SQL
+pnpm db:generate                      # refresh the client
+```
+
+`db:new-migration` builds a shadow database from the existing history, diffs
+`schema.prisma` against it, and writes only the gap — then applies it and
+re-diffs to prove it lands. Read what it generated and add a comment saying
+why before committing.
+
+For a change `schema.prisma` cannot express — RLS, a partial index, a data
+backfill, dropping something Prisma never knew about — write the SQL by hand:
+
+```bash
+supabase migration new describe_the_change   # timestamped empty file
+# write the SQL, then check it replays and changes nothing unexpected
+pnpm db:reset-test && pnpm db:verify
+```
+
+Make hand-written migrations idempotent (`IF EXISTS`, `IF NOT EXISTS`) where the
+statement might meet a database that has already diverged.
+
+`pnpm db:verify` fails if `schema.prisma` and the history disagree. The
+exceptions live in `packages/db/prisma/known-drift.sql`, one entry, for a partial
+index Prisma cannot express. Add to that file only when Prisma genuinely cannot
+say the thing — not when the schema is merely out of date.
 
 Never change the schema outside a migration. Every drift this repo has had came
 from a hand-run script: `harden-household-auth-link.sql` set `householdId` NOT
-NULL across seven tables, was deleted from the repo, and silently broke global
-system super categories for five months (see 0018).
+NULL across seven tables, was deleted from the repo, and silently broke both
+global system super categories and household onboarding for five months (0018,
+0019). Neither was caught, because the test database had never received the
+script and so did not match production.
 
-`pnpm db:migrate` does not work against the `DATABASE_URL` in `packages/db/.env`:
-that is the transaction pooler (`:6543`, `pgbouncer=true`), and `prisma migrate
-deploy` needs a session-mode advisory lock, so it hangs with no output. Apply
-migrations with the `:5432` session-pooler URL commented beside it.
-
-`DATABASE_URL` points at **production**. Only `TEST_DATABASE_URL` uses the local
-docker Postgres.
+`DATABASE_URL` points at **production** — local development reads and writes live
+data. Only `TEST_DATABASE_URL` uses the docker Postgres, and it names the database
+`fairsplit`, not `fairsplit_test`. `pnpm db:reset-test` rebuilds it from the
+history and refuses any non-local URL.
 
 `SuperCategory.householdId IS NULL` means "global, available to every
 household" — it is a value with meaning, not a missing value. Do not make that

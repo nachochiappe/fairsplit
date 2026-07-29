@@ -1,0 +1,24 @@
+-- Differences between schema.prisma and supabase/migrations that are expected and
+-- accepted. `./scripts/migrations.sh verify` passes only when the drift it finds is
+-- exactly this; anything else is a real mismatch to fix.
+--
+-- Keep this as small as possible. Every line here is something Prisma's schema
+-- language cannot say, not something we have not gotten around to.
+--
+-- ---------------------------------------------------------------------------
+-- Partial unique index on User.authUserId
+--
+-- The database has:
+--   CREATE UNIQUE INDEX user_auth_user_id_uq ON "User"("authUserId")
+--     WHERE "authUserId" IS NOT NULL;
+--
+-- so that many users may sit unlinked (`authUserId IS NULL`) while every linked
+-- id stays unique. Prisma cannot express a partial index, and `@unique` on the
+-- field is still needed for `findUnique({ where: { authUserId } })` in
+-- app.ts — so Prisma asks for a plain unique index and we ignore it.
+--
+-- `user_household_email_ci_uq` and `super_category_system_slug_uq` are partial
+-- too, but Prisma leaves indexes it cannot represent alone rather than proposing
+-- a drop, so they need no entry here.
+
+CREATE UNIQUE INDEX "User_authUserId_key" ON "User"("authUserId");

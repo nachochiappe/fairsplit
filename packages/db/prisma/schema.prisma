@@ -8,23 +8,23 @@ datasource db {
 }
 
 model User {
-  id               String            @id @default(cuid())
-  name             String
-  email            String?
-  authUserId       String?
-  locale           String            @default("en") @db.VarChar(5)
-  householdId      String?
+  id                            String            @id @default(cuid())
+  name                          String
+  email                         String?
+  authUserId                    String?
+  locale                        String            @default("en") @db.VarChar(5)
+  householdId                   String?
   onboardingHouseholdDecisionAt DateTime?
-  sessionRevokedAt DateTime?
-  household        Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
-  createdAt        DateTime          @default(now())
-  incomes          MonthlyIncome[]
-  paidExpenses     Expense[]         @relation("ExpensePaidByUser")
-  fixedTemplates   ExpenseTemplate[] @relation("TemplatePaidByUser")
-  createdInvites   HouseholdInvite[] @relation("InviteCreatedBy")
-  consumedInvites  HouseholdInvite[] @relation("InviteConsumedBy")
-  passkeys         UserPasskey[]
-  revokedSessions  RevokedSession[]
+  sessionRevokedAt              DateTime?
+  household                     Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  createdAt                     DateTime          @default(now())
+  incomes                       MonthlyIncome[]
+  paidExpenses                  Expense[]         @relation("ExpensePaidByUser")
+  fixedTemplates                ExpenseTemplate[] @relation("TemplatePaidByUser")
+  createdInvites                HouseholdInvite[] @relation("InviteCreatedBy")
+  consumedInvites               HouseholdInvite[] @relation("InviteConsumedBy")
+  passkeys                      UserPasskey[]
+  revokedSessions               RevokedSession[]
 
   @@unique([authUserId])
   @@index([householdId])
@@ -53,21 +53,21 @@ model RevokedSession {
 
 /// A WebAuthn credential registered by a user as a secondary sign-in method.
 model UserPasskey {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Base64url-encoded credential ID as reported by the authenticator.
   credentialId String
   publicKey    Bytes
   /// Authenticator signature counter. Many passkeys always report 0.
-  counter      BigInt   @default(0)
-  transports   String[] @default([])
+  counter      BigInt    @default(0)
+  transports   String[]  @default([])
   /// 'singleDevice' or 'multiDevice' as reported during registration.
-  deviceType   String   @db.VarChar(16)
-  backedUp     Boolean  @default(false)
+  deviceType   String    @db.VarChar(16)
+  backedUp     Boolean   @default(false)
   /// User-supplied name so multiple passkeys stay distinguishable.
-  label        String   @db.VarChar(60)
-  createdAt    DateTime @default(now())
+  label        String    @db.VarChar(60)
+  createdAt    DateTime  @default(now())
   lastUsedAt   DateTime?
 
   @@unique([credentialId])
@@ -91,17 +91,17 @@ model WebAuthnChallenge {
 }
 
 model MonthlyIncome {
-  id          String   @id @default(cuid())
-  month       String   @db.VarChar(7)
-  description String
-  amount      Decimal  @db.Decimal(14, 2)
-  amountOriginal Decimal @db.Decimal(14, 2)
-  currencyCode String   @db.VarChar(3) @default("ARS")
-  fxRateUsed   Decimal  @db.Decimal(14, 6) @default(1)
-  householdId  String?
-  household    Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  month          String    @db.VarChar(7)
+  description    String    @default("Income")
+  amount         Decimal   @db.Decimal(14, 2)
+  amountOriginal Decimal   @db.Decimal(14, 2)
+  currencyCode   String    @default("ARS") @db.VarChar(3)
+  fxRateUsed     Decimal   @default(1) @db.Decimal(14, 6)
+  householdId    String
+  household      Household @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([month])
   @@index([month, userId, id])
@@ -113,8 +113,8 @@ model MonthlyIncome {
 model Category {
   id               String            @id @default(cuid())
   name             String
-  householdId      String?
-  household        Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  householdId      String
+  household        Household         @relation(fields: [householdId], references: [id], onDelete: SetNull)
   superCategoryId  String?
   superCategory    SuperCategory?    @relation(fields: [superCategoryId], references: [id], onDelete: SetNull)
   createdAt        DateTime          @default(now())
@@ -123,58 +123,60 @@ model Category {
   expenses         Expense[]
   expenseTemplates ExpenseTemplate[]
 
+  @@unique([householdId, name])
   @@index([archivedAt, name])
   @@index([superCategoryId])
   @@index([householdId])
-  @@unique([householdId, name])
 }
 
 model SuperCategory {
-  id         String     @id @default(cuid())
-  name       String
-  slug       String
+  id          String     @id @default(cuid())
+  name        String
+  slug        String
   householdId String?
-  household  Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
-  color      String     @default("#64748b")
-  icon       String?
-  sortOrder  Int        @default(0)
-  isSystem   Boolean    @default(false)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  archivedAt DateTime?
-  categories Category[]
+  household   Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  color       String     @default("#64748b")
+  icon        String?
+  sortOrder   Int        @default(0)
+  isSystem    Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  archivedAt  DateTime?
+  categories  Category[]
 
+  @@unique([householdId, slug])
   @@index([archivedAt, sortOrder, name])
   @@index([householdId])
-  @@unique([householdId, slug])
 }
 
 model Expense {
-  id                 String   @id @default(cuid())
-  month              String   @db.VarChar(7)
-  date               DateTime
-  description        String
-  categoryId         String
-  category           Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  amountOriginal     Decimal  @db.Decimal(14, 2)
-  amountArs          Decimal  @db.Decimal(14, 2)
-  currencyCode       String   @db.VarChar(3) @default("ARS")
-  fxRateUsed         Decimal  @db.Decimal(14, 6) @default(1)
-  isInstallment      Boolean  @default(false)
+  id                  String           @id @default(cuid())
+  month               String           @db.VarChar(7)
+  date                DateTime
+  description         String
+  categoryId          String
+  category            Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  amountOriginal      Decimal          @db.Decimal(14, 2)
+  amountArs           Decimal          @db.Decimal(14, 2)
+  currencyCode        String           @default("ARS") @db.VarChar(3)
+  fxRateUsed          Decimal          @default(1) @db.Decimal(14, 6)
+  isInstallment       Boolean          @default(false)
   installmentSeriesId String?
   installmentNumber   Int?
   installmentTotal    Int?
-  installmentAmount   Decimal? @db.Decimal(14, 2)
+  installmentAmount   Decimal?         @db.Decimal(14, 2)
   installmentSource   String?
-  originalTotalAmount Decimal? @db.Decimal(14, 2)
-  createdFromSeries   Boolean  @default(false)
-  householdId        String?
-  household          Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
-  templateId         String?
-  template           ExpenseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  paidByUserId       String
-  paidByUser         User     @relation("ExpensePaidByUser", fields: [paidByUserId], references: [id], onDelete: Restrict)
+  originalTotalAmount Decimal?         @db.Decimal(14, 2)
+  createdFromSeries   Boolean          @default(false)
+  householdId         String
+  household           Household        @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  templateId          String?
+  template            ExpenseTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  paidByUserId        String
+  paidByUser          User             @relation("ExpensePaidByUser", fields: [paidByUserId], references: [id], onDelete: Restrict)
 
+  @@unique([month, templateId])
+  @@unique([installmentSeriesId, month])
   @@index([month])
   @@index([month, isInstallment])
   @@index([paidByUserId])
@@ -182,31 +184,29 @@ model Expense {
   @@index([templateId])
   @@index([templateId, month])
   @@index([month, templateId])
-  @@index([month, date, id])
+  @@index([month, date(sort: Desc), id(sort: Desc)])
   @@index([installmentSeriesId, installmentNumber])
-  @@unique([month, templateId])
-  @@unique([installmentSeriesId, month])
   @@index([householdId])
   @@index([householdId, month])
 }
 
 model ExpenseTemplate {
-  id             String   @id @default(cuid())
+  id             String                      @id @default(cuid())
   description    String
   categoryId     String
-  category       Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  amountOriginal Decimal  @db.Decimal(14, 2)
-  amountArs      Decimal  @db.Decimal(14, 2)
-  currencyCode   String   @db.VarChar(3) @default("ARS")
-  fxRate         Decimal  @db.Decimal(14, 6)
+  category       Category                    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  amountOriginal Decimal                     @db.Decimal(14, 2)
+  amountArs      Decimal                     @db.Decimal(14, 2)
+  currencyCode   String                      @default("ARS") @db.VarChar(3)
+  fxRate         Decimal                     @db.Decimal(14, 6)
   dayOfMonth     Int
-  isActive       Boolean  @default(true)
-  householdId    String?
-  household      Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  isActive       Boolean                     @default(true)
+  householdId    String
+  household      Household                   @relation(fields: [householdId], references: [id], onDelete: SetNull)
   paidByUserId   String
-  paidByUser     User     @relation("TemplatePaidByUser", fields: [paidByUserId], references: [id], onDelete: Restrict)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  paidByUser     User                        @relation("TemplatePaidByUser", fields: [paidByUserId], references: [id], onDelete: Restrict)
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
   expenses       Expense[]
   skippedMonths  RecurringExpenseSkipMonth[]
 
@@ -229,14 +229,14 @@ model RecurringExpenseSkipMonth {
 }
 
 model MonthlyExchangeRate {
-  id           String   @id @default(cuid())
-  month        String   @db.VarChar(7)
-  currencyCode String   @db.VarChar(3)
-  rateToArs    Decimal  @db.Decimal(14, 6)
-  householdId  String?
-  household    Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id           String    @id @default(cuid())
+  month        String    @db.VarChar(7)
+  currencyCode String    @db.VarChar(3)
+  rateToArs    Decimal   @db.Decimal(14, 6)
+  householdId  String
+  household    Household @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([householdId, month, currencyCode])
   @@index([month])
@@ -244,32 +244,32 @@ model MonthlyExchangeRate {
 }
 
 model Household {
-  id              String              @id @default(cuid())
-  name            String
-  createdAt       DateTime            @default(now())
-  users           User[]
-  incomes         MonthlyIncome[]
-  expenses        Expense[]
+  id               String                @id @default(cuid())
+  name             String
+  createdAt        DateTime              @default(now())
+  users            User[]
+  incomes          MonthlyIncome[]
+  expenses         Expense[]
   expenseTemplates ExpenseTemplate[]
-  categories      Category[]
-  superCategories SuperCategory[]
-  exchangeRates   MonthlyExchangeRate[]
-  invites         HouseholdInvite[]
+  categories       Category[]
+  superCategories  SuperCategory[]
+  exchangeRates    MonthlyExchangeRate[]
+  invites          HouseholdInvite[]
 }
 
 model HouseholdInvite {
-  id               String     @id @default(cuid())
+  id               String    @id @default(cuid())
   householdId      String
-  household        Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  code             String     @unique
+  household        Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  code             String    @unique
   createdByUserId  String
-  createdByUser    User       @relation("InviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdByUser    User      @relation("InviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
   consumedByUserId String?
-  consumedByUser   User?      @relation("InviteConsumedBy", fields: [consumedByUserId], references: [id], onDelete: SetNull)
-  createdAt        DateTime   @default(now())
+  consumedByUser   User?     @relation("InviteConsumedBy", fields: [consumedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
   expiresAt        DateTime
   consumedAt       DateTime?
-  isRevoked        Boolean    @default(false)
+  isRevoked        Boolean   @default(false)
 
   @@index([householdId, expiresAt])
   @@index([createdByUserId])
