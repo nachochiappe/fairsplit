@@ -4,16 +4,12 @@
   "private": true,
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "scripts": {
     "dev": "echo 'No dev server for @fairsplit/db'",
     "build": "pnpm prisma:generate && tsc -p tsconfig.json",
     "test": "echo 'No tests for @fairsplit/db'",
     "lint": "echo 'No lint step for @fairsplit/db'",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy"
+    "prisma:generate": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1"

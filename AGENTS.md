@@ -29,8 +29,13 @@ pnpm lint
 pnpm format
 
 # Database
-pnpm db:migrate       # Run Prisma migrations
-pnpm db:generate      # Regenerate Prisma client
+pnpm db:generate               # Regenerate Prisma client
+pnpm db:new-migration <name>   # Author a migration from schema.prisma
+pnpm db:verify                 # Check schema.prisma matches the migration history
+pnpm db:reset-test             # Rebuild the local test database
+
+# Migrations reach production by merging to main; the Supabase GitHub
+# integration deploys them. No command applies them to production.
 
 # Run API tests only (Vitest integration tests)
 cd apps/api && pnpm test

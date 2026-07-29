@@ -1,2 +1,0 @@
-ALTER TABLE "User"
-ADD COLUMN "sessionRevokedAt" TIMESTAMP(3);

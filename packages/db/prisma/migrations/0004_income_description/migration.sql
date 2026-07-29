@@ -1,2 +1,0 @@
-ALTER TABLE "MonthlyIncome"
-ADD COLUMN IF NOT EXISTS "description" TEXT NOT NULL DEFAULT 'Income';

@@ -167,9 +167,13 @@ docker compose up -d
 4. Prepare the database.
 
 ```bash
-pnpm db:generate
-pnpm db:migrate
+pnpm db:generate     # Prisma client
+pnpm db:reset-test   # build the local test database from supabase/migrations
 ```
+
+Migrations reach production by merging to `main` — the Supabase GitHub
+integration deploys them. There is no command that applies migrations to
+production, by design.
 
 5. Start the app.
 
