@@ -76,6 +76,30 @@ fetches do the same via `ApiError` in `lib/api.ts`.
 ### Database
 Prisma with PostgreSQL. Key models: `User`, `Household`, `MonthlyIncome`, `Expense`, `ExpenseTemplate` (recurring), `Category`/`SuperCategory`, `MonthlyExchangeRate`. The `packages/db` singleton pattern ensures a single Prisma client instance in development.
 
+### Migrations
+Two histories describe the same database and must stay in step:
+`packages/db/prisma/migrations` (Prisma, the applier) and `supabase/migrations`
+(the same SQL, timestamp-prefixed, for the Supabase CLI and preview branches).
+Add a migration to both. `supabase migration list` should show Local and Remote
+matching on every row.
+
+Never change the schema outside a migration. Every drift this repo has had came
+from a hand-run script: `harden-household-auth-link.sql` set `householdId` NOT
+NULL across seven tables, was deleted from the repo, and silently broke global
+system super categories for five months (see 0018).
+
+`pnpm db:migrate` does not work against the `DATABASE_URL` in `packages/db/.env`:
+that is the transaction pooler (`:6543`, `pgbouncer=true`), and `prisma migrate
+deploy` needs a session-mode advisory lock, so it hangs with no output. Apply
+migrations with the `:5432` session-pooler URL commented beside it.
+
+`DATABASE_URL` points at **production**. Only `TEST_DATABASE_URL` uses the local
+docker Postgres.
+
+`SuperCategory.householdId IS NULL` means "global, available to every
+household" — it is a value with meaning, not a missing value. Do not make that
+column NOT NULL.
+
 ### Settlement Algorithm (`packages/shared/src/settlement.ts`)
 Calculates each user's fair share of expenses based on their proportion of total household income for a given month. Expenses are normalized to ARS using `MonthlyExchangeRate` before calculation.
 

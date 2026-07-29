@@ -15,9 +15,9 @@ apps/api/test-results
 !.env.example
 
 # Database and local data
-prisma/migrations
 packages/db/data
-supabase/
+# supabase/ is tracked (config.toml, migrations); its local CLI state is
+# excluded by supabase/.gitignore.
 
 # Generated docs and automation artifacts
 docs/
