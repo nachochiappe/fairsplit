@@ -1827,12 +1827,25 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return res.status(400).json({ error: 'At least one field is required.' });
     }
 
+    // Deliberately looks at the same set the read paths return — the household's
+    // own plus the global system ones — so that editing a system super category is
+    // refused on its own terms rather than reported as missing. Scoping the lookup
+    // to the household alone would also refuse it, but only by accident: a system
+    // super category has no `householdId`, and the day someone widens this query to
+    // match the reads, renaming one would start succeeding and rename it for every
+    // household at once.
     const superCategory = await prisma.superCategory.findFirst({
-      where: { id: req.params.id, householdId: auth.householdId },
-      select: { id: true },
+      where: {
+        id: req.params.id,
+        OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+      },
+      select: { id: true, isSystem: true },
     });
     if (!superCategory) {
       return res.status(404).json({ error: 'Super category not found.' });
+    }
+    if (superCategory.isSystem) {
+      return res.status(400).json({ error: 'System super categories cannot be edited.' });
     }
 
     try {
@@ -1876,8 +1889,13 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
+    // Same widening as the edit route, for the same reason: the `isSystem` refusal
+    // below should be what stops this, not the household scoping happening to miss.
     const source = await prisma.superCategory.findFirst({
-      where: { id: req.params.id, householdId: auth.householdId },
+      where: {
+        id: req.params.id,
+        OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+      },
       include: {
         _count: {
           select: { categories: true },
