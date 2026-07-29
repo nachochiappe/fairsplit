@@ -483,6 +483,10 @@ export function SettingsClient({
   };
 
   const onRenameSuperCategory = async (superCategory: SuperCategory) => {
+    // System super categories are shared by every household, so nobody edits them.
+    if (superCategory.isSystem) {
+      return;
+    }
     setSuperCategoryRenameDialog({
       superCategory,
       nextName: superCategory.name,
@@ -1140,36 +1144,42 @@ export function SettingsClient({
                 </div>
 
                 <div className="ml-2 flex shrink-0 items-center gap-2 self-start">
-                  <ActionButton
-                    action="rename"
-                    aria-label={copy.renameAria(superCategory.name)}
-                    className="h-11 w-11 sm:hidden"
-                    disabled={saving}
-                    onClick={() => void onRenameSuperCategory(superCategory)}
-                    size="icon"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      viewBox="0 0 24 24"
+                  {/* A system super category belongs to every household, so it offers
+                      no controls at all — the "System" badge is the whole story. */}
+                  {!superCategory.isSystem ? (
+                    <ActionButton
+                      action="rename"
+                      aria-label={copy.renameAria(superCategory.name)}
+                      className="h-11 w-11 sm:hidden"
+                      disabled={saving}
+                      onClick={() => void onRenameSuperCategory(superCategory)}
+                      size="icon"
                     >
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-                    </svg>
-                  </ActionButton>
-                  <ActionButton
-                    action="rename"
-                    className="hidden sm:inline-flex"
-                    disabled={saving}
-                    onClick={() => void onRenameSuperCategory(superCategory)}
-                  >
-                    {shared.rename}
-                  </ActionButton>
+                      <svg
+                        aria-hidden="true"
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </ActionButton>
+                  ) : null}
+                  {!superCategory.isSystem ? (
+                    <ActionButton
+                      action="rename"
+                      className="hidden sm:inline-flex"
+                      disabled={saving}
+                      onClick={() => void onRenameSuperCategory(superCategory)}
+                    >
+                      {shared.rename}
+                    </ActionButton>
+                  ) : null}
                   {!superCategory.isSystem ? (
                     <ActionButton
                       action="archive"
