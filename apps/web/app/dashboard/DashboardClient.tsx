@@ -75,22 +75,24 @@ function DashboardClientContent({
   return (
     <main
       id="main-content"
-      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-8 md:px-6 md:pb-10 md:pt-10"
+      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-5 md:px-6 md:pb-10 md:pt-7"
     >
-      <header className="mb-7 rounded-3xl border border-stroke/80 bg-surface p-6 shadow-sm md:p-9">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-6">
-            <TitleMark className="h-12 w-12 shrink-0 rounded-2xl md:h-14 md:w-14" />
+      <header className="mb-5 rounded-3xl border border-stroke/80 bg-surface px-4 py-4 shadow-sm md:px-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <TitleMark className="h-10 w-10 shrink-0 rounded-xl" />
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">
                 Fairsplit
               </p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink-strong md:text-5xl">
-                {copy.title}
-              </h1>
-              <p className="mt-2 max-w-2xl text-base text-ink-muted">
-                {copy.subtitle}
-              </p>
+              <div className="mt-1 md:flex md:items-baseline md:gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-ink-strong md:text-3xl">
+                  {copy.title}
+                </h1>
+                <p className="mt-1 max-w-2xl text-sm text-ink-muted md:mt-0">
+                  {copy.subtitle}
+                </p>
+              </div>
             </div>
           </div>
           <MonthSelector month={month} locale={locale} />
