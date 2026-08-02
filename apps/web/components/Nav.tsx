@@ -98,7 +98,7 @@ export function Nav({ month, locale }: { month: string; locale: AppLocale }) {
     <>
       <nav
         aria-label={copy.nav.primaryNavigation}
-        className="mb-8 hidden grid-cols-2 gap-2 rounded-2xl border border-stroke/80 bg-surface p-2 shadow-sm md:grid md:grid-cols-4"
+        className="mb-5 hidden grid-cols-2 gap-2 rounded-3xl border border-stroke/80 bg-surface p-2 shadow-sm md:grid md:grid-cols-4"
       >
         {links.map((link) => {
           const href = month && link.monthScoped ? `${link.href}?month=${month}` : link.href;

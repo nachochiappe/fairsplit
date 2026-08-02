@@ -1,7 +1,19 @@
 import { cookies } from 'next/headers';
 import { ExpensesClient } from './ExpensesClient';
-import { Expense, getCategories, getExchangeRates, getExpenses, getSettlement, getUsers } from '../../lib/api';
-import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
+import {
+  Expense,
+  getCategories,
+  getExchangeRates,
+  getExpenses,
+  getSettlement,
+  getUsers,
+} from '../../lib/api';
+import {
+  buildServerApiInit,
+  getServerRequestId,
+  withServerApiLogging,
+  withSessionRecovery,
+} from '../../lib/server-api';
 import { DEFAULT_MAX_ROWS_PER_SECTION, getSectionFetchBatchSize } from './pagination';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -60,7 +72,8 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
     ),
   );
   const sessionUserId = session?.userId ?? null;
-  const currentUserId = sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
+  const currentUserId =
+    sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
   const locale = resolveLocaleForUser(users, sessionUserId);
   const [oneTimeData, installmentData, totalsData, settlement] = await withSessionRecovery(() =>
     withServerApiLogging(requestId, { month, route: '/expenses', step: 'month-totals' }, async () =>
@@ -117,7 +130,8 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   );
 
   const noIncomeWarning = settlement === null ? t(locale).expenses.noIncomeWarning : null;
-  const totalExpensesArs = settlement?.totalExpenses ?? totalsData.totals?.filteredSubtotalArs ?? '0.00';
+  const totalExpensesArs =
+    settlement?.totalExpenses ?? totalsData.totals?.filteredSubtotalArs ?? '0.00';
 
   const initialWarnings = Array.from(
     new Set([
@@ -133,7 +147,11 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       currentUserId={currentUserId}
       month={month}
       initialUsers={users}
-      initialExpenses={mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses])}
+      initialExpenses={mergeUniqueExpenses([
+        ...fixedData.expenses,
+        ...oneTimeData.expenses,
+        ...installmentData.expenses,
+      ])}
       initialWarnings={initialWarnings}
       initialSectionPagination={{
         fixed: {

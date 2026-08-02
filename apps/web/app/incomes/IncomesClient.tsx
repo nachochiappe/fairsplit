@@ -490,6 +490,7 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
 
   return (
     <AppShell
+      compact
       month={month}
       title={copy.title}
       subtitle={copy.subtitle}

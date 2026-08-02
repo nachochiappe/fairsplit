@@ -4,7 +4,7 @@ import { memo } from 'react';
 import { formatMoney } from '../../lib/currency';
 import { type AppLocale, type Expense } from '../../lib/api';
 import type { Translation } from '../../lib/i18n';
-import { DesktopExpenseActionMenu } from './DesktopExpenseActionMenu';
+import { ExpenseActionMenu } from './ExpenseActionMenu';
 
 type ExpensesCopy = Translation['expenses'];
 
@@ -51,10 +51,11 @@ function DesktopExpenseRowComponent({
         <div className="truncate text-xs text-slate-500">{getExpenseKindLabel(copy, expense)}</div>
       </td>
       <td className="px-4 py-3">{expense.categoryName}</td>
-      <td className="px-4 py-3 tabular-nums">
+      <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
+      <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink-strong">
         <div>ARS {formatMoney(expense.amountArs, locale)}</div>
         {expense.currencyCode !== 'ARS' ? (
-          <div className="text-xs text-slate-500">
+          <div className="font-normal text-xs text-slate-500">
             {copy.originalAmount(
               expense.currencyCode,
               formatMoney(expense.amountOriginal, locale),
@@ -63,9 +64,8 @@ function DesktopExpenseRowComponent({
           </div>
         ) : null}
       </td>
-      <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
       <td className="whitespace-nowrap px-4 py-3 text-right">
-        <DesktopExpenseActionMenu
+        <ExpenseActionMenu
           expense={expense}
           isOpen={isOpen}
           locale={locale}

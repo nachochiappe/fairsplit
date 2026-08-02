@@ -29,7 +29,6 @@ import {
   getExpenses,
   getSettlement,
   updateExpense,
-  upsertExchangeRate,
   User,
 } from '../../lib/api';
 import {
@@ -49,11 +48,6 @@ import {
   insertExpense,
 } from './optimistic-expenses';
 import {
-  cardClass,
-  compactFieldClass,
-  fieldClass,
-  moneyInputClass,
-  primaryButtonClass,
   tableControlFieldClass,
   tableControlLabelClass,
   tableControlSearchFieldClass,
@@ -64,9 +58,7 @@ import {
   expenseSchema,
   ExpenseForm,
   getTodayDateInputValue,
-  supportedCurrencyCodes,
   toSupportedCurrencyCode,
-  type SupportedCurrencyCode,
 } from './expense-form';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ScopeDialog } from './ScopeDialog';
@@ -76,6 +68,7 @@ import { DesktopExpenseRow } from './DesktopExpenseRow';
 type ApplyScope = 'single' | 'future' | 'all';
 type ExpenseSortField = 'date' | 'description' | 'category' | 'amountArs' | 'paidBy';
 type SortDirection = 'asc' | 'desc';
+type ExpenseTypeFilter = 'all' | ExpenseSectionKey;
 const DEFAULT_SORT_FIELD: ExpenseSortField = 'date';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 const SEARCH_DEBOUNCE_MS = 350;
@@ -86,8 +79,8 @@ const SORTABLE_EXPENSE_FIELDS: readonly ExpenseSortField[] = [
   'date',
   'description',
   'category',
-  'amountArs',
   'paidBy',
+  'amountArs',
 ];
 
 function getSortFieldLabel(copy: ExpensesCopy, sortField: ExpenseSortField): string {
@@ -126,7 +119,6 @@ interface SubmissionToastState {
 }
 
 const SUBMISSION_TOAST_VISIBLE_MS = 6000;
-
 
 interface ExpensesClientProps {
   currentUserId: string | null;
@@ -188,7 +180,6 @@ function makeSectionOpenMap(value: boolean): Record<ExpenseSectionKey, boolean> 
   };
 }
 
-
 function formatMonthHeading(value: string, locale: AppLocale): string {
   const date = new Date(`${value}-01T00:00:00`);
   if (Number.isNaN(date.getTime())) {
@@ -207,22 +198,6 @@ function getDefaultSortDirection(sortField: ExpenseSortField): SortDirection {
   }
 
   return 'desc';
-}
-
-function getSortDirectionLabel(
-  copy: ExpensesCopy,
-  sortField: ExpenseSortField,
-  sortDirection: SortDirection,
-): string {
-  if (sortField === 'amountArs') {
-    return sortDirection === 'asc' ? copy.sortDirection.lowestFirst : copy.sortDirection.highestFirst;
-  }
-
-  if (sortField === 'description' || sortField === 'category' || sortField === 'paidBy') {
-    return sortDirection === 'asc' ? copy.sortDirection.aToZ : copy.sortDirection.zToA;
-  }
-
-  return sortDirection === 'asc' ? copy.sortDirection.oldestFirst : copy.sortDirection.newestFirst;
 }
 
 function getAriaSortValue(
@@ -267,37 +242,49 @@ export function ExpensesClient({
   const [warnings, setWarnings] = useState<string[]>(initialWarnings);
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
-  const [totalCombinedExpensesArs, setTotalCombinedExpensesArs] = useState<number>(Number(initialTotalExpensesArs));
-  const [subtotalTotals, setSubtotalTotals] = useState<ExpenseListResponse['totals']>(initialTotals);
+  const [totalCombinedExpensesArs, setTotalCombinedExpensesArs] = useState<number>(
+    Number(initialTotalExpensesArs),
+  );
+  const [subtotalTotals, setSubtotalTotals] =
+    useState<ExpenseListResponse['totals']>(initialTotals);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [scopeDialog, setScopeDialog] = useState<ScopeDialogState | null>(null);
-  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState | null>(null);
+  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialogState | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submissionToast, setSubmissionToast] = useState<SubmissionToastState | null>(null);
-  const [newFxCurrency, setNewFxCurrency] = useState<SupportedCurrencyCode>('USD');
-  const [newFxRate, setNewFxRate] = useState('');
-  const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(DEFAULT_MAX_ROWS_PER_SECTION);
-  const fetchBatchSize = useMemo(() => getSectionFetchBatchSize(maxRowsPerSection), [maxRowsPerSection]);
+  const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(
+    DEFAULT_MAX_ROWS_PER_SECTION,
+  );
+  const fetchBatchSize = useMemo(
+    () => getSectionFetchBatchSize(maxRowsPerSection),
+    [maxRowsPerSection],
+  );
   const [sectionPages, setSectionPages] = useState<Record<ExpenseSectionKey, number>>({
     fixed: 1,
     oneTime: 1,
     installment: 1,
   });
-  const [sectionPagination, setSectionPagination] = useState<SectionPaginationMap>(initialSectionPagination);
+  const [sectionPagination, setSectionPagination] =
+    useState<SectionPaginationMap>(initialSectionPagination);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [sortField, setSortField] = useState<ExpenseSortField>(DEFAULT_SORT_FIELD);
   const [sortDirection, setSortDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION);
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [selectedExpenseType, setSelectedExpenseType] = useState<ExpenseTypeFilter>('all');
+  const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const hasSearchQuery = searchQuery.trim().length > 0;
-  const [isMobileFxOpen, setIsMobileFxOpen] = useState(false);
-  const [isDesktopFxEditing, setIsDesktopFxEditing] = useState(false);
   const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
   const [openExpenseActionMenuId, setOpenExpenseActionMenuId] = useState<string | null>(null);
-  const [sectionOpen, setSectionOpen] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionOpenMap(true));
-  const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(makeSectionLoadingMap(false));
+  const [sectionOpen, setSectionOpen] = useState<Record<ExpenseSectionKey, boolean>>(
+    makeSectionOpenMap(true),
+  );
+  const [sectionLoading, setSectionLoading] = useState<Record<ExpenseSectionKey, boolean>>(
+    makeSectionLoadingMap(false),
+  );
   const expensesRef = useRef(expenses);
   const submissionToastTimeoutRef = useRef<number | null>(null);
   const warningsRef = useRef(warnings);
@@ -305,9 +292,14 @@ export function ExpensesClient({
   const exchangeRatesRef = useRef(exchangeRates);
   const subtotalTotalsRef = useRef(subtotalTotals);
   const totalCombinedExpensesArsRef = useRef(totalCombinedExpensesArs);
-  const sectionFetchInFlightRef = useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
-  const sectionCacheFetchedAtRef = useRef<Record<ExpenseSectionKey, number>>(makeSectionTimestampMap(Date.now()));
-  const sectionPrefetchTargetRef = useRef<Record<ExpenseSectionKey, string | null>>(makeSectionPrefetchTargetMap());
+  const sectionFetchInFlightRef =
+    useRef<Record<ExpenseSectionKey, Promise<void> | null>>(makeSectionPromiseMap());
+  const sectionCacheFetchedAtRef = useRef<Record<ExpenseSectionKey, number>>(
+    makeSectionTimestampMap(Date.now()),
+  );
+  const sectionPrefetchTargetRef = useRef<Record<ExpenseSectionKey, string | null>>(
+    makeSectionPrefetchTargetMap(),
+  );
   const sectionLoadingCountRef = useRef<Record<ExpenseSectionKey, number>>({
     fixed: 0,
     oneTime: 0,
@@ -315,8 +307,8 @@ export function ExpensesClient({
   });
   const fetchBatchSizeRef = useRef(fetchBatchSize);
   const expenseFormRef = useRef<HTMLFormElement | null>(null);
+  const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const mutationTokenRef = useRef(0);
-  const fxCurrencies = useMemo(() => supportedCurrencyCodes.filter((code) => code !== 'ARS'), []);
 
   useEffect(() => {
     fetchBatchSizeRef.current = fetchBatchSize;
@@ -345,6 +337,34 @@ export function ExpensesClient({
       document.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [openExpenseActionMenuId]);
+
+  useEffect(() => {
+    if (!isMoreFiltersOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        moreFiltersRef.current &&
+        event.target instanceof Node &&
+        !moreFiltersRef.current.contains(event.target)
+      ) {
+        setIsMoreFiltersOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsMoreFiltersOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMoreFiltersOpen]);
 
   useEffect(() => {
     if (!openExpenseActionMenuId) {
@@ -412,45 +432,33 @@ export function ExpensesClient({
     [categories],
   );
   const sortedActiveCategories = useMemo(
-    () => [...activeCategories].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+    () =>
+      [...activeCategories].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
     [activeCategories],
   );
   const hasActiveFilters = useMemo(
     () => Boolean(searchQuery.trim()) || selectedCategoryId !== 'all',
     [searchQuery, selectedCategoryId],
   );
-  const hasActiveControls = useMemo(
-    () => hasActiveFilters || sortField !== DEFAULT_SORT_FIELD || sortDirection !== DEFAULT_SORT_DIRECTION,
-    [hasActiveFilters, sortDirection, sortField],
-  );
-  const handleSortChange = useCallback((nextSortField: ExpenseSortField) => {
-    if (nextSortField === sortField) {
-      setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'));
-      return;
-    }
+  const handleSortChange = useCallback(
+    (nextSortField: ExpenseSortField) => {
+      if (nextSortField === sortField) {
+        setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'));
+        return;
+      }
 
-    setSortField(nextSortField);
-    setSortDirection(getDefaultSortDirection(nextSortField));
-  }, [sortField]);
+      setSortField(nextSortField);
+      setSortDirection(getDefaultSortDirection(nextSortField));
+    },
+    [sortField],
+  );
   const sortableColumns = useMemo(
-    () => SORTABLE_EXPENSE_FIELDS.map((field) => ({ field, label: getSortFieldLabel(copy, field) })),
+    () =>
+      SORTABLE_EXPENSE_FIELDS.map((field) => ({ field, label: getSortFieldLabel(copy, field) })),
     [copy],
   );
-  const mobileControlChips = useMemo(() => {
-    const chips: string[] = [];
-
-    if (selectedCategoryId !== 'all') {
-      const category = sortedActiveCategories.find((entry) => entry.id === selectedCategoryId);
-      if (category) {
-        chips.push(category.name);
-      }
-    }
-    if (sortField !== DEFAULT_SORT_FIELD || sortDirection !== DEFAULT_SORT_DIRECTION) {
-      chips.push(`${getSortFieldLabel(copy, sortField)}: ${getSortDirectionLabel(copy, sortField, sortDirection)}`);
-    }
-
-    return chips;
-  }, [copy, selectedCategoryId, sortDirection, sortField, sortedActiveCategories]);
   const applyClientControls = useCallback(
     (list: Expense[]) => {
       const searchTerm = debouncedSearchQuery.trim().toLowerCase();
@@ -461,7 +469,8 @@ export function ExpensesClient({
         if (!searchTerm) {
           return true;
         }
-        const searchableText = `${expense.description} ${expense.categoryName} ${expense.paidByUserName}`.toLowerCase();
+        const searchableText =
+          `${expense.description} ${expense.categoryName} ${expense.paidByUserName}`.toLowerCase();
         return searchableText.includes(searchTerm);
       });
 
@@ -469,13 +478,19 @@ export function ExpensesClient({
       sorted.sort((left, right) => {
         let comparison = 0;
         if (sortField === 'description') {
-          comparison = left.description.localeCompare(right.description, undefined, { sensitivity: 'base' });
+          comparison = left.description.localeCompare(right.description, undefined, {
+            sensitivity: 'base',
+          });
         } else if (sortField === 'category') {
-          comparison = left.categoryName.localeCompare(right.categoryName, undefined, { sensitivity: 'base' });
+          comparison = left.categoryName.localeCompare(right.categoryName, undefined, {
+            sensitivity: 'base',
+          });
         } else if (sortField === 'amountArs') {
           comparison = Number(left.amountArs) - Number(right.amountArs);
         } else if (sortField === 'paidBy') {
-          comparison = left.paidByUserName.localeCompare(right.paidByUserName, undefined, { sensitivity: 'base' });
+          comparison = left.paidByUserName.localeCompare(right.paidByUserName, undefined, {
+            sensitivity: 'base',
+          });
         } else {
           comparison = left.date.localeCompare(right.date);
         }
@@ -513,13 +528,19 @@ export function ExpensesClient({
   useEffect(() => {
     optimisticFilterStateRef.current = optimisticFilterState;
   }, [optimisticFilterState]);
-  const visibleExpenses = useMemo(() => applyClientControls(expenses), [applyClientControls, expenses]);
+  const visibleExpenses = useMemo(
+    () => applyClientControls(expenses),
+    [applyClientControls, expenses],
+  );
   const loadedFilteredSubtotalArs = useMemo(
     () => visibleExpenses.reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
   const loadedFixedSubtotalArs = useMemo(
-    () => visibleExpenses.filter((expense) => expense.fixed.enabled).reduce((sum, expense) => sum + Number(expense.amountArs), 0),
+    () =>
+      visibleExpenses
+        .filter((expense) => expense.fixed.enabled)
+        .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
   const loadedInstallmentSubtotalArs = useMemo(
@@ -536,13 +557,25 @@ export function ExpensesClient({
         .reduce((sum, expense) => sum + Number(expense.amountArs), 0),
     [visibleExpenses],
   );
-  const filteredSubtotalArs = subtotalTotals ? Number(subtotalTotals.filteredSubtotalArs) : loadedFilteredSubtotalArs;
-  const fixedSubtotalArs = subtotalTotals ? Number(subtotalTotals.bySection.fixedArs) : loadedFixedSubtotalArs;
-  const installmentSubtotalArs = subtotalTotals ? Number(subtotalTotals.bySection.installmentArs) : loadedInstallmentSubtotalArs;
-  const oneTimeSubtotalArs = subtotalTotals ? Number(subtotalTotals.bySection.oneTimeArs) : loadedOneTimeSubtotalArs;
-  const fixedExpenses = useMemo(() => visibleExpenses.filter((expense) => expense.fixed.enabled), [visibleExpenses]);
+  const filteredSubtotalArs = subtotalTotals
+    ? Number(subtotalTotals.filteredSubtotalArs)
+    : loadedFilteredSubtotalArs;
+  const fixedSubtotalArs = subtotalTotals
+    ? Number(subtotalTotals.bySection.fixedArs)
+    : loadedFixedSubtotalArs;
+  const installmentSubtotalArs = subtotalTotals
+    ? Number(subtotalTotals.bySection.installmentArs)
+    : loadedInstallmentSubtotalArs;
+  const oneTimeSubtotalArs = subtotalTotals
+    ? Number(subtotalTotals.bySection.oneTimeArs)
+    : loadedOneTimeSubtotalArs;
+  const fixedExpenses = useMemo(
+    () => visibleExpenses.filter((expense) => expense.fixed.enabled),
+    [visibleExpenses],
+  );
   const installmentExpenses = useMemo(
-    () => visibleExpenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
+    () =>
+      visibleExpenses.filter((expense) => !expense.fixed.enabled && Boolean(expense.installment)),
     [visibleExpenses],
   );
   const oneTimeExpenses = useMemo(
@@ -685,7 +718,11 @@ export function ExpensesClient({
           ),
         sectionPagination:
           options.sectionPagination ??
-          adjustSectionPagination(previousSnapshot.sectionPagination, previousAffected, nextAffected),
+          adjustSectionPagination(
+            previousSnapshot.sectionPagination,
+            previousAffected,
+            nextAffected,
+          ),
         exchangeRates: options.exchangeRates ?? previousSnapshot.exchangeRates,
       };
 
@@ -696,7 +733,8 @@ export function ExpensesClient({
   );
 
   const getUserName = useCallback(
-    (userId: string, fallbackName: string) => users.find((user) => user.id === userId)?.name ?? fallbackName,
+    (userId: string, fallbackName: string) =>
+      users.find((user) => user.id === userId)?.name ?? fallbackName,
     [users],
   );
 
@@ -706,8 +744,10 @@ export function ExpensesClient({
       return {
         categoryName: category?.name ?? fallbackExpense?.categoryName ?? copy.uncategorized,
         superCategoryId: category?.superCategoryId ?? fallbackExpense?.superCategoryId ?? null,
-        superCategoryName: category?.superCategoryName ?? fallbackExpense?.superCategoryName ?? null,
-        superCategoryColor: category?.superCategoryColor ?? fallbackExpense?.superCategoryColor ?? null,
+        superCategoryName:
+          category?.superCategoryName ?? fallbackExpense?.superCategoryName ?? null,
+        superCategoryColor:
+          category?.superCategoryColor ?? fallbackExpense?.superCategoryColor ?? null,
       };
     },
     [categories, copy.uncategorized],
@@ -738,15 +778,18 @@ export function ExpensesClient({
       }
 
       const existingInstallment = existingExpense?.installment;
-      const nextTotal = payload?.enabled ? (payload.count ?? existingInstallment?.total ?? 1) : (existingInstallment?.total ?? 1);
-      const entryMode =
-        payload?.enabled
-          ? (payload.entryMode ?? (payload.totalAmount !== undefined ? 'total' : 'perInstallment'))
-          : 'perInstallment';
+      const nextTotal = payload?.enabled
+        ? (payload.count ?? existingInstallment?.total ?? 1)
+        : (existingInstallment?.total ?? 1);
+      const entryMode = payload?.enabled
+        ? (payload.entryMode ?? (payload.totalAmount !== undefined ? 'total' : 'perInstallment'))
+        : 'perInstallment';
       const perInstallmentAmount =
         payload?.enabled && entryMode === 'perInstallment'
-          ? (payload.perInstallmentAmount ?? options.amount ?? Number(existingExpense?.amountOriginal ?? 0))
-          : options.amount ?? Number(existingExpense?.amountOriginal ?? 0);
+          ? (payload.perInstallmentAmount ??
+            options.amount ??
+            Number(existingExpense?.amountOriginal ?? 0))
+          : (options.amount ?? Number(existingExpense?.amountOriginal ?? 0));
       const totalAmount =
         payload?.enabled && entryMode === 'total'
           ? payload.totalAmount
@@ -768,7 +811,8 @@ export function ExpensesClient({
       return {
         amountOriginal: schedule.amounts[installmentNumber - 1] ?? schedule.amounts[0] ?? '0.00',
         installment: {
-          seriesId: existingInstallment?.seriesId ?? `optimistic:series:${createOptimisticExpenseId()}`,
+          seriesId:
+            existingInstallment?.seriesId ?? `optimistic:series:${createOptimisticExpenseId()}`,
           number: installmentNumber,
           total: nextTotal,
           isGenerated: existingInstallment?.isGenerated ?? false,
@@ -789,13 +833,17 @@ export function ExpensesClient({
         return null;
       }
 
-      const fxRateUsed = (payload.currencyCode ?? 'ARS') === 'ARS' ? '1.000000' : Number(payload.fxRate ?? 0).toFixed(6);
+      const fxRateUsed =
+        (payload.currencyCode ?? 'ARS') === 'ARS'
+          ? '1.000000'
+          : Number(payload.fxRate ?? 0).toFixed(6);
       const installmentValues = buildInstallmentValues({
         installmentPayload: payload.installment,
         amount: payload.amount,
         existingExpense,
       });
-      const amountOriginal = installmentValues?.amountOriginal ?? Number(payload.amount ?? 0).toFixed(2);
+      const amountOriginal =
+        installmentValues?.amountOriginal ?? Number(payload.amount ?? 0).toFixed(2);
       const categoryDetails = getCategoryDetails(payload.categoryId, existingExpense);
 
       return {
@@ -815,15 +863,27 @@ export function ExpensesClient({
         currencyCode: payload.currencyCode ?? 'ARS',
         fxRateUsed,
         paidByUserId: payload.paidByUserId,
-        paidByUserName: getUserName(payload.paidByUserId, existingExpense?.paidByUserName ?? copy.unknownUser),
+        paidByUserName: getUserName(
+          payload.paidByUserId,
+          existingExpense?.paidByUserName ?? copy.unknownUser,
+        ),
         fixed: {
           enabled: Boolean(payload.fixed?.enabled),
-          templateId: payload.fixed?.enabled ? `optimistic:template:${createOptimisticExpenseId()}` : null,
+          templateId: payload.fixed?.enabled
+            ? `optimistic:template:${createOptimisticExpenseId()}`
+            : null,
         },
         installment: installmentValues?.installment ?? null,
       };
     },
-    [buildInstallmentValues, copy.unknownUser, getCategoryDetails, getUserName, month, toAmountArsString],
+    [
+      buildInstallmentValues,
+      copy.unknownUser,
+      getCategoryDetails,
+      getUserName,
+      month,
+      toAmountArsString,
+    ],
   );
 
   const buildOptimisticUpdatedExpense = useCallback(
@@ -851,7 +911,9 @@ export function ExpensesClient({
 
       const amountOriginal =
         nextInstallmentValues?.amountOriginal ??
-        (payload.amount !== undefined ? Number(payload.amount).toFixed(2) : existingExpense.amountOriginal);
+        (payload.amount !== undefined
+          ? Number(payload.amount).toFixed(2)
+          : existingExpense.amountOriginal);
       const nextCategoryId = payload.categoryId ?? existingExpense.categoryId;
       const categoryDetails = getCategoryDetails(nextCategoryId, existingExpense);
       const nextPaidByUserId = payload.paidByUserId ?? existingExpense.paidByUserId;
@@ -909,113 +971,147 @@ export function ExpensesClient({
     [resetForm, sortedActiveCategories],
   );
 
-  const fetchMonthData = useCallback(async (options?: { includeRates?: boolean; includeSettlement?: boolean; mutationToken?: number }) => {
-    const allSectionKeys: ExpenseSectionKey[] = ['fixed', 'oneTime', 'installment'];
-    beginSectionLoading(allSectionKeys);
+  const fetchMonthData = useCallback(
+    async (options?: {
+      includeRates?: boolean;
+      includeSettlement?: boolean;
+      mutationToken?: number;
+    }) => {
+      const allSectionKeys: ExpenseSectionKey[] = ['fixed', 'oneTime', 'installment'];
+      beginSectionLoading(allSectionKeys);
 
-    try {
-    const includeRates = options?.includeRates ?? false;
-    const includeSettlement = options?.includeSettlement ?? false;
-    const mutationToken = options?.mutationToken;
-    const sharedQuery = { sortBy: 'date' as const, sortDir: 'desc' as const, limit: fetchBatchSizeRef.current };
-    let hasNoIncomeSettlement = false;
+      try {
+        const includeRates = options?.includeRates ?? false;
+        const includeSettlement = options?.includeSettlement ?? false;
+        const mutationToken = options?.mutationToken;
+        const sharedQuery = {
+          sortBy: 'date' as const,
+          sortDir: 'desc' as const,
+          limit: fetchBatchSizeRef.current,
+        };
+        let hasNoIncomeSettlement = false;
 
-    const [fixedData, oneTimeData, installmentData, totalsData, rates, settlement] = await Promise.all([
-      getExpenses(month, { ...sharedQuery, type: 'fixed', hydrate: true, includeCount: true }),
-      getExpenses(month, { ...sharedQuery, type: 'oneTime', hydrate: false, includeCount: false }),
-      getExpenses(month, { ...sharedQuery, type: 'installment', hydrate: false, includeCount: false }),
-      getExpenses(month, {
-        ...filterQueryRef.current,
-        sortBy: 'date',
-        sortDir: 'desc',
-        limit: 1,
-        hydrate: false,
-        includeCount: false,
-        includeTotals: true,
-      }),
-      includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
-      includeSettlement
-        ? getSettlement(month, undefined, { hydrate: false }).catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : copy.settlementLoadFailed;
-            if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
-              hasNoIncomeSettlement = true;
-              return null;
-            }
+        const [fixedData, oneTimeData, installmentData, totalsData, rates, settlement] =
+          await Promise.all([
+            getExpenses(month, {
+              ...sharedQuery,
+              type: 'fixed',
+              hydrate: true,
+              includeCount: true,
+            }),
+            getExpenses(month, {
+              ...sharedQuery,
+              type: 'oneTime',
+              hydrate: false,
+              includeCount: false,
+            }),
+            getExpenses(month, {
+              ...sharedQuery,
+              type: 'installment',
+              hydrate: false,
+              includeCount: false,
+            }),
+            getExpenses(month, {
+              ...filterQueryRef.current,
+              sortBy: 'date',
+              sortDir: 'desc',
+              limit: 1,
+              hydrate: false,
+              includeCount: false,
+              includeTotals: true,
+            }),
+            includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
+            includeSettlement
+              ? getSettlement(month, undefined, { hydrate: false }).catch((error: unknown) => {
+                  const message =
+                    error instanceof Error ? error.message : copy.settlementLoadFailed;
+                  if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
+                    hasNoIncomeSettlement = true;
+                    return null;
+                  }
 
-            throw error;
-          })
-        : Promise.resolve<null | { totalExpenses: string }>(null),
-    ]);
+                  throw error;
+                })
+              : Promise.resolve<null | { totalExpenses: string }>(null),
+          ]);
 
-    const paginationBySection: SectionPaginationMap = {
-      fixed: {
-        nextCursor: fixedData.pagination?.nextCursor ?? null,
-        hasMore: fixedData.pagination?.hasMore ?? false,
-        totalCount: fixedData.pagination?.totalCount ?? null,
-      },
-      oneTime: {
-        nextCursor: oneTimeData.pagination?.nextCursor ?? null,
-        hasMore: oneTimeData.pagination?.hasMore ?? false,
-        totalCount: oneTimeData.pagination?.totalCount ?? null,
-      },
-      installment: {
-        nextCursor: installmentData.pagination?.nextCursor ?? null,
-        hasMore: installmentData.pagination?.hasMore ?? false,
-        totalCount: installmentData.pagination?.totalCount ?? null,
-      },
-    };
+        const paginationBySection: SectionPaginationMap = {
+          fixed: {
+            nextCursor: fixedData.pagination?.nextCursor ?? null,
+            hasMore: fixedData.pagination?.hasMore ?? false,
+            totalCount: fixedData.pagination?.totalCount ?? null,
+          },
+          oneTime: {
+            nextCursor: oneTimeData.pagination?.nextCursor ?? null,
+            hasMore: oneTimeData.pagination?.hasMore ?? false,
+            totalCount: oneTimeData.pagination?.totalCount ?? null,
+          },
+          installment: {
+            nextCursor: installmentData.pagination?.nextCursor ?? null,
+            hasMore: installmentData.pagination?.hasMore ?? false,
+            totalCount: installmentData.pagination?.totalCount ?? null,
+          },
+        };
 
-    if (mutationToken !== undefined && mutationToken !== mutationTokenRef.current) {
-      return;
-    }
+        if (mutationToken !== undefined && mutationToken !== mutationTokenRef.current) {
+          return;
+        }
 
-    const mergedExpenses = mergeUniqueExpenses([...fixedData.expenses, ...oneTimeData.expenses, ...installmentData.expenses]);
-    const nextWarnings = Array.from(
-      new Set([
-        ...fixedData.warnings,
-        ...oneTimeData.warnings,
-        ...installmentData.warnings,
-        ...(hasNoIncomeSettlement ? [copy.noIncomeWarning] : []),
-      ]),
-    );
+        const mergedExpenses = mergeUniqueExpenses([
+          ...fixedData.expenses,
+          ...oneTimeData.expenses,
+          ...installmentData.expenses,
+        ]);
+        const nextWarnings = Array.from(
+          new Set([
+            ...fixedData.warnings,
+            ...oneTimeData.warnings,
+            ...installmentData.warnings,
+            ...(hasNoIncomeSettlement ? [copy.noIncomeWarning] : []),
+          ]),
+        );
 
-    let nextTotalExpensesArs = settlement ? Number(settlement.totalExpenses) : totalCombinedExpensesArsRef.current;
-    if (hasNoIncomeSettlement) {
-      const allExpensesResult = await getExpenses(month, {
-        sortBy: 'date',
-        sortDir: 'desc',
-        hydrate: false,
-        includeCount: false,
-      });
-      nextTotalExpensesArs = sumExpensesArs(allExpensesResult.expenses);
-    }
+        let nextTotalExpensesArs = settlement
+          ? Number(settlement.totalExpenses)
+          : totalCombinedExpensesArsRef.current;
+        if (hasNoIncomeSettlement) {
+          const allExpensesResult = await getExpenses(month, {
+            sortBy: 'date',
+            sortDir: 'desc',
+            hydrate: false,
+            includeCount: false,
+          });
+          nextTotalExpensesArs = sumExpensesArs(allExpensesResult.expenses);
+        }
 
-    if (mutationToken !== undefined && mutationToken !== mutationTokenRef.current) {
-      return;
-    }
+        if (mutationToken !== undefined && mutationToken !== mutationTokenRef.current) {
+          return;
+        }
 
-    applyExpenseScreenSnapshot({
-      expenses: mergedExpenses,
-      warnings: nextWarnings,
-      sectionPagination: paginationBySection,
-      subtotalTotals: totalsData.totals,
-      totalCombinedExpensesArs: nextTotalExpensesArs,
-      exchangeRates: rates ?? exchangeRatesRef.current,
-    });
-    sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
-    invalidateSectionChunkState();
-    } finally {
-      endSectionLoading(allSectionKeys);
-    }
-  }, [
-    applyExpenseScreenSnapshot,
-    beginSectionLoading,
-    copy.noIncomeWarning,
-    copy.settlementLoadFailed,
-    endSectionLoading,
-    invalidateSectionChunkState,
-    month,
-  ]);
+        applyExpenseScreenSnapshot({
+          expenses: mergedExpenses,
+          warnings: nextWarnings,
+          sectionPagination: paginationBySection,
+          subtotalTotals: totalsData.totals,
+          totalCombinedExpensesArs: nextTotalExpensesArs,
+          exchangeRates: rates ?? exchangeRatesRef.current,
+        });
+        sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
+        invalidateSectionChunkState();
+      } finally {
+        endSectionLoading(allSectionKeys);
+      }
+    },
+    [
+      applyExpenseScreenSnapshot,
+      beginSectionLoading,
+      copy.noIncomeWarning,
+      copy.settlementLoadFailed,
+      endSectionLoading,
+      invalidateSectionChunkState,
+      month,
+    ],
+  );
 
   const runBackgroundRefresh = useCallback(
     async (
@@ -1030,7 +1126,9 @@ export function ExpensesClient({
           return;
         }
         setError(
-          refreshError instanceof Error ? `${failureMessage} ${refreshError.message}` : failureMessage,
+          refreshError instanceof Error
+            ? `${failureMessage} ${refreshError.message}`
+            : failureMessage,
         );
       }
     },
@@ -1113,12 +1211,25 @@ export function ExpensesClient({
   useEffect(() => {
     resetSectionPages();
     invalidateSectionChunkState();
-  }, [debouncedSearchQuery, selectedCategoryId, sortField, sortDirection, invalidateSectionChunkState, resetSectionPages]);
+  }, [
+    debouncedSearchQuery,
+    selectedCategoryId,
+    sortField,
+    sortDirection,
+    invalidateSectionChunkState,
+    resetSectionPages,
+  ]);
 
   useEffect(() => {
     setSectionPages((previousPages) => ({
-      fixed: Math.min(previousPages.fixed, Math.max(1, Math.ceil(fixedExpenses.length / maxRowsPerSection))),
-      oneTime: Math.min(previousPages.oneTime, Math.max(1, Math.ceil(oneTimeExpenses.length / maxRowsPerSection))),
+      fixed: Math.min(
+        previousPages.fixed,
+        Math.max(1, Math.ceil(fixedExpenses.length / maxRowsPerSection)),
+      ),
+      oneTime: Math.min(
+        previousPages.oneTime,
+        Math.max(1, Math.ceil(oneTimeExpenses.length / maxRowsPerSection)),
+      ),
       installment: Math.min(
         previousPages.installment,
         Math.max(1, Math.ceil(installmentExpenses.length / maxRowsPerSection)),
@@ -1133,7 +1244,14 @@ export function ExpensesClient({
     exchangeRatesRef.current = exchangeRates;
     subtotalTotalsRef.current = subtotalTotals;
     totalCombinedExpensesArsRef.current = totalCombinedExpensesArs;
-  }, [exchangeRates, expenses, sectionPagination, subtotalTotals, totalCombinedExpensesArs, warnings]);
+  }, [
+    exchangeRates,
+    expenses,
+    sectionPagination,
+    subtotalTotals,
+    totalCombinedExpensesArs,
+    warnings,
+  ]);
 
   const rowsForSection = useCallback((sectionKey: ExpenseSectionKey, list: Expense[]) => {
     if (sectionKey === 'fixed') {
@@ -1159,47 +1277,47 @@ export function ExpensesClient({
       const run = async () => {
         beginSectionLoading([sectionKey]);
         try {
-        let loadedExpenses = expensesRef.current;
-        let paginationForSection = sectionPaginationRef.current[sectionKey];
-        const requiredRows = targetPage * maxRowsPerSection;
-        const type = sectionTypeMap[sectionKey];
-        let latestWarnings = warningsRef.current;
+          let loadedExpenses = expensesRef.current;
+          let paginationForSection = sectionPaginationRef.current[sectionKey];
+          const requiredRows = targetPage * maxRowsPerSection;
+          const type = sectionTypeMap[sectionKey];
+          let latestWarnings = warningsRef.current;
 
-        while (
-          rowsForSection(sectionKey, applyClientControls(loadedExpenses)).length < requiredRows &&
-          paginationForSection.hasMore &&
-          paginationForSection.nextCursor
-        ) {
-          const page = await getExpenses(month, {
-            type,
-            sortBy: 'date',
-            sortDir: 'desc',
-            limit: fetchBatchSize,
-            cursor: paginationForSection.nextCursor,
-            hydrate: false,
-            includeCount: false,
-          });
-          loadedExpenses = mergeUniqueExpenses([...loadedExpenses, ...page.expenses]);
-          latestWarnings = Array.from(new Set([...latestWarnings, ...page.warnings]));
-          paginationForSection = {
-            nextCursor: page.pagination?.nextCursor ?? null,
-            hasMore: page.pagination?.hasMore ?? false,
-            totalCount: page.pagination?.totalCount ?? paginationForSection.totalCount,
+          while (
+            rowsForSection(sectionKey, applyClientControls(loadedExpenses)).length < requiredRows &&
+            paginationForSection.hasMore &&
+            paginationForSection.nextCursor
+          ) {
+            const page = await getExpenses(month, {
+              type,
+              sortBy: 'date',
+              sortDir: 'desc',
+              limit: fetchBatchSize,
+              cursor: paginationForSection.nextCursor,
+              hydrate: false,
+              includeCount: false,
+            });
+            loadedExpenses = mergeUniqueExpenses([...loadedExpenses, ...page.expenses]);
+            latestWarnings = Array.from(new Set([...latestWarnings, ...page.warnings]));
+            paginationForSection = {
+              nextCursor: page.pagination?.nextCursor ?? null,
+              hasMore: page.pagination?.hasMore ?? false,
+              totalCount: page.pagination?.totalCount ?? paginationForSection.totalCount,
+            };
+            sectionCacheFetchedAtRef.current[sectionKey] = Date.now();
+          }
+
+          if (loadedExpenses !== expensesRef.current) {
+            setExpenses(loadedExpenses);
+            expensesRef.current = loadedExpenses;
+          }
+          setWarnings(latestWarnings);
+          warningsRef.current = latestWarnings;
+          setSectionPagination((previous) => ({ ...previous, [sectionKey]: paginationForSection }));
+          sectionPaginationRef.current = {
+            ...sectionPaginationRef.current,
+            [sectionKey]: paginationForSection,
           };
-          sectionCacheFetchedAtRef.current[sectionKey] = Date.now();
-        }
-
-        if (loadedExpenses !== expensesRef.current) {
-          setExpenses(loadedExpenses);
-          expensesRef.current = loadedExpenses;
-        }
-        setWarnings(latestWarnings);
-        warningsRef.current = latestWarnings;
-        setSectionPagination((previous) => ({ ...previous, [sectionKey]: paginationForSection }));
-        sectionPaginationRef.current = {
-          ...sectionPaginationRef.current,
-          [sectionKey]: paginationForSection,
-        };
         } finally {
           endSectionLoading([sectionKey]);
         }
@@ -1236,7 +1354,10 @@ export function ExpensesClient({
         .filter((expense): expense is Expense => expense !== null);
 
       return {
-        expenses: mergeUniqueExpenses([...nextAffected, ...list.filter((expense) => !predicate(expense))]),
+        expenses: mergeUniqueExpenses([
+          ...nextAffected,
+          ...list.filter((expense) => !predicate(expense)),
+        ]),
         previousAffected,
         nextAffected,
       };
@@ -1244,58 +1365,67 @@ export function ExpensesClient({
     [],
   );
 
-  const buildUpdatePayload = useCallback((values: ExpenseForm, scope?: ApplyScope) => {
-    const applyToFuture = values.fixedEnabled && !values.installmentEnabled ? values.applyToFuture : false;
-    const payload: Parameters<typeof updateExpense>[1] = {
-      month: values.nextMonthExpense ? addMonths(month, 1) : month,
-      date: values.date,
-      description: values.description,
-      categoryId: values.categoryId,
-      currencyCode: values.currencyCode,
-      fxRate: values.fxRate,
-      paidByUserId: values.paidByUserId,
-      applyScope: scope,
-      applyToFuture,
-    };
-
-    if (!values.installmentEnabled) {
-      payload.amount = values.amount ?? 0;
-    } else {
-      payload.installment = {
-        enabled: true,
-        count: values.installmentCount,
-        entryMode: values.installmentEntryMode,
-        perInstallmentAmount: values.installmentEntryMode === 'perInstallment' ? values.amount : undefined,
-        totalAmount: values.installmentEntryMode === 'total' ? values.totalAmount : undefined,
+  const buildUpdatePayload = useCallback(
+    (values: ExpenseForm, scope?: ApplyScope) => {
+      const applyToFuture =
+        values.fixedEnabled && !values.installmentEnabled ? values.applyToFuture : false;
+      const payload: Parameters<typeof updateExpense>[1] = {
+        month: values.nextMonthExpense ? addMonths(month, 1) : month,
+        date: values.date,
+        description: values.description,
+        categoryId: values.categoryId,
+        currencyCode: values.currencyCode,
+        fxRate: values.fxRate,
+        paidByUserId: values.paidByUserId,
+        applyScope: scope,
+        applyToFuture,
       };
-    }
 
-    return payload;
-  }, [month]);
+      if (!values.installmentEnabled) {
+        payload.amount = values.amount ?? 0;
+      } else {
+        payload.installment = {
+          enabled: true,
+          count: values.installmentCount,
+          entryMode: values.installmentEntryMode,
+          perInstallmentAmount:
+            values.installmentEntryMode === 'perInstallment' ? values.amount : undefined,
+          totalAmount: values.installmentEntryMode === 'total' ? values.totalAmount : undefined,
+        };
+      }
 
-  const buildCreatePayload = useCallback((values: ExpenseForm) => {
-    const issuedMonth = values.nextMonthExpense ? addMonths(month, 1) : month;
-    return {
-      month: issuedMonth,
-      date: values.date,
-      description: values.description,
-      categoryId: values.categoryId,
-      amount: values.installmentEnabled ? undefined : values.amount,
-      currencyCode: values.currencyCode,
-      fxRate: values.fxRate,
-      paidByUserId: values.paidByUserId,
-      fixed: { enabled: values.fixedEnabled },
-      installment: values.installmentEnabled
-        ? {
-            enabled: true,
-            count: values.installmentCount,
-            entryMode: values.installmentEntryMode,
-            perInstallmentAmount: values.installmentEntryMode === 'perInstallment' ? values.amount : undefined,
-            totalAmount: values.installmentEntryMode === 'total' ? values.totalAmount : undefined,
-          }
-        : undefined,
-    };
-  }, [month]);
+      return payload;
+    },
+    [month],
+  );
+
+  const buildCreatePayload = useCallback(
+    (values: ExpenseForm) => {
+      const issuedMonth = values.nextMonthExpense ? addMonths(month, 1) : month;
+      return {
+        month: issuedMonth,
+        date: values.date,
+        description: values.description,
+        categoryId: values.categoryId,
+        amount: values.installmentEnabled ? undefined : values.amount,
+        currencyCode: values.currencyCode,
+        fxRate: values.fxRate,
+        paidByUserId: values.paidByUserId,
+        fixed: { enabled: values.fixedEnabled },
+        installment: values.installmentEnabled
+          ? {
+              enabled: true,
+              count: values.installmentCount,
+              entryMode: values.installmentEntryMode,
+              perInstallmentAmount:
+                values.installmentEntryMode === 'perInstallment' ? values.amount : undefined,
+              totalAmount: values.installmentEntryMode === 'total' ? values.totalAmount : undefined,
+            }
+          : undefined,
+      };
+    },
+    [month],
+  );
 
   const runOptimisticMutation = useCallback(
     async <T,>(options: {
@@ -1367,7 +1497,9 @@ export function ExpensesClient({
       const scope: ApplyScope = current.installment
         ? 'all'
         : current.fixed.enabled
-          ? (values.applyToFuture ? 'future' : 'single')
+          ? values.applyToFuture
+            ? 'future'
+            : 'single'
           : 'single';
       const payload = buildUpdatePayload(values, scope);
       const scopedPredicate = current.installment?.seriesId
@@ -1463,7 +1595,9 @@ export function ExpensesClient({
         }
 
         const currentExpenses = expensesRef.current;
-        const previousAffected = currentExpenses.filter((expense) => expense.id === optimisticExpenseId);
+        const previousAffected = currentExpenses.filter(
+          (expense) => expense.id === optimisticExpenseId,
+        );
         const nextExpenses = mergeUniqueExpenses([
           { ...createdExpense, isOptimistic: false, optimisticSource: undefined },
           ...currentExpenses.filter((expense) => expense.id !== optimisticExpenseId),
@@ -1486,29 +1620,32 @@ export function ExpensesClient({
     });
   }, [form]);
 
-  const startEdit = useCallback((expense: Expense) => {
-    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-      setIsMobileAddExpenseOpen(true);
-    }
-    setEditingExpenseId(expense.id);
-    form.reset({
-      date: expense.date,
-      description: expense.description,
-      categoryId: expense.categoryId,
-      amount: Number(expense.amountOriginal),
-      currencyCode: toSupportedCurrencyCode(expense.currencyCode),
-      fxRate: Number(expense.fxRateUsed),
-      paidByUserId: expense.paidByUserId,
-      fixedEnabled: expense.fixed.enabled,
-      nextMonthExpense: false,
-      applyToFuture: expense.fixed.enabled,
-      installmentEnabled: Boolean(expense.installment),
-      installmentCount: expense.installment?.total ?? 2,
-      installmentEntryMode: 'perInstallment',
-      totalAmount: undefined,
-    });
-    jumpToExpenseEditor();
-  }, [form, jumpToExpenseEditor]);
+  const startEdit = useCallback(
+    (expense: Expense) => {
+      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+        setIsMobileAddExpenseOpen(true);
+      }
+      setEditingExpenseId(expense.id);
+      form.reset({
+        date: expense.date,
+        description: expense.description,
+        categoryId: expense.categoryId,
+        amount: Number(expense.amountOriginal),
+        currencyCode: toSupportedCurrencyCode(expense.currencyCode),
+        fxRate: Number(expense.fxRateUsed),
+        paidByUserId: expense.paidByUserId,
+        fixedEnabled: expense.fixed.enabled,
+        nextMonthExpense: false,
+        applyToFuture: expense.fixed.enabled,
+        installmentEnabled: Boolean(expense.installment),
+        installmentCount: expense.installment?.total ?? 2,
+        installmentEntryMode: 'perInstallment',
+        totalAmount: undefined,
+      });
+      jumpToExpenseEditor();
+    },
+    [form, jumpToExpenseEditor],
+  );
 
   const removeExpense = useCallback((expense: Expense) => {
     setConfirmationDialog({ action: 'delete', expense });
@@ -1594,7 +1731,9 @@ export function ExpensesClient({
           return;
         }
         const currentExpenses = expensesRef.current;
-        const previousAffected = currentExpenses.filter((entry) => entry.id === optimisticExpenseId);
+        const previousAffected = currentExpenses.filter(
+          (entry) => entry.id === optimisticExpenseId,
+        );
         const nextExpenses = mergeUniqueExpenses([
           { ...createdExpense, isOptimistic: false, optimisticSource: undefined },
           ...currentExpenses.filter((entry) => entry.id !== optimisticExpenseId),
@@ -1683,72 +1822,6 @@ export function ExpensesClient({
     });
   };
 
-  const onSaveExchangeRate = async () => {
-    const parsedRate = Number(newFxRate);
-    if (!newFxCurrency || Number.isNaN(parsedRate) || parsedRate <= 0) {
-      return;
-    }
-    const nextExchangeRates = (() => {
-      const existingIndex = exchangeRatesRef.current.findIndex((rate) => rate.currencyCode === newFxCurrency);
-      if (existingIndex === -1) {
-        return [
-          ...exchangeRatesRef.current,
-          {
-            id: createOptimisticExpenseId(),
-            month,
-            currencyCode: newFxCurrency,
-            rateToArs: parsedRate.toFixed(6),
-          },
-        ];
-      }
-
-      return exchangeRatesRef.current.map((rate, index) =>
-        index === existingIndex ? { ...rate, rateToArs: parsedRate.toFixed(6) } : rate,
-      );
-    })();
-
-    await runOptimisticMutation({
-      successTitle: copy.toasts.fxSaved,
-      successMessage: copy.toasts.fxSavedSuccessfully,
-      errorTitle: copy.toasts.couldNotSaveFx,
-      errorFallbackMessage: copy.toasts.fxSaveFailed,
-      applyOptimistic: () => {
-        applyExpenseMutationState({
-          expenses: expensesRef.current,
-          exchangeRates: nextExchangeRates,
-        });
-      },
-      execute: () => upsertExchangeRate({ month, currencyCode: newFxCurrency, rateToArs: parsedRate }),
-      onSuccess: (_result, mutationToken) => {
-        setNewFxRate('');
-        void runBackgroundRefresh(
-          mutationToken,
-          { includeRates: true, includeSettlement: true },
-          copy.fxNoRefresh,
-        );
-      },
-    });
-  };
-
-  const fxRatePills = (
-    <div className="mt-2 flex flex-wrap gap-2">
-      {exchangeRates.length === 0 ? (
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-          {copy.fx.noRatesYet}
-        </span>
-      ) : (
-        exchangeRates.map((rate) => (
-          <span
-            key={rate.id}
-            className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
-          >
-            {rate.currencyCode} {formatFxRate(rate.rateToArs)}
-          </span>
-        ))
-      )}
-    </div>
-  );
-
   const sectionSummaries = useMemo(() => {
     const sectionData: Array<{
       key: ExpenseSectionKey;
@@ -1824,6 +1897,95 @@ export function ExpensesClient({
     sectionPages,
   ]);
 
+  const visibleSectionSummaries = useMemo(
+    () =>
+      selectedExpenseType === 'all'
+        ? sectionSummaries
+        : sectionSummaries.filter((section) => section.key === selectedExpenseType),
+    [sectionSummaries, selectedExpenseType],
+  );
+  const visibleExpenseCount = useMemo(
+    () => visibleSectionSummaries.reduce((total, section) => total + section.totalRows, 0),
+    [visibleSectionSummaries],
+  );
+  const visibleFilteredSubtotalArs = useMemo(
+    () =>
+      selectedExpenseType === 'all'
+        ? filteredSubtotalArs
+        : (visibleSectionSummaries[0]?.subtotalArs ?? 0),
+    [filteredSubtotalArs, selectedExpenseType, visibleSectionSummaries],
+  );
+  const expenseTypeFilters = useMemo<
+    Array<{ key: ExpenseTypeFilter; label: string }>
+  >(
+    () => [
+      { key: 'all', label: copy.allExpenseTypes },
+      { key: 'oneTime', label: copy.kindOneTime },
+      { key: 'fixed', label: copy.kindRecurring },
+      { key: 'installment', label: copy.sections.installmentTitle },
+    ],
+    [copy],
+  );
+  const mobileSortOptions = useMemo(
+    () => [
+      {
+        value: 'date:desc',
+        label: `${copy.columns.date}: ${copy.sortDirection.newestFirst}`,
+      },
+      {
+        value: 'date:asc',
+        label: `${copy.columns.date}: ${copy.sortDirection.oldestFirst}`,
+      },
+      {
+        value: 'description:asc',
+        label: `${copy.columns.description}: ${copy.sortDirection.aToZ}`,
+      },
+      {
+        value: 'description:desc',
+        label: `${copy.columns.description}: ${copy.sortDirection.zToA}`,
+      },
+      {
+        value: 'category:asc',
+        label: `${copy.columns.category}: ${copy.sortDirection.aToZ}`,
+      },
+      {
+        value: 'category:desc',
+        label: `${copy.columns.category}: ${copy.sortDirection.zToA}`,
+      },
+      {
+        value: 'paidBy:asc',
+        label: `${copy.columns.paidBy}: ${copy.sortDirection.aToZ}`,
+      },
+      {
+        value: 'paidBy:desc',
+        label: `${copy.columns.paidBy}: ${copy.sortDirection.zToA}`,
+      },
+      {
+        value: 'amountArs:desc',
+        label: `${copy.columns.amount}: ${copy.sortDirection.highestFirst}`,
+      },
+      {
+        value: 'amountArs:asc',
+        label: `${copy.columns.amount}: ${copy.sortDirection.lowestFirst}`,
+      },
+    ],
+    [copy],
+  );
+  const moreFiltersActive =
+    selectedCategoryId !== 'all' || maxRowsPerSection !== DEFAULT_MAX_ROWS_PER_SECTION;
+  const mobileMoreFiltersActive =
+    moreFiltersActive ||
+    selectedExpenseType !== 'all' ||
+    sortField !== DEFAULT_SORT_FIELD ||
+    sortDirection !== DEFAULT_SORT_DIRECTION;
+
+  const selectExpenseType = useCallback((nextType: ExpenseTypeFilter) => {
+    setSelectedExpenseType(nextType);
+    if (nextType !== 'all') {
+      setSectionOpen((previous) => ({ ...previous, [nextType]: true }));
+    }
+  }, []);
+
   useEffect(() => {
     for (const section of sectionSummaries) {
       if (!section.hasMore) {
@@ -1832,7 +1994,8 @@ export function ExpensesClient({
 
       const rowsRemainingAfterPage = section.totalRows - section.currentPage * maxRowsPerSection;
       const cacheAgeMs = Date.now() - sectionCacheFetchedAtRef.current[section.key];
-      const shouldPrefetchByProximity = rowsRemainingAfterPage <= maxRowsPerSection * PREFETCH_AHEAD_PAGES;
+      const shouldPrefetchByProximity =
+        rowsRemainingAfterPage <= maxRowsPerSection * PREFETCH_AHEAD_PAGES;
       const shouldPrefetchByTtl = cacheAgeMs > SECTION_CACHE_TTL_MS && section.currentPage === 1;
 
       if (!shouldPrefetchByProximity && !shouldPrefetchByTtl) {
@@ -1854,11 +2017,14 @@ export function ExpensesClient({
 
   return (
     <AppShell
+      compact
+      containerClassName="max-w-[1480px]"
       month={month}
       title={copy.title}
       subtitle={copy.subtitle}
       locale={locale}
       rightSlot={<MonthSelector month={month} locale={locale} />}
+      unframed
     >
       {scopeDialog ? (
         <ScopeDialog
@@ -1901,21 +2067,30 @@ export function ExpensesClient({
           <div className="flex h-full w-full max-w-none flex-col bg-slate-100 md:hidden">
             <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 shadow-[0_1px_0_rgba(226,232,240,0.9)] backdrop-blur">
               <div className="mx-auto flex w-full max-w-[30rem] items-center justify-between gap-3">
-              <button
-                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
-                onClick={closeMobileComposer}
-                type="button"
-              >
-                <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" viewBox="0 0 24 24">
-                  <path d="m15 18-6-6 6-6" />
-                </svg>
-              </button>
-              <div className="min-w-0 flex-1">
-                <p className="text-lg font-semibold text-slate-900">
-                  {editingExpenseId ? copy.form.editExpense : copy.form.addExpense}
-                </p>
-                <p className="text-sm text-slate-500">{formatMonthHeading(month, locale)}</p>
-              </div>
+                <button
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
+                  onClick={closeMobileComposer}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg font-semibold text-slate-900">
+                    {editingExpenseId ? copy.form.editExpense : copy.form.addExpense}
+                  </p>
+                  <p className="text-sm text-slate-500">{formatMonthHeading(month, locale)}</p>
+                </div>
               </div>
             </div>
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} ref={expenseFormRef}>
@@ -1951,38 +2126,40 @@ export function ExpensesClient({
         ) : null}
 
         {error ? (
-          <div aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            aria-live="assertive"
+            className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
             {error}
           </div>
         ) : null}
 
-        <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
-          <div className="min-w-0 space-y-4">
-            <div className="md:hidden">
-              <button
-                className="flex w-full items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm"
-                onClick={openMobileComposer}
-                type="button"
-              >
-                <div>
-                  <p className="text-base font-semibold text-slate-900">
-                    {editingExpenseId ? copy.form.continueEditing : copy.form.addNewExpense}
-                  </p>
-                </div>
-                <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-brand-600 to-violet-500 text-2xl font-semibold text-white shadow-lg shadow-brand-200/70">
-                  +
-                </span>
-              </button>
-            </div>
+        <section className="rounded-[1.75rem] border border-brand-100 bg-white p-5 shadow-sm md:p-6 lg:hidden">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-700">
+            {copy.thisMonth}
+          </p>
+          <p className="mt-1 text-base font-semibold text-ink-muted">
+            {copy.totalCombinedExpenses}
+          </p>
+          <p className="mt-3 text-[clamp(2rem,10vw,3.25rem)] font-bold leading-none tracking-[-0.04em] text-ink-strong tabular-nums">
+            <span className="mr-2 text-sm font-bold tracking-normal text-ink-soft">ARS</span>
+            {formatMoney(totalCombinedExpensesArs, locale)}
+          </p>
+        </section>
 
+        <div className="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
+          <aside className="hidden min-w-0 space-y-4 md:block lg:sticky lg:top-0">
             {!isMobileAddExpenseOpen ? (
               <form
-                className="hidden min-w-0 space-y-4 md:block"
+                className="hidden min-w-0 space-y-4 rounded-[1.6rem] border border-stroke bg-white p-5 shadow-sm md:block"
                 onSubmit={submit}
                 ref={expenseFormRef}
               >
-                <div className="px-1">
-                  <h2 className="text-lg font-semibold text-slate-900">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-700">
+                    {copy.quickAdd}
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-ink-strong">
                     {editingExpenseId ? copy.form.editExpense : copy.form.addExpense}
                   </h2>
                 </div>
@@ -2001,93 +2178,228 @@ export function ExpensesClient({
                 </div>
               </form>
             ) : null}
-
-            <section className={cardClass}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="text-base font-semibold text-slate-900">{copy.fx.heading}</h3>
-                  {fxRatePills}
-                </div>
-                <button
-                  aria-controls="fx-defaults-panel"
-                  aria-expanded={isMobileFxOpen}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
-                  onClick={() => setIsMobileFxOpen((isOpen) => !isOpen)}
-                  type="button"
-                >
-                  {isMobileFxOpen ? shared.close : shared.edit}
-                </button>
-                <button
-                  aria-controls="fx-defaults-panel"
-                  aria-expanded={isDesktopFxEditing}
-                  className="hidden min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:inline-flex"
-                  onClick={() => setIsDesktopFxEditing((isEditing) => !isEditing)}
-                  type="button"
-                >
-                  {isDesktopFxEditing ? shared.close : shared.edit}
-                </button>
-              </div>
-
-              <div
-                className={`${isMobileFxOpen || isDesktopFxEditing ? 'mt-3 block' : 'hidden'}`}
-                id="fx-defaults-panel"
-              >
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr_auto]">
-                  <select
-                    className={fieldClass}
-                    onChange={(e) => setNewFxCurrency(e.target.value as SupportedCurrencyCode)}
-                    value={newFxCurrency}
-                  >
-                    {fxCurrencies.map((currencyCode) => (
-                      <option key={currencyCode} value={currencyCode}>
-                        {currencyCode}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="relative">
-                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500">
-                      $
-                    </span>
-                    <input
-                      className={moneyInputClass}
-                      min="0"
-                      onChange={(e) => setNewFxRate(e.target.value)}
-                      placeholder={copy.fx.ratePlaceholder}
-                      step="0.000001"
-                      type="number"
-                      value={newFxRate}
-                    />
-                  </div>
-                  <button className={primaryButtonClass} onClick={() => void onSaveExchangeRate()} type="button">
-                    {shared.save}
-                  </button>
-                </div>
-              </div>
-            </section>
-          </div>
+          </aside>
 
           <div className="min-w-0 space-y-4">
-            <section className="overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white shadow-lg">
-              <p className="text-base font-semibold text-blue-100">{copy.totalCombinedExpenses}</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-                ARS {formatMoney(totalCombinedExpensesArs, locale)}
-              </p>
+            <section className="hidden rounded-[1.75rem] border border-brand-100 bg-white p-5 shadow-sm md:p-6 lg:block">
+              <div className="flex items-end justify-between gap-6">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-700">
+                    {copy.thisMonth}
+                  </p>
+                  <p className="mt-1 text-base font-semibold text-ink-muted">
+                    {copy.totalCombinedExpenses}
+                  </p>
+                </div>
+                <p className="text-[clamp(2rem,5vw,3.25rem)] font-bold leading-none tracking-[-0.04em] text-ink-strong tabular-nums">
+                  <span className="mr-2 text-sm font-bold tracking-normal text-ink-soft">ARS</span>
+                  {formatMoney(totalCombinedExpensesArs, locale)}
+                </p>
+              </div>
             </section>
-            <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-              <div className="border-b border-slate-200 bg-white px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {copy.showingLoaded(visibleExpenses.length)}
-                    </p>
-                    <p className="text-xs text-slate-500">{copy.filteredResults}</p>
-                    <p className="text-xs font-medium text-slate-600">{copy.filteredSubtotal(formatMoney(filteredSubtotalArs, locale))}</p>
+            <section className="min-w-0 space-y-4">
+              <div
+                className="relative rounded-[1.5rem] border border-stroke bg-white px-3 py-3 shadow-sm md:px-4 md:py-4"
+                ref={moreFiltersRef}
+              >
+                <div className="flex min-w-0 items-center gap-2 md:gap-3">
+                  <div className="relative min-w-0 flex-1">
+                    <svg
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="m20 20-3.4-3.4" />
+                    </svg>
+                    <input
+                      aria-label={copy.searchExpenses}
+                      className={`${tableControlSearchFieldClass} min-h-11 pl-10 placeholder:text-xs md:placeholder:text-sm ${hasSearchQuery ? '!bg-white' : '!border-slate-200 !bg-slate-50'}`}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder={copy.searchPlaceholderDesktop}
+                      type="search"
+                      value={searchQuery}
+                    />
+                    {hasSearchQuery ? (
+                      <button
+                        aria-label={copy.clearSearch}
+                        className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        onClick={() => setSearchQuery('')}
+                        type="button"
+                      >
+                        <svg
+                          aria-hidden="true"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="2.2"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M6 6l12 12M18 6 6 18" />
+                        </svg>
+                      </button>
+                    ) : null}
                   </div>
-                  <div className="hidden w-full flex-col gap-2 sm:w-auto sm:items-end md:flex">
-                    <label className="flex items-center gap-2 text-sm text-slate-700" htmlFor="expense-max-rows-per-section">
-                      <span className="font-medium">{copy.maxRowsPerSection}</span>
+
+                  <div className="hidden shrink-0 items-center gap-1 md:flex">
+                    {expenseTypeFilters.map((filter) => {
+                      const isActive = selectedExpenseType === filter.key;
+                      return (
+                        <button
+                          key={filter.key}
+                          aria-pressed={isActive}
+                          className={`inline-flex min-h-11 items-center rounded-full px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
+                            isActive
+                              ? 'bg-brand-50 text-brand-700'
+                              : 'text-ink-muted hover:bg-slate-50 hover:text-ink-strong'
+                          }`}
+                          onClick={() => selectExpenseType(filter.key)}
+                          type="button"
+                        >
+                          {filter.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    aria-expanded={isMoreFiltersOpen}
+                    aria-label={copy.moreFilters}
+                    className={`relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden ${
+                      isMoreFiltersOpen || mobileMoreFiltersActive
+                        ? 'border-brand-200 bg-brand-50 text-brand-700'
+                        : 'border-slate-200 bg-white text-ink-muted hover:bg-brand-50 hover:text-brand-700'
+                    }`}
+                    onClick={() => setIsMoreFiltersOpen((current) => !current)}
+                    title={copy.moreFilters}
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M4 7h16" />
+                      <path d="M7 12h10" />
+                      <path d="M10 17h4" />
+                    </svg>
+                    {mobileMoreFiltersActive ? (
+                      <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-50" />
+                    ) : null}
+                  </button>
+
+                  <button
+                    aria-expanded={isMoreFiltersOpen}
+                    aria-label={copy.moreFilters}
+                    className={`relative hidden h-11 w-11 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:inline-flex ${
+                      isMoreFiltersOpen || moreFiltersActive
+                        ? 'border-brand-200 bg-brand-50 text-brand-700'
+                        : 'border-slate-200 bg-white text-ink-muted hover:bg-brand-50 hover:text-brand-700'
+                    }`}
+                    onClick={() => setIsMoreFiltersOpen((current) => !current)}
+                    title={copy.moreFilters}
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M4 7h16" />
+                      <path d="M7 12h10" />
+                      <path d="M10 17h4" />
+                    </svg>
+                    {moreFiltersActive ? (
+                      <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-600 ring-2 ring-brand-50" />
+                    ) : null}
+                  </button>
+                </div>
+
+                {isMoreFiltersOpen ? (
+                  <div className="absolute inset-x-3 top-full z-50 mt-2 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl md:left-auto md:right-4 md:w-80">
+                    <p className="text-sm font-bold text-ink-strong">{copy.moreFilters}</p>
+                    <fieldset className="md:hidden">
+                      <legend className={tableControlLabelClass}>{copy.expenseTypeFilter}</legend>
+                      <div className="grid grid-cols-2 gap-2">
+                        {expenseTypeFilters.map((filter) => {
+                          const isActive = selectedExpenseType === filter.key;
+                          return (
+                            <button
+                              key={filter.key}
+                              aria-pressed={isActive}
+                              className={`inline-flex min-h-11 items-center justify-center rounded-xl border px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
+                                isActive
+                                  ? 'border-brand-200 bg-brand-50 text-brand-700'
+                                  : 'border-slate-200 bg-white text-ink-muted'
+                              }`}
+                              onClick={() => selectExpenseType(filter.key)}
+                              type="button"
+                            >
+                              {filter.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                    <label className="block">
+                      <span className={tableControlLabelClass}>{copy.columns.category}</span>
                       <select
-                        className={`${compactFieldClass} min-w-20 rounded-lg px-3 py-2`}
+                        className={tableControlFieldClass}
+                        onChange={(event) => {
+                          setSelectedCategoryId(event.target.value);
+                          resetSectionPages();
+                        }}
+                        value={selectedCategoryId}
+                      >
+                        <option value="all">{copy.allCategories}</option>
+                        {sortedActiveCategories.map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block md:hidden">
+                      <span className={tableControlLabelClass}>{copy.sortByLabel}</span>
+                      <select
+                        className={tableControlFieldClass}
+                        onChange={(event) => {
+                          const [nextField, nextDirection] = event.target.value.split(':') as [
+                            ExpenseSortField,
+                            SortDirection,
+                          ];
+                          setSortField(nextField);
+                          setSortDirection(nextDirection);
+                        }}
+                        value={`${sortField}:${sortDirection}`}
+                      >
+                        {mobileSortOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block" htmlFor="expense-max-rows-per-section">
+                      <span className={tableControlLabelClass}>{copy.maxRowsPerSection}</span>
+                      <select
+                        className={tableControlFieldClass}
                         id="expense-max-rows-per-section"
                         onChange={(event) => {
                           setMaxRowsPerSection(Number(event.target.value) as 10 | 25 | 50);
@@ -2101,228 +2413,79 @@ export function ExpensesClient({
                         <option value={50}>50</option>
                       </select>
                     </label>
-                  </div>
-                </div>
-              </div>
-              <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-4">
-                <div className="md:hidden">
-                  <div className="flex items-center gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <input
-                        aria-label={copy.searchExpenses}
-                        className={tableControlSearchFieldClass}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder={copy.searchPlaceholderMobile}
-                        type="search"
-                        value={searchQuery}
-                      />
-                      {hasSearchQuery ? (
+                    <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                      {mobileMoreFiltersActive ? (
                         <button
-                          aria-label={copy.clearSearch}
-                          className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                          onClick={() => setSearchQuery('')}
-                          type="button"
-                        >
-                          X
-                        </button>
-                      ) : null}
-                    </div>
-                    <button
-                      aria-label={copy.openFilters}
-                      className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-brand-200 bg-brand-50 text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                      onClick={() => setIsMobileFiltersOpen((current) => !current)}
-                      type="button"
-                    >
-                      <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M4 7h16" />
-                        <path d="M7 12h10" />
-                        <path d="M10 17h4" />
-                      </svg>
-                    </button>
-                  </div>
-                  {isMobileFiltersOpen ? (
-                    <div className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-                      <label className="block">
-                        <span className={tableControlLabelClass}>{copy.columns.category}</span>
-                        <select
-                          className={tableControlFieldClass}
-                          onChange={(event) => setSelectedCategoryId(event.target.value)}
-                          value={selectedCategoryId}
-                        >
-                          <option value="all">{copy.allCategories}</option>
-                          {sortedActiveCategories.map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="flex items-center justify-between gap-3">
-                        <button
-                          className="text-sm font-semibold text-slate-500"
-                          onClick={() => setIsMobileFiltersOpen(false)}
-                          type="button"
-                        >
-                          {shared.done}
-                        </button>
-                        <button
-                          className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700"
+                          className="inline-flex min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-ink-muted hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:hidden"
                           onClick={() => {
-                            setSearchQuery('');
+                            setSelectedExpenseType('all');
                             setSelectedCategoryId('all');
+                            setMaxRowsPerSection(DEFAULT_MAX_ROWS_PER_SECTION);
                             setSortField(DEFAULT_SORT_FIELD);
                             setSortDirection(DEFAULT_SORT_DIRECTION);
                             resetSectionPages();
-                            setIsMobileFiltersOpen(false);
-                          }}
-                          type="button"
-                        >
-                          {shared.clear}
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {mobileControlChips.length > 0 || hasActiveControls ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {mobileControlChips.map((chip) => (
-                        <span
-                          key={chip}
-                          className="inline-flex items-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200"
-                        >
-                          {chip}
-                        </span>
-                      ))}
-                      {hasActiveControls ? (
-                        <button
-                          className="inline-flex items-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200"
-                          onClick={() => {
-                            setSearchQuery('');
-                            setSelectedCategoryId('all');
-                            setSortField(DEFAULT_SORT_FIELD);
-                            setSortDirection(DEFAULT_SORT_DIRECTION);
-                            resetSectionPages();
+                            invalidateSectionChunkState();
                           }}
                           type="button"
                         >
                           {shared.clear}
                         </button>
                       ) : null}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="hidden md:block" id="expense-mobile-filters">
-                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
-                    <label className="hidden lg:col-span-8 md:block">
-                      <span className={tableControlLabelClass}>{copy.searchLabel}</span>
-                      <div className="relative">
-                        <input
-                          className={tableControlSearchFieldClass}
-                          onChange={(event) => setSearchQuery(event.target.value)}
-                          placeholder={copy.searchPlaceholderDesktop}
-                          type="search"
-                          value={searchQuery}
-                        />
-                        {hasSearchQuery ? (
-                          <button
-                            aria-label={copy.clearSearch}
-                            className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full text-sm font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                            onClick={() => setSearchQuery('')}
-                            type="button"
-                          >
-                            X
-                          </button>
-                        ) : null}
-                      </div>
-                    </label>
-                    <label className="lg:col-span-4">
-                      <span className={tableControlLabelClass}>{copy.columns.category}</span>
-                      <select
-                        className={tableControlFieldClass}
-                        onChange={(event) => setSelectedCategoryId(event.target.value)}
-                        value={selectedCategoryId}
-                      >
-                        <option value="all">{copy.allCategories}</option>
-                        {sortedActiveCategories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="mt-3 border-t border-slate-200 pt-3">
-                    <div className="flex flex-wrap items-end justify-between gap-3">
-                      <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
-                        <p className="text-xs text-slate-500">{copy.sortHint}</p>
-                        {hasActiveControls ? (
-                          <button
-                            className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                            onClick={() => {
-                              setSearchQuery('');
-                              setSelectedCategoryId('all');
-                              setSortField(DEFAULT_SORT_FIELD);
-                              setSortDirection(DEFAULT_SORT_DIRECTION);
-                              resetSectionPages();
-                            }}
-                            type="button"
-                          >
-                            {copy.clearFilters}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
-                <div className="flex flex-wrap gap-2">
-                  {sortableColumns.map((column) => {
-                    const isActive = sortField === column.field;
-                    return (
+                      {moreFiltersActive ? (
+                        <button
+                          className="hidden min-h-11 items-center rounded-xl px-3 py-2 text-sm font-semibold text-ink-muted hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:inline-flex"
+                          onClick={() => {
+                            setSelectedCategoryId('all');
+                            setMaxRowsPerSection(DEFAULT_MAX_ROWS_PER_SECTION);
+                            resetSectionPages();
+                            invalidateSectionChunkState();
+                          }}
+                          type="button"
+                        >
+                          {shared.clear}
+                        </button>
+                      ) : null}
+                      {!mobileMoreFiltersActive ? <span className="md:hidden" /> : null}
+                      {!moreFiltersActive ? <span className="hidden md:block" /> : null}
                       <button
-                        key={column.field}
-                        aria-pressed={isActive}
-                        className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
-                          isActive
-                            ? 'border-brand-200 bg-brand-50 text-brand-700'
-                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                        }`}
-                        onClick={() => handleSortChange(column.field)}
+                        className="inline-flex min-h-11 items-center rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                        onClick={() => setIsMoreFiltersOpen(false)}
                         type="button"
                       >
-                        <span>{column.label}</span>
-                        {isActive ? (
-                          <svg
-                            aria-hidden="true"
-                            className="h-3.5 w-3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2.2"
-                            viewBox="0 0 24 24"
-                          >
-                            {sortDirection === 'asc' ? <path d="m6 14 6-6 6 6" /> : <path d="m6 10 6 6 6-6" />}
-                          </svg>
-                        ) : null}
+                        {shared.done}
                       </button>
-                    );
-                  })}
-                </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div className="space-y-5 p-4">
-                {sectionSummaries.map((section) => (
+              <div className="space-y-5 rounded-[1.75rem] border border-stroke bg-white p-4 shadow-sm md:p-5">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-700">
+                      {formatMonthHeading(month, locale)}
+                    </p>
+                    <h2 className="mt-1 text-xl font-bold text-ink-strong">{copy.ledgerHeading}</h2>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-ink-muted">
+                      {copy.showingLoaded(visibleExpenseCount)}
+                    </p>
+                    <p className="mt-0.5 text-xs text-ink-soft">
+                      {copy.filteredSubtotal(formatMoney(visibleFilteredSubtotalArs, locale))}
+                    </p>
+                  </div>
+                </div>
+                {visibleSectionSummaries.map((section) => (
                   <section
                     key={section.key}
                     aria-busy={sectionLoading[section.key]}
-                    className="overflow-hidden rounded-xl border border-slate-200/80"
+                    className="rounded-[1.35rem] border border-slate-200/80"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-[1.35rem] border-b border-slate-200 bg-surface-muted px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span
                           aria-hidden="true"
-                          className={`inline-flex h-10 w-10 items-center justify-center rounded-full ${
+                          className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${
                             section.key === 'fixed'
                               ? 'bg-blue-100 text-blue-700'
                               : section.key === 'oneTime'
@@ -2331,20 +2494,44 @@ export function ExpensesClient({
                           }`}
                         >
                           {section.key === 'fixed' ? (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" viewBox="0 0 24 24">
+                            <svg
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2.2"
+                              viewBox="0 0 24 24"
+                            >
                               <path d="M3 12a9 9 0 0 1 15.1-6.36" />
                               <path d="M3 4v6h6" />
                               <path d="M21 12a9 9 0 0 1-15.1 6.36" />
                               <path d="M21 20v-6h-6" />
                             </svg>
                           ) : section.key === 'oneTime' ? (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" viewBox="0 0 24 24">
+                            <svg
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2.1"
+                              viewBox="0 0 24 24"
+                            >
                               <rect height="14" rx="2.5" width="14" x="5" y="7" />
                               <path d="M9 7V5a3 3 0 0 1 6 0v2" />
                               <path d="M12 11v4" />
                             </svg>
                           ) : (
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" viewBox="0 0 24 24">
+                            <svg
+                              className="h-5 w-5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2.1"
+                              viewBox="0 0 24 24"
+                            >
                               <rect height="16" rx="2.5" width="12" x="6" y="4" />
                               <path d="M9 8h6" />
                               <path d="M9 12h6" />
@@ -2358,9 +2545,9 @@ export function ExpensesClient({
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        <p className="text-xs font-semibold text-ink-muted">
                           {copy.subtotal}:{' '}
-                          <span className="text-sm normal-case text-slate-900">
+                          <span className="text-base text-ink-strong tabular-nums">
                             ARS {formatMoney(section.subtotalArs, locale)}
                           </span>
                         </p>
@@ -2400,176 +2587,227 @@ export function ExpensesClient({
                       className={sectionOpen[section.key] ? 'block' : 'hidden'}
                       id={`${section.key}-expenses-panel`}
                     >
-                    <div className="relative">
-                      {sectionLoading[section.key] ? (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-                          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
-                            <svg
-                              aria-hidden="true"
-                              className="h-4 w-4 animate-spin text-brand-600"
-                              fill="none"
-                              viewBox="0 0 24 24"
+                      <div className="relative">
+                        {sectionLoading[section.key] ? (
+                          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm">
+                              <svg
+                                aria-hidden="true"
+                                className="h-4 w-4 animate-spin text-brand-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  className="opacity-90"
+                                  d="M22 12a10 10 0 0 0-10-10"
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeWidth="4"
+                                />
+                              </svg>
+                              {shared.loading}
+                            </div>
+                          </div>
+                        ) : null}
+                        <div
+                          className={`space-y-3 p-3 md:hidden ${sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'}`}
+                        >
+                          {section.rows.map((expense) => (
+                            <MobileExpenseCard
+                              key={expense.id}
+                              expense={expense}
+                              formatFxRate={formatFxRate}
+                              locale={locale}
+                              isOpen={openExpenseActionMenuId === expense.id}
+                              onClone={handleRowCloneAndDismiss}
+                              onDelete={handleRowDeleteAndDismiss}
+                              onEdit={handleRowEditAndDismiss}
+                              onOpenChange={handleRowMenuOpenChange}
+                            />
+                          ))}
+                          {section.rows.length === 0 ? (
+                            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                              {section.emptyMessage}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="hidden w-full max-w-full overflow-x-auto md:block">
+                          <table
+                            className={`w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm transition-opacity ${
+                              sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'
+                            }`}
+                          >
+                            <caption className="sr-only">{section.title}</caption>
+                            <colgroup>
+                              <col className="w-[14%]" />
+                              <col className="w-[25%]" />
+                              <col className="w-[16%]" />
+                              <col className="w-[15%]" />
+                              <col className="w-[20%]" />
+                              <col className="w-[10%]" />
+                            </colgroup>
+                            <thead className="bg-surface-muted text-left text-[11px] uppercase tracking-[0.12em] text-ink-soft">
+                              <tr>
+                                {sortableColumns.map((column) => {
+                                  const isActive = sortField === column.field;
+                                  const ariaSort = getAriaSortValue(
+                                    sortField,
+                                    sortDirection,
+                                    column.field,
+                                  );
+                                  return (
+                                    <th
+                                      key={column.field}
+                                      aria-sort={ariaSort}
+                                      className={`px-4 py-3 font-bold ${column.field === 'date' || column.field === 'paidBy' ? 'whitespace-nowrap' : ''} ${column.field === 'amountArs' ? 'text-right' : ''}`}
+                                      scope="col"
+                                    >
+                                      <button
+                                        aria-label={copy.sortBy(column.label)}
+                                        className={`inline-flex items-center gap-1.5 rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${column.field === 'amountArs' ? 'ml-auto' : ''} ${
+                                          isActive
+                                            ? 'text-slate-900'
+                                            : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                        onClick={() => handleSortChange(column.field)}
+                                        type="button"
+                                      >
+                                        <span>
+                                          {column.label.toLocaleUpperCase(localeTags[locale])}
+                                        </span>
+                                        {isActive ? (
+                                          <svg
+                                            aria-hidden="true"
+                                            className="h-3.5 w-3.5"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2.2"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            {sortDirection === 'asc' ? (
+                                              <path d="m6 14 6-6 6 6" />
+                                            ) : (
+                                              <path d="m6 10 6 6 6-6" />
+                                            )}
+                                          </svg>
+                                        ) : null}
+                                      </button>
+                                    </th>
+                                  );
+                                })}
+                                <th
+                                  className="whitespace-nowrap px-4 py-3 text-right font-medium"
+                                  scope="col"
+                                >
+                                  <span className="sr-only">{shared.actions}</span>
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {section.rows.map((expense) => (
+                                <DesktopExpenseRow
+                                  key={expense.id}
+                                  copy={copy}
+                                  expense={expense}
+                                  formatFxRate={formatFxRate}
+                                  isOpen={openExpenseActionMenuId === expense.id}
+                                  locale={locale}
+                                  onClone={handleRowClone}
+                                  onDelete={handleRowDelete}
+                                  onEdit={handleRowEdit}
+                                  onOpenChange={handleRowMenuOpenChange}
+                                />
+                              ))}
+                              {section.rows.length === 0 ? (
+                                <tr>
+                                  <td
+                                    className="px-4 py-6 text-center text-sm text-slate-500"
+                                    colSpan={6}
+                                  >
+                                    {section.emptyMessage}
+                                  </td>
+                                </tr>
+                              ) : null}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                      {section.showSectionPager ? (
+                        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-sm font-medium text-slate-600">
+                            {copy.pageRange(
+                              section.pageStart,
+                              section.pageEnd,
+                              section.totalRows,
+                              section.hasMore,
+                            )}
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <button
+                              aria-label={copy.previousPage(section.title)}
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={section.currentPage === 1 || sectionLoading[section.key]}
+                              onClick={() =>
+                                setSectionPages((previous) => ({
+                                  ...previous,
+                                  [section.key]: Math.max(1, section.currentPage - 1),
+                                }))
+                              }
+                              type="button"
                             >
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                              <path className="opacity-90" d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeLinecap="round" strokeWidth="4" />
-                            </svg>
-                            {shared.loading}
+                              <svg
+                                aria-hidden="true"
+                                className="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2.5"
+                                viewBox="0 0 24 24"
+                              >
+                                <path d="m15 18-6-6 6-6" />
+                              </svg>
+                            </button>
+                            <button
+                              aria-label={copy.nextPage(section.title)}
+                              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={!section.canMoveNext || sectionLoading[section.key]}
+                              onClick={async () => {
+                                const targetPage = section.currentPage + 1;
+                                await ensureRowsForSection(section.key, targetPage);
+                                setSectionPages((previous) => ({
+                                  ...previous,
+                                  [section.key]: targetPage,
+                                }));
+                              }}
+                              type="button"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                className="h-5 w-5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2.5"
+                                viewBox="0 0 24 24"
+                              >
+                                <path d="m9 18 6-6-6-6" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       ) : null}
-                      <div className={`space-y-3 p-3 md:hidden ${sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'}`}>
-                        {section.rows.map((expense) => (
-                          <MobileExpenseCard
-                            key={expense.id}
-                            expense={expense}
-                            formatFxRate={formatFxRate}
-                            locale={locale}
-                            isOpen={openExpenseActionMenuId === expense.id}
-                            onClone={handleRowCloneAndDismiss}
-                            onDelete={handleRowDeleteAndDismiss}
-                            onEdit={handleRowEditAndDismiss}
-                            onOpenChange={handleRowMenuOpenChange}
-                          />
-                        ))}
-                        {section.rows.length === 0 ? (
-                          <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                            {section.emptyMessage}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="hidden w-full max-w-full overflow-x-auto md:block">
-                        <table
-                          className={`w-full min-w-[840px] table-fixed divide-y divide-slate-200 text-sm transition-opacity ${
-                            sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'
-                          }`}
-                        >
-                          <caption className="sr-only">{section.title}</caption>
-                          <colgroup>
-                            <col className="w-[14%]" />
-                            <col className="w-[24%]" />
-                            <col className="w-[14%]" />
-                            <col className="w-[22%]" />
-                            <col className="w-[16%]" />
-                            <col className="w-[10%]" />
-                          </colgroup>
-                          <thead className="bg-white text-left text-slate-600">
-                            <tr>
-                              {sortableColumns.map((column) => {
-                                const isActive = sortField === column.field;
-                                const ariaSort = getAriaSortValue(sortField, sortDirection, column.field);
-                                return (
-                                  <th
-                                    key={column.field}
-                                    aria-sort={ariaSort}
-                                    className={`px-4 py-3 font-medium ${column.field === 'date' || column.field === 'paidBy' ? 'whitespace-nowrap' : ''}`}
-                                    scope="col"
-                                  >
-                                    <button
-                                      aria-label={copy.sortBy(column.label)}
-                                      className={`inline-flex items-center gap-1.5 rounded-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
-                                        isActive ? 'text-slate-900' : 'text-slate-600 hover:text-slate-900'
-                                      }`}
-                                      onClick={() => handleSortChange(column.field)}
-                                      type="button"
-                                    >
-                                      <span>{column.label}</span>
-                                      {isActive ? (
-                                        <svg
-                                          aria-hidden="true"
-                                          className="h-3.5 w-3.5"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth="2.2"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          {sortDirection === 'asc' ? <path d="m6 14 6-6 6 6" /> : <path d="m6 10 6 6 6-6" />}
-                                        </svg>
-                                      ) : null}
-                                    </button>
-                                  </th>
-                                );
-                              })}
-                              <th className="whitespace-nowrap px-4 py-3 text-right font-medium" scope="col">
-                                <span className="sr-only">{shared.actions}</span>
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {section.rows.map((expense) => (
-                              <DesktopExpenseRow
-                                key={expense.id}
-                                copy={copy}
-                                expense={expense}
-                                formatFxRate={formatFxRate}
-                                isOpen={openExpenseActionMenuId === expense.id}
-                                locale={locale}
-                                onClone={handleRowClone}
-                                onDelete={handleRowDelete}
-                                onEdit={handleRowEdit}
-                                onOpenChange={handleRowMenuOpenChange}
-                              />
-                            ))}
-                            {section.rows.length === 0 ? (
-                              <tr>
-                                <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={6}>
-                                  {section.emptyMessage}
-                                </td>
-                              </tr>
-                            ) : null}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                    {section.showSectionPager ? (
-                      <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm font-medium text-slate-600">
-                          {copy.pageRange(
-                            section.pageStart,
-                            section.pageEnd,
-                            section.totalRows,
-                            section.hasMore,
-                          )}
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <button
-                            aria-label={copy.previousPage(section.title)}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={section.currentPage === 1 || sectionLoading[section.key]}
-                            onClick={() =>
-                              setSectionPages((previous) => ({
-                                ...previous,
-                                [section.key]: Math.max(1, section.currentPage - 1),
-                              }))
-                            }
-                            type="button"
-                          >
-                            <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-                              <path d="m15 18-6-6 6-6" />
-                            </svg>
-                          </button>
-                          <button
-                            aria-label={copy.nextPage(section.title)}
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={!section.canMoveNext || sectionLoading[section.key]}
-                            onClick={async () => {
-                              const targetPage = section.currentPage + 1;
-                              await ensureRowsForSection(section.key, targetPage);
-                              setSectionPages((previous) => ({
-                                ...previous,
-                                [section.key]: targetPage,
-                              }));
-                            }}
-                            type="button"
-                          >
-                            <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" viewBox="0 0 24 24">
-                              <path d="m9 18 6-6-6-6" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
                     </div>
                   </section>
                 ))}
@@ -2578,6 +2816,26 @@ export function ExpensesClient({
           </div>
         </div>
       </div>
+      {!isMobileAddExpenseOpen && !isMoreFiltersOpen ? (
+        <button
+          aria-label={copy.form.addExpense}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+6.75rem)] right-5 z-30 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-[0_12px_28px_rgba(37,99,235,0.35)] transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 active:translate-y-0.5 md:hidden"
+          onClick={openMobileComposer}
+          type="button"
+        >
+          <svg
+            aria-hidden="true"
+            className="h-6 w-6"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeWidth="2.5"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+      ) : null}
       {submissionToast ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
           <div
@@ -2622,7 +2880,12 @@ export function ExpensesClient({
                 className={`submission-toast-progress block h-full ${
                   submissionToast.kind === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
                 }`}
-                style={{ '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<string, string>}
+                style={
+                  { '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<
+                    string,
+                    string
+                  >
+                }
               />
             </span>
           </div>

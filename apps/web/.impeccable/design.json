@@ -1,0 +1,590 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-31T13:10:31Z",
+  "title": "Design System: Fairsplit",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas",
+        "canonical": "#f8fbff",
+        "tonalRamp": [
+          "oklch(15% 0.012 250)",
+          "oklch(25% 0.012 250)",
+          "oklch(38% 0.012 250)",
+          "oklch(50% 0.012 250)",
+          "oklch(62% 0.012 250)",
+          "oklch(74% 0.012 250)",
+          "oklch(86% 0.012 250)",
+          "oklch(95% 0.012 250)"
+        ]
+      },
+      "ink-strong": {
+        "role": "neutral",
+        "displayName": "Ledger Ink",
+        "canonical": "#0f1b35",
+        "tonalRamp": [
+          "oklch(15% 0.06 260)",
+          "oklch(25% 0.06 260)",
+          "oklch(38% 0.06 260)",
+          "oklch(50% 0.06 260)",
+          "oklch(62% 0.06 260)",
+          "oklch(74% 0.06 260)",
+          "oklch(86% 0.06 260)",
+          "oklch(95% 0.06 260)"
+        ]
+      },
+      "ink-base": {
+        "role": "neutral",
+        "displayName": "Body Slate",
+        "canonical": "#334155",
+        "tonalRamp": [
+          "oklch(15% 0.04 258)",
+          "oklch(25% 0.04 258)",
+          "oklch(38% 0.04 258)",
+          "oklch(50% 0.04 258)",
+          "oklch(62% 0.04 258)",
+          "oklch(74% 0.04 258)",
+          "oklch(86% 0.04 258)",
+          "oklch(95% 0.04 258)"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "#475569",
+        "tonalRamp": [
+          "oklch(15% 0.035 255)",
+          "oklch(25% 0.035 255)",
+          "oklch(38% 0.035 255)",
+          "oklch(50% 0.035 255)",
+          "oklch(62% 0.035 255)",
+          "oklch(74% 0.035 255)",
+          "oklch(86% 0.035 255)",
+          "oklch(95% 0.035 255)"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Soft Slate",
+        "canonical": "#64748b",
+        "tonalRamp": [
+          "oklch(15% 0.03 255)",
+          "oklch(25% 0.03 255)",
+          "oklch(38% 0.03 255)",
+          "oklch(50% 0.03 255)",
+          "oklch(62% 0.03 255)",
+          "oklch(74% 0.03 255)",
+          "oklch(86% 0.03 255)",
+          "oklch(95% 0.03 255)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0.005 250)",
+          "oklch(25% 0.005 250)",
+          "oklch(38% 0.005 250)",
+          "oklch(50% 0.005 250)",
+          "oklch(62% 0.005 250)",
+          "oklch(74% 0.005 250)",
+          "oklch(86% 0.005 250)",
+          "oklch(95% 0.005 250)"
+        ]
+      },
+      "surface-soft": {
+        "role": "neutral",
+        "displayName": "Cool Blue Surface",
+        "canonical": "#eef4ff",
+        "tonalRamp": [
+          "oklch(15% 0.025 255)",
+          "oklch(25% 0.025 255)",
+          "oklch(38% 0.025 255)",
+          "oklch(50% 0.025 255)",
+          "oklch(62% 0.025 255)",
+          "oklch(74% 0.025 255)",
+          "oklch(86% 0.025 255)",
+          "oklch(95% 0.025 255)"
+        ]
+      },
+      "surface-muted": {
+        "role": "neutral",
+        "displayName": "Ledger Mist",
+        "canonical": "#f8fafc",
+        "tonalRamp": [
+          "oklch(15% 0.012 250)",
+          "oklch(25% 0.012 250)",
+          "oklch(38% 0.012 250)",
+          "oklch(50% 0.012 250)",
+          "oklch(62% 0.012 250)",
+          "oklch(74% 0.012 250)",
+          "oklch(86% 0.012 250)",
+          "oklch(95% 0.012 250)"
+        ]
+      },
+      "stroke": {
+        "role": "neutral",
+        "displayName": "Cool Rule",
+        "canonical": "#d9e3f3",
+        "tonalRamp": [
+          "oklch(15% 0.025 255)",
+          "oklch(25% 0.025 255)",
+          "oklch(38% 0.025 255)",
+          "oklch(50% 0.025 255)",
+          "oklch(62% 0.025 255)",
+          "oklch(74% 0.025 255)",
+          "oklch(86% 0.025 255)",
+          "oklch(95% 0.025 255)"
+        ]
+      },
+      "trust-blue-wash": {
+        "role": "primary",
+        "displayName": "Trust Blue Wash",
+        "canonical": "#eff6ff",
+        "tonalRamp": [
+          "oklch(15% 0.035 255)",
+          "oklch(25% 0.035 255)",
+          "oklch(38% 0.035 255)",
+          "oklch(50% 0.035 255)",
+          "oklch(62% 0.035 255)",
+          "oklch(74% 0.035 255)",
+          "oklch(86% 0.035 255)",
+          "oklch(95% 0.035 255)"
+        ]
+      },
+      "trust-blue-soft": {
+        "role": "primary",
+        "displayName": "Trust Blue Soft",
+        "canonical": "#dbeafe",
+        "tonalRamp": [
+          "oklch(15% 0.06 255)",
+          "oklch(25% 0.06 255)",
+          "oklch(38% 0.06 255)",
+          "oklch(50% 0.06 255)",
+          "oklch(62% 0.06 255)",
+          "oklch(74% 0.06 255)",
+          "oklch(86% 0.06 255)",
+          "oklch(95% 0.06 255)"
+        ]
+      },
+      "trust-blue-mid": {
+        "role": "primary",
+        "displayName": "Trust Blue Mid",
+        "canonical": "#3b82f6",
+        "tonalRamp": [
+          "oklch(15% 0.2 255)",
+          "oklch(25% 0.2 255)",
+          "oklch(38% 0.2 255)",
+          "oklch(50% 0.2 255)",
+          "oklch(62% 0.2 255)",
+          "oklch(74% 0.2 255)",
+          "oklch(86% 0.2 255)",
+          "oklch(95% 0.2 255)"
+        ]
+      },
+      "trust-blue": {
+        "role": "primary",
+        "displayName": "Trust Blue",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "oklch(15% 0.21 255)",
+          "oklch(25% 0.21 255)",
+          "oklch(38% 0.21 255)",
+          "oklch(50% 0.21 255)",
+          "oklch(62% 0.21 255)",
+          "oklch(74% 0.21 255)",
+          "oklch(86% 0.21 255)",
+          "oklch(95% 0.21 255)"
+        ]
+      },
+      "trust-blue-deep": {
+        "role": "primary",
+        "displayName": "Deep Trust Blue",
+        "canonical": "#1d4ed8",
+        "tonalRamp": [
+          "oklch(15% 0.2 255)",
+          "oklch(25% 0.2 255)",
+          "oklch(38% 0.2 255)",
+          "oklch(50% 0.2 255)",
+          "oklch(62% 0.2 255)",
+          "oklch(74% 0.2 255)",
+          "oklch(86% 0.2 255)",
+          "oklch(95% 0.2 255)"
+        ]
+      },
+      "housing-indigo": {
+        "role": "secondary",
+        "displayName": "Housing Indigo",
+        "canonical": "#4f46e5",
+        "tonalRamp": [
+          "oklch(15% 0.2 274)",
+          "oklch(25% 0.2 274)",
+          "oklch(38% 0.2 274)",
+          "oklch(50% 0.2 274)",
+          "oklch(62% 0.2 274)",
+          "oklch(74% 0.2 274)",
+          "oklch(86% 0.2 274)",
+          "oklch(95% 0.2 274)"
+        ]
+      },
+      "lifestyle-green": {
+        "role": "secondary",
+        "displayName": "Lifestyle Green",
+        "canonical": "#10b981",
+        "tonalRamp": [
+          "oklch(15% 0.17 160)",
+          "oklch(25% 0.17 160)",
+          "oklch(38% 0.17 160)",
+          "oklch(50% 0.17 160)",
+          "oklch(62% 0.17 160)",
+          "oklch(74% 0.17 160)",
+          "oklch(86% 0.17 160)",
+          "oklch(95% 0.17 160)"
+        ]
+      },
+      "essentials-amber": {
+        "role": "secondary",
+        "displayName": "Essentials Amber",
+        "canonical": "#f59e0b",
+        "tonalRamp": [
+          "oklch(15% 0.18 75)",
+          "oklch(25% 0.18 75)",
+          "oklch(38% 0.18 75)",
+          "oklch(50% 0.18 75)",
+          "oklch(62% 0.18 75)",
+          "oklch(74% 0.18 75)",
+          "oklch(86% 0.18 75)",
+          "oklch(95% 0.18 75)"
+        ]
+      },
+      "mobility-cyan": {
+        "role": "secondary",
+        "displayName": "Mobility Cyan",
+        "canonical": "#0891b2",
+        "tonalRamp": [
+          "oklch(15% 0.15 210)",
+          "oklch(25% 0.15 210)",
+          "oklch(38% 0.15 210)",
+          "oklch(50% 0.15 210)",
+          "oklch(62% 0.15 210)",
+          "oklch(74% 0.15 210)",
+          "oklch(86% 0.15 210)",
+          "oklch(95% 0.15 210)"
+        ]
+      },
+      "finance-violet": {
+        "role": "secondary",
+        "displayName": "Finance Violet",
+        "canonical": "#7c3aed",
+        "tonalRamp": [
+          "oklch(15% 0.2 294)",
+          "oklch(25% 0.2 294)",
+          "oklch(38% 0.2 294)",
+          "oklch(50% 0.2 294)",
+          "oklch(62% 0.2 294)",
+          "oklch(74% 0.2 294)",
+          "oklch(86% 0.2 294)",
+          "oklch(95% 0.2 294)"
+        ]
+      },
+      "other-slate": {
+        "role": "secondary",
+        "displayName": "Other Slate",
+        "canonical": "#64748b",
+        "tonalRamp": [
+          "oklch(15% 0.03 255)",
+          "oklch(25% 0.03 255)",
+          "oklch(38% 0.03 255)",
+          "oklch(50% 0.03 255)",
+          "oklch(62% 0.03 255)",
+          "oklch(74% 0.03 255)",
+          "oklch(86% 0.03 255)",
+          "oklch(95% 0.03 255)"
+        ]
+      },
+      "positive": {
+        "role": "secondary",
+        "displayName": "Positive Green",
+        "canonical": "#059669",
+        "tonalRamp": [
+          "oklch(15% 0.17 155)",
+          "oklch(25% 0.17 155)",
+          "oklch(38% 0.17 155)",
+          "oklch(50% 0.17 155)",
+          "oklch(62% 0.17 155)",
+          "oklch(74% 0.17 155)",
+          "oklch(86% 0.17 155)",
+          "oklch(95% 0.17 155)"
+        ]
+      },
+      "negative": {
+        "role": "secondary",
+        "displayName": "Negative Rose",
+        "canonical": "#f43f5e",
+        "tonalRamp": [
+          "oklch(15% 0.2 15)",
+          "oklch(25% 0.2 15)",
+          "oklch(38% 0.2 15)",
+          "oklch(50% 0.2 15)",
+          "oklch(62% 0.2 15)",
+          "oklch(74% 0.2 15)",
+          "oklch(86% 0.2 15)",
+          "oklch(95% 0.2 15)"
+        ]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Warning Brown",
+        "canonical": "#92400e",
+        "tonalRamp": [
+          "oklch(15% 0.12 60)",
+          "oklch(25% 0.12 60)",
+          "oklch(38% 0.12 60)",
+          "oklch(50% 0.12 60)",
+          "oklch(62% 0.12 60)",
+          "oklch(74% 0.12 60)",
+          "oklch(86% 0.12 60)",
+          "oklch(95% 0.12 60)"
+        ]
+      },
+      "danger": {
+        "role": "secondary",
+        "displayName": "Danger Red",
+        "canonical": "#b91c1c",
+        "tonalRamp": [
+          "oklch(15% 0.18 25)",
+          "oklch(25% 0.18 25)",
+          "oklch(38% 0.18 25)",
+          "oklch(50% 0.18 25)",
+          "oklch(62% 0.18 25)",
+          "oklch(74% 0.18 25)",
+          "oklch(86% 0.18 25)",
+          "oklch(95% 0.18 25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "App-shell titles and the strongest screen identity."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Major financial totals and metric values."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section headings and prominent panel statements."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Instructions, descriptions, field values, and default reading text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Brand eyebrows, metric labels, table headers, and month context."
+      }
+    },
+    "shadows": [
+      {
+        "name": "surface-low",
+        "value": "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+        "purpose": "Default headers, cards, fields, and content panels."
+      },
+      {
+        "name": "active-brand",
+        "value": "0 4px 6px -1px rgba(29, 78, 216, 0.25), 0 2px 4px -2px rgba(29, 78, 216, 0.25)",
+        "purpose": "Active desktop navigation only."
+      },
+      {
+        "name": "prism-mark",
+        "value": "0 4px 12px rgba(15, 23, 42, 0.16)",
+        "purpose": "Tactile separation for the compact brand mark."
+      },
+      {
+        "name": "mobile-dock",
+        "value": "0 18px 48px rgba(15, 23, 42, 0.18)",
+        "purpose": "Fixed bottom navigation above page content."
+      },
+      {
+        "name": "dialog",
+        "value": "0 20px 25px -5px rgba(0, 0, 0, 0.10), 0 8px 10px -6px rgba(0, 0, 0, 0.10)",
+        "purpose": "Modal dialogs against the dimmed viewport."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-standard",
+        "value": "200ms ease",
+        "purpose": "Background, border, color, and shadow transitions for interactive state changes."
+      },
+      {
+        "name": "toast-progress",
+        "value": "6000ms linear",
+        "purpose": "Default progress duration for submission toasts; the duration remains overridable."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0.01ms",
+        "purpose": "Near-instant replacement for animation and transition duration when reduced motion is requested."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The dependable default for one clear, forward-moving action.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: var(--brand-600); color: #fff; padding: 10px 16px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; line-height: 24px; transition: background-color 200ms ease, box-shadow 200ms ease; cursor: pointer; } .ds-btn-primary:hover { background: var(--brand-700); } .ds-btn-primary:active { background: var(--brand-700); } .ds-btn-primary:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A quiet bordered action that supports, cancels, or offers an alternative to the primary action.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; border: 1px solid #cbd5e1; border-radius: 12px; background: var(--surface); color: var(--ink-base); padding: 10px 16px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 600; line-height: 24px; transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease; cursor: pointer; } .ds-btn-secondary:hover { background: var(--surface-muted); } .ds-btn-secondary:active { background: var(--surface-soft); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "A full-width, touch-friendly field for financial and household data entry.",
+      "html": "<label class=\"ds-field-label\">Description<input class=\"ds-field\" value=\"Groceries\" /></label>",
+      "css": ".ds-field-label { display: grid; gap: 6px; color: var(--ink-base); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 500; } .ds-field { min-height: 44px; width: 100%; border: 1px solid #cbd5e1; border-radius: 12px; background: var(--surface); color: var(--ink-strong); padding: 10px 16px; font-family: inherit; font-size: 16px; line-height: 24px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); transition: border-color 200ms ease, box-shadow 200ms ease; } .ds-field:hover { border-color: var(--ink-soft); } .ds-field:focus-visible { border-color: var(--brand-500); outline: 2px solid color-mix(in srgb, var(--brand-600) 20%, transparent); outline-offset: 1px; }"
+    },
+    {
+      "name": "Metric Card",
+      "kind": "card",
+      "refersTo": "surface-card",
+      "description": "A quiet financial summary card with a compact label and dominant tabular value.",
+      "html": "<article class=\"ds-metric-card\"><p class=\"ds-metric-label\">TOTAL EXPENSES</p><p class=\"ds-metric-value\">ARS 1,284,320</p></article>",
+      "css": ".ds-metric-card { border: 1px solid color-mix(in srgb, var(--stroke) 80%, transparent); border-radius: 24px; background: var(--surface); color: var(--ink-base); padding: 24px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); font-family: ui-sans-serif, system-ui, sans-serif; } .ds-metric-label { margin: 0; color: var(--ink-soft); font-size: 12px; font-weight: 700; line-height: 16px; letter-spacing: 0.16em; } .ds-metric-value { margin: 8px 0 0; color: var(--ink-strong); font-size: 36px; font-weight: 700; line-height: 40px; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Desktop Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-desktop-active",
+      "description": "The active state for month-scoped desktop navigation.",
+      "html": "<a class=\"ds-nav-desktop\" href=\"#\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M4 10.5 12 4l8 6.5\"/><path d=\"M6.5 9.5V20h11V9.5\"/></svg><span>Dashboard</span></a>",
+      "css": ".ds-nav-desktop { display: flex; flex-direction: column; align-items: center; gap: 6px; border-radius: 12px; background: var(--brand-600); color: #fff; padding: 12px 16px; text-decoration: none; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; font-weight: 600; line-height: 20px; box-shadow: 0 4px 6px -1px rgba(29, 78, 216, 0.25), 0 2px 4px -2px rgba(29, 78, 216, 0.25); transition: background-color 200ms ease, box-shadow 200ms ease; } .ds-nav-desktop svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; } .ds-nav-desktop:hover { background: var(--brand-700); } .ds-nav-desktop:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 2px; }"
+    },
+    {
+      "name": "Mobile Navigation Item",
+      "kind": "nav",
+      "refersTo": "nav-mobile-active",
+      "description": "The quiet selected state inside the fixed mobile bottom dock.",
+      "html": "<a class=\"ds-nav-mobile\" href=\"#\"><svg aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M6 4h10l2 3v13H6z\"/><path d=\"M9 9h6M9 13h6M9 17h4\"/></svg><span>Expenses</span></a>",
+      "css": ".ds-nav-mobile { display: flex; min-height: 56px; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 20px; background: var(--brand-50); color: var(--brand-700); padding: 8px; text-decoration: none; box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12); font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; font-weight: 600; line-height: 11px; transition: background-color 200ms ease, box-shadow 200ms ease; } .ds-nav-mobile svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; } .ds-nav-mobile:hover { background: var(--brand-100); } .ds-nav-mobile:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 2px; }"
+    },
+    {
+      "name": "Active Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-active",
+      "description": "A compact, explicit selected state for sorting and filtering financial lists.",
+      "html": "<button class=\"ds-chip-active\" aria-pressed=\"true\">Date · newest</button>",
+      "css": ".ds-chip-active { display: inline-flex; min-height: 40px; align-items: center; gap: 6px; border: 1px solid var(--brand-100); border-radius: 9999px; background: var(--brand-50); color: var(--brand-700); padding: 8px 12px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 600; line-height: 16px; transition: background-color 200ms ease, border-color 200ms ease; cursor: pointer; } .ds-chip-active:hover { background: var(--brand-100); } .ds-chip-active:active { border-color: var(--brand-500); } .ds-chip-active:focus-visible { outline: 2px solid var(--brand-600); outline-offset: 2px; }"
+    },
+    {
+      "name": "Prism Title Mark",
+      "kind": "custom",
+      "refersTo": "title-mark",
+      "description": "The compact brand signature used beside app identity and major entry points.",
+      "html": "<span class=\"ds-title-mark\"><span class=\"ds-title-mark-highlight\"></span><span class=\"ds-title-mark-ribbon\"></span></span>",
+      "css": ".ds-title-mark { position: relative; display: inline-block; width: 48px; height: 48px; overflow: hidden; transform: rotate(12deg); border-radius: 12px; background: #e2e8f0; box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16); } .ds-title-mark-highlight { position: absolute; inset: 0; background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.3), transparent); } .ds-title-mark-ribbon { position: absolute; left: -45%; top: 50%; width: 190%; height: 10px; transform: translateY(-50%) rotate(45deg); background: linear-gradient(to right, #2dd4bf, #a855f7); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clear Ledger",
+    "overview": "Fairsplit is a calm, light-mode financial workspace where shared money feels understandable rather than clinical. The Clear Ledger pairs crisp accounting structure with softly rounded surfaces and a restrained blue trust signal, making the current month, the household total, and each partner's fair position easy to scan without recreating the pressure of a spreadsheet.\n\nThe interface is softly layered rather than decorative. Cool white and pale blue surfaces organize dense financial information; fine borders do most of the structural work; ambient shadows only separate important planes. The system should feel calm, dependable, and touch-friendly, with warmth coming from the faint canvas glow, the small prism mark, and functional category colors—not from ornament or novelty.",
+    "keyCharacteristics": [
+      "Light-mode first with a cool, open canvas and clean white work surfaces.",
+      "Large, tabular financial totals supported by compact labels and restrained body copy.",
+      "Rounded, touch-friendly controls and containers with precise border hierarchy.",
+      "Trust Blue reserved for current state, primary action, focus, and important guidance.",
+      "Functional accent colors identify spending categories and financial status without dominating the page.",
+      "Responsive information density: tables and horizontal navigation on desktop; cards and a fixed bottom navigation on mobile."
+    ],
+    "rules": [
+      {
+        "name": "The One Trust Signal Rule",
+        "body": "Trust Blue is the only general-purpose accent; use it for action, focus, and current state, never as broad decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Category Color Stays Categorical Rule",
+        "body": "Housing, lifestyle, essentials, mobility, finance, and other accents identify data; they do not replace Trust Blue for navigation or generic controls.",
+        "section": "colors"
+      },
+      {
+        "name": "The Meaning Before Hue Rule",
+        "body": "Positive, negative, warning, and danger colors must retain a readable text label or numeric sign so color never carries meaning alone.",
+        "section": "colors"
+      },
+      {
+        "name": "The Fairness Is Numeric Rule",
+        "body": "Monetary values, percentages, rates, and date-like controls use tabular numerals and strong alignment so partners can compare amounts without visual jitter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Quiet Type Rule",
+        "body": "Hierarchy comes from weight and size within one platform sans family; do not add a second typeface, decorative italics, or oversized editorial display treatments.",
+        "section": "typography"
+      },
+      {
+        "name": "The Month Is the Frame Rule",
+        "body": "Keep the selected month visually adjacent to the screen title and preserve it across month-scoped navigation; the current month is the organizing frame for every financial task.",
+        "section": "layout"
+      },
+      {
+        "name": "The Soft Layer Rule",
+        "body": "Borders and tonal surfaces create hierarchy first; add shadow only when a plane genuinely sits above another plane.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Overlay Earns Depth Rule",
+        "body": "Strong elevation is limited to dialogs, the mobile dock, and the prism mark—never routine content cards.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Radius Signals Scale Rule",
+        "body": "Larger spatial containers receive larger radii; do not apply the 24px hero radius indiscriminately to small controls or dense table elements.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do make month-to-date totals, partner differences, and the settlement statement the strongest visual information.",
+      "Do use Paper, Ledger Mist, Cool Blue Surface, and Cool Rule borders to group dense financial information before adding shadow.",
+      "Do keep controls touch-friendly, keyboard-visible, and responsive; maintain 44px targets and mobile safe-area clearance.",
+      "Do use tabular numerals and right alignment for comparable monetary values.",
+      "Do let category and status colors carry a specific functional label, sign, or data relationship.",
+      "Do preserve the light-mode-first, calm, clear visual character across new screens."
+    ],
+    "donts": [
+      "Don't turn Trust Blue or the category palette into decorative gradients, oversized color fields, or generic dashboard chrome.",
+      "Don't introduce a second font, glass-heavy surfaces, neon accents, or ornamental data visualizations.",
+      "Don't make every container a floating card; use spacing, borders, and nested tonal surfaces to keep hierarchy quiet.",
+      "Don't shrink mobile controls below 44px or force desktop tables into narrow viewports.",
+      "Don't use color alone to communicate who owes, who paid more, an error, or a destructive consequence.",
+      "Don't duplicate the prism ribbon across buttons, charts, backgrounds, or unrelated decorative elements."
+    ]
+  }
+}

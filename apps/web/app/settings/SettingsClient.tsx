@@ -761,6 +761,7 @@ export function SettingsClient({
 
   return (
     <AppShell
+      compact
       month={month}
       title={copy.shellTitle}
       subtitle={copy.shellSubtitle}
