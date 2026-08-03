@@ -115,7 +115,7 @@ export function createExpenseFormDefaults({
     applyToFuture: true,
     installmentEnabled: false,
     installmentCount: 2,
-    installmentEntryMode: 'perInstallment',
+    installmentEntryMode: 'total',
     totalAmount: undefined,
   };
 }
