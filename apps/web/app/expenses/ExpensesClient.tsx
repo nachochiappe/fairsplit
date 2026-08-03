@@ -54,6 +54,7 @@ import {
 } from './expense-styles';
 import { ExpenseComposerFields, MobileExpenseComposerFields } from './ExpenseComposerFields';
 import {
+  createExpenseFormDefaults,
   dateInputValueToMonth,
   expenseSchema,
   ExpenseForm,
@@ -589,22 +590,10 @@ export function ExpensesClient({
 
   const form = useForm<ExpenseForm>({
     resolver: zodResolver(expenseSchema),
-    defaultValues: {
-      date: getTodayDateInputValue(),
-      description: '',
+    defaultValues: createExpenseFormDefaults({
       categoryId: initialCategories.find((category) => category.archivedAt === null)?.id ?? '',
-      amount: undefined,
-      currencyCode: 'ARS',
-      fxRate: undefined,
       paidByUserId: resolveDefaultPaidByUserId(initialUsers, currentUserId),
-      fixedEnabled: false,
-      nextMonthExpense: false,
-      applyToFuture: true,
-      installmentEnabled: false,
-      installmentCount: 2,
-      installmentEntryMode: 'perInstallment',
-      totalAmount: undefined,
-    },
+    }),
   });
 
   const formatFxRate = useCallback(
@@ -631,22 +620,12 @@ export function ExpensesClient({
 
   const resetForm = useCallback(
     (defaultCategoryId: string) => {
-      form.reset({
-        date: getTodayDateInputValue(),
-        description: '',
-        categoryId: defaultCategoryId,
-        amount: undefined,
-        currencyCode: 'ARS',
-        fxRate: undefined,
-        paidByUserId: defaultPaidByUserId,
-        fixedEnabled: false,
-        nextMonthExpense: false,
-        applyToFuture: true,
-        installmentEnabled: false,
-        installmentCount: 2,
-        installmentEntryMode: 'perInstallment',
-        totalAmount: undefined,
-      });
+      form.reset(
+        createExpenseFormDefaults({
+          categoryId: defaultCategoryId,
+          paidByUserId: defaultPaidByUserId,
+        }),
+      );
       form.resetField('amount', { defaultValue: undefined });
       form.resetField('totalAmount', { defaultValue: undefined });
     },

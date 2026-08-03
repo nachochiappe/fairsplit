@@ -92,3 +92,30 @@ export const expenseSchema = z
   });
 
 export type ExpenseForm = z.infer<typeof expenseSchema>;
+
+interface CreateExpenseFormDefaultsOptions {
+  categoryId: string;
+  paidByUserId: string;
+}
+
+export function createExpenseFormDefaults({
+  categoryId,
+  paidByUserId,
+}: CreateExpenseFormDefaultsOptions): ExpenseForm {
+  return {
+    date: getTodayDateInputValue(),
+    description: '',
+    categoryId,
+    amount: undefined,
+    currencyCode: DEFAULT_CURRENCY_CODE,
+    fxRate: 1,
+    paidByUserId,
+    fixedEnabled: false,
+    nextMonthExpense: false,
+    applyToFuture: true,
+    installmentEnabled: false,
+    installmentCount: 2,
+    installmentEntryMode: 'perInstallment',
+    totalAmount: undefined,
+  };
+}
