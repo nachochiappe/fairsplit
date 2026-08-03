@@ -2127,7 +2127,7 @@ export function ExpensesClient({
         </section>
 
         <div className="grid items-start gap-5 lg:grid-cols-[22rem_minmax(0,1fr)]">
-          <aside className="hidden min-w-0 space-y-4 md:block lg:sticky lg:top-0">
+          <aside className="hidden min-w-0 space-y-4 md:block lg:sticky lg:top-0 lg:max-h-[100dvh] lg:overflow-y-auto">
             {!isMobileAddExpenseOpen ? (
               <form
                 className="hidden min-w-0 space-y-4 rounded-[1.6rem] border border-stroke bg-white p-5 shadow-sm md:block"
