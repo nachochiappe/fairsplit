@@ -254,6 +254,6 @@ describe('tenant isolation', () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.error).toContain(`Missing FX rate for USD in ${monthA}`);
+    expect(response.body.error).toContain(`Missing exchange rate for USD in ${monthA}`);
   });
 });

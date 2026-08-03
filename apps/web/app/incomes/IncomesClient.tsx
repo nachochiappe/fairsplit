@@ -1,138 +1,24 @@
 'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ActionButton } from '../../components/ActionButton';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { MonthSelector } from '../../components/MonthSelector';
 import { ViewportModal } from '../../components/ViewportModal';
 import {
-  getExchangeRates,
   getIncomes,
   replaceIncomesForUser,
+  type AppLocale,
   type ExchangeRate,
   type Income,
-  type AppLocale,
   type User,
 } from '../../lib/api';
-import { formatMoney } from '../../lib/currency';
-import { t } from '../../lib/i18n';
-
-type IncomeDraft = {
-  id?: string;
-  description: string;
-  amount: string;
-  currencyCode: SupportedCurrencyCode;
-  fxRate: string;
-};
-
-const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
-type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
-const DEFAULT_CURRENCY_CODE: SupportedCurrencyCode = 'ARS';
-const surfaceClass = 'rounded-3xl border border-slate-200 bg-white/90 shadow-sm';
-const fieldClass =
-  'w-full min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base placeholder:text-ink-soft shadow-sm transition-colors focus-visible:border-brand-500 focus-visible:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20 focus-visible:ring-offset-1';
-const moneyFieldClass = `${fieldClass} pl-8 text-right`;
-const subtleButtonClass =
-  'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-const primaryButtonClass =
-  'inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-6 py-3 text-base font-bold text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
-
-const userInitialToneClasses = [
-  'border-rose-200 bg-rose-100 text-rose-700',
-  'border-amber-200 bg-amber-100 text-amber-700',
-  'border-emerald-200 bg-emerald-100 text-emerald-700',
-  'border-cyan-200 bg-cyan-100 text-cyan-700',
-  'border-indigo-200 bg-indigo-100 text-indigo-700',
-  'border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700',
-] as const;
-
-function toSupportedCurrencyCode(value: string): SupportedCurrencyCode {
-  const normalizedValue = value.trim().toUpperCase();
-  return supportedCurrencyCodes.includes(normalizedValue as SupportedCurrencyCode)
-    ? (normalizedValue as SupportedCurrencyCode)
-    : DEFAULT_CURRENCY_CODE;
-}
-
-function getPreviousMonth(month: string): string {
-  const [yearPart, monthPart] = month.split('-');
-  const year = Number(yearPart);
-  const monthIndex = Number(monthPart) - 1;
-  const date = new Date(Date.UTC(year, monthIndex, 1));
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
-  return `${date.getUTCFullYear()}-${nextMonth}`;
-}
-
-function getUserInitial(name: string): string {
-  const trimmedName = name.trim();
-  return trimmedName.length > 0 ? trimmedName[0]!.toUpperCase() : '?';
-}
-
-function getUserInitialToneClass(userId: string): (typeof userInitialToneClasses)[number] {
-  let hash = 0;
-  for (let index = 0; index < userId.length; index += 1) {
-    hash = (hash << 5) - hash + userId.charCodeAt(index);
-    hash |= 0;
-  }
-
-  const toneIndex = Math.abs(hash) % userInitialToneClasses.length;
-  return userInitialToneClasses[toneIndex]!;
-}
-
-function buildIncomeDrafts(users: User[], incomes: Income[]): Record<string, IncomeDraft[]> {
-  const nextDrafts: Record<string, IncomeDraft[]> = {};
-  for (const user of users) {
-    nextDrafts[user.id] = [];
-  }
-
-  for (const income of incomes) {
-    if (!nextDrafts[income.userId]) {
-      nextDrafts[income.userId] = [];
-    }
-
-    const currencyCode = toSupportedCurrencyCode(income.currencyCode);
-    nextDrafts[income.userId].push({
-      id: income.id,
-      description: income.description,
-      amount: Number(income.amountOriginal).toFixed(2),
-      currencyCode,
-      fxRate: currencyCode === 'ARS' ? '1' : income.fxRateUsed,
-    });
-  }
-
-  return nextDrafts;
-}
-
-function areIncomeDraftMapsEqual(
-  left: Record<string, IncomeDraft[]>,
-  right: Record<string, IncomeDraft[]>,
-): boolean {
-  const userIds = new Set([...Object.keys(left), ...Object.keys(right)]);
-
-  for (const userId of userIds) {
-    const leftRows = left[userId] ?? [];
-    const rightRows = right[userId] ?? [];
-
-    if (leftRows.length !== rightRows.length) {
-      return false;
-    }
-
-    for (let index = 0; index < leftRows.length; index += 1) {
-      const leftRow = leftRows[index];
-      const rightRow = rightRows[index];
-      if (
-        leftRow?.description !== rightRow?.description ||
-        leftRow?.amount !== rightRow?.amount ||
-        leftRow?.currencyCode !== rightRow?.currencyCode ||
-        leftRow?.fxRate !== rightRow?.fxRate
-      ) {
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
+import { localeTags, t } from '../../lib/i18n';
+import {
+  IncomeEntryForm,
+  supportedIncomeCurrencyCodes,
+  type IncomeCurrencyCode,
+  type IncomeDraft,
+} from './IncomeEntryForm';
 
 interface IncomesClientProps {
   month: string;
@@ -142,45 +28,195 @@ interface IncomesClientProps {
   locale: AppLocale;
 }
 
-interface PendingIncomeRemoval {
+interface ActiveIncomeEditor {
+  draft: IncomeDraft;
+  index: number | null;
   userId: string;
-  index: number;
+}
+
+interface PendingIncomeRemoval {
   description: string;
+  index: number;
+  userId: string;
+}
+
+const partnerToneClasses = [
+  {
+    avatar: 'border-rose-200 bg-rose-100 text-rose-700',
+    segment: 'bg-rose-500',
+  },
+  {
+    avatar: 'border-fuchsia-200 bg-fuchsia-100 text-fuchsia-700',
+    segment: 'bg-violet-600',
+  },
+  {
+    avatar: 'border-emerald-200 bg-emerald-100 text-emerald-700',
+    segment: 'bg-emerald-600',
+  },
+  {
+    avatar: 'border-cyan-200 bg-cyan-100 text-cyan-700',
+    segment: 'bg-cyan-600',
+  },
+  {
+    avatar: 'border-amber-200 bg-amber-100 text-amber-700',
+    segment: 'bg-amber-500',
+  },
+  {
+    avatar: 'border-indigo-200 bg-indigo-100 text-indigo-700',
+    segment: 'bg-indigo-600',
+  },
+] as const;
+
+function toSupportedCurrencyCode(value: string): IncomeCurrencyCode {
+  const normalized = value.trim().toUpperCase();
+  return supportedIncomeCurrencyCodes.includes(normalized as IncomeCurrencyCode)
+    ? (normalized as IncomeCurrencyCode)
+    : 'ARS';
+}
+
+function getPreviousMonth(month: string): string {
+  const [yearPart, monthPart] = month.split('-');
+  const date = new Date(Date.UTC(Number(yearPart), Number(monthPart) - 1, 1));
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonth(month: string, locale: AppLocale, includeYear = true): string {
+  return new Intl.DateTimeFormat(localeTags[locale], {
+    month: 'long',
+    ...(includeYear ? { year: 'numeric' as const } : {}),
+    timeZone: 'UTC',
+  }).format(new Date(`${month}-01T12:00:00.000Z`));
+}
+
+function formatArs(value: number, locale: AppLocale): string {
+  return new Intl.NumberFormat(localeTags[locale], {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatRate(value: string, locale: AppLocale): string {
+  return new Intl.NumberFormat(localeTags[locale], {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+  }).format(Number(value));
+}
+
+function formatPercentage(value: number, locale: AppLocale): string {
+  return new Intl.NumberFormat(localeTags[locale], {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+function getUserInitial(name: string): string {
+  const trimmedName = name.trim();
+  return trimmedName.length > 0 ? trimmedName[0]!.toUpperCase() : '?';
+}
+
+function getPartnerTone(index: number): (typeof partnerToneClasses)[number] {
+  return partnerToneClasses[index % partnerToneClasses.length]!;
+}
+
+function buildIncomeDrafts(users: User[], incomes: Income[]): Record<string, IncomeDraft[]> {
+  const nextDrafts: Record<string, IncomeDraft[]> = Object.fromEntries(
+    users.map((user) => [user.id, []]),
+  );
+
+  for (const income of incomes) {
+    if (!nextDrafts[income.userId]) {
+      nextDrafts[income.userId] = [];
+    }
+
+    const currencyCode = toSupportedCurrencyCode(income.currencyCode);
+    nextDrafts[income.userId]!.push({
+      id: income.id,
+      amount: Number(income.amountOriginal).toFixed(2),
+      currencyCode,
+      description: income.description,
+      fxRate: currencyCode === 'ARS' ? '1' : income.fxRateUsed,
+    });
+  }
+
+  return nextDrafts;
+}
+
+function mergeExchangeRatesFromIncomes(
+  previousRates: ExchangeRate[],
+  incomes: Income[],
+  month: string,
+): ExchangeRate[] {
+  const nextRates = [...previousRates];
+
+  for (const income of incomes) {
+    if (income.currencyCode === 'ARS') {
+      continue;
+    }
+
+    const existingIndex = nextRates.findIndex((rate) => rate.currencyCode === income.currencyCode);
+    const nextRate: ExchangeRate = {
+      id: existingIndex >= 0 ? nextRates[existingIndex]!.id : `local-${income.currencyCode}`,
+      currencyCode: income.currencyCode,
+      month,
+      rateToArs: income.fxRateUsed,
+    };
+
+    if (existingIndex >= 0) {
+      nextRates[existingIndex] = nextRate;
+    } else {
+      nextRates.push(nextRate);
+    }
+  }
+
+  return nextRates;
 }
 
 function ConfirmationDialog({
-  title,
+  busy,
+  cancelLabel,
+  confirmLabel,
   message,
   onCancel,
   onConfirm,
-  confirmLabel,
-  cancelLabel,
+  title,
 }: {
-  title: string;
+  busy: boolean;
+  cancelLabel: string;
+  confirmLabel: string;
   message: string;
   onCancel: () => void;
   onConfirm: () => void;
-  confirmLabel: string;
-  cancelLabel: string;
+  title: string;
 }) {
   return (
-    <ViewportModal onDismiss={onCancel}>
+    <ViewportModal onDismiss={busy ? undefined : onCancel}>
       <div
         aria-labelledby="income-confirmation-dialog-title"
         aria-modal="true"
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
         role="dialog"
       >
-        <h3 className="text-base font-semibold text-slate-900" id="income-confirmation-dialog-title">
+        <h3 className="text-lg font-bold text-ink-strong" id="income-confirmation-dialog-title">
           {title}
         </h3>
-        <p className="mt-2 text-sm text-slate-700">{message}</p>
-        <div className="mt-4 flex gap-2">
-          <button className={primaryButtonClass} onClick={onConfirm} type="button">
-            {confirmLabel}
-          </button>
-          <button className={subtleButtonClass} onClick={onCancel} type="button">
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">{message}</p>
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-60"
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+          >
             {cancelLabel}
+          </button>
+          <button
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-600 focus-visible:ring-offset-2 disabled:opacity-60"
+            disabled={busy}
+            onClick={onConfirm}
+            type="button"
+          >
+            {confirmLabel}
           </button>
         </div>
       </div>
@@ -188,156 +224,40 @@ function ConfirmationDialog({
   );
 }
 
-export function IncomesClient({ month, initialUsers, initialIncomes, initialExchangeRates, locale }: IncomesClientProps) {
+export function IncomesClient({
+  month,
+  initialUsers,
+  initialIncomes,
+  initialExchangeRates,
+  locale,
+}: IncomesClientProps) {
   const copy = t(locale).incomes;
   const shared = t(locale).common;
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRate[]>(initialExchangeRates);
-  const [incomeDraftsByUser, setIncomeDraftsByUser] = useState<Record<string, IncomeDraft[]>>(
-    () => buildIncomeDrafts(initialUsers, initialIncomes),
+  const [incomeDraftsByUser, setIncomeDraftsByUser] = useState<Record<string, IncomeDraft[]>>(() =>
+    buildIncomeDrafts(initialUsers, initialIncomes),
   );
-  const [baselineIncomeDraftsByUser, setBaselineIncomeDraftsByUser] = useState<Record<string, IncomeDraft[]>>(
-    () => buildIncomeDrafts(initialUsers, initialIncomes),
+  const [editor, setEditor] = useState<ActiveIncomeEditor | null>(null);
+  const [pendingIncomeRemoval, setPendingIncomeRemoval] = useState<PendingIncomeRemoval | null>(
+    null,
   );
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [copyingPrevious, setCopyingPrevious] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pendingIncomeRemoval, setPendingIncomeRemoval] = useState<PendingIncomeRemoval | null>(null);
-  const [openMobileActionMenuId, setOpenMobileActionMenuId] = useState<string | null>(null);
-  const previousMonth = useMemo(() => getPreviousMonth(month), [month]);
-
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      setMessage(null);
-
-      const [incomesResponse, rates] = await Promise.all([getIncomes(month), getExchangeRates(month)]);
-      const nextDrafts = buildIncomeDrafts(users, incomesResponse);
-      setIncomeDraftsByUser(nextDrafts);
-      setBaselineIncomeDraftsByUser(nextDrafts);
-      setExchangeRates(rates);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : copy.loadFailed);
-    } finally {
-      setLoading(false);
-    }
-  }, [copy.loadFailed, month, users]);
 
   useEffect(() => {
-    const nextDrafts = buildIncomeDrafts(initialUsers, initialIncomes);
     setUsers(initialUsers);
-    setIncomeDraftsByUser(nextDrafts);
-    setBaselineIncomeDraftsByUser(nextDrafts);
+    setIncomeDraftsByUser(buildIncomeDrafts(initialUsers, initialIncomes));
     setExchangeRates(initialExchangeRates);
-    setLoading(false);
-    setError(null);
-  }, [initialExchangeRates, initialUsers, initialIncomes]);
-
-  useEffect(() => {
-    if (!openMobileActionMenuId) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) {
-        return;
-      }
-
-      if (target.closest('[data-mobile-income-menu]')) {
-        return;
-      }
-
-      setOpenMobileActionMenuId(null);
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [openMobileActionMenuId]);
-
-  const hasUnsavedChanges = useMemo(
-    () => !areIncomeDraftMapsEqual(incomeDraftsByUser, baselineIncomeDraftsByUser),
-    [baselineIncomeDraftsByUser, incomeDraftsByUser],
-  );
-
-  const discardChanges = () => {
-    setIncomeDraftsByUser(baselineIncomeDraftsByUser);
-    setError(null);
-    setMessage(null);
-  };
-
-  const updateDraftDescription = (userId: string, index: number, nextDescription: string) => {
-    setIncomeDraftsByUser((previous) => {
-      const nextRows = [...(previous[userId] ?? [])];
-      nextRows[index] = { ...nextRows[index], description: nextDescription };
-      return { ...previous, [userId]: nextRows };
-    });
-  };
-
-  const updateDraftAmount = (userId: string, index: number, nextAmount: string) => {
-    setIncomeDraftsByUser((previous) => {
-      const nextRows = [...(previous[userId] ?? [])];
-      nextRows[index] = { ...nextRows[index], amount: nextAmount };
-      return { ...previous, [userId]: nextRows };
-    });
-  };
-
-  const updateDraftCurrencyCode = (userId: string, index: number, nextCurrencyCode: SupportedCurrencyCode) => {
-    setIncomeDraftsByUser((previous) => {
-      const nextRows = [...(previous[userId] ?? [])];
-      const monthRate = exchangeRates.find((rate) => rate.currencyCode === nextCurrencyCode)?.rateToArs;
-      const nextFxRate = nextCurrencyCode === 'ARS' ? '1' : monthRate ?? '';
-      nextRows[index] = { ...nextRows[index], currencyCode: nextCurrencyCode, fxRate: nextFxRate };
-      return { ...previous, [userId]: nextRows };
-    });
-  };
-
-  const updateDraftFxRate = (userId: string, index: number, nextFxRate: string) => {
-    setIncomeDraftsByUser((previous) => {
-      const nextRows = [...(previous[userId] ?? [])];
-      nextRows[index] = { ...nextRows[index], fxRate: nextFxRate };
-      return { ...previous, [userId]: nextRows };
-    });
-  };
-
-  const addIncomeDraft = (userId: string) => {
-    setIncomeDraftsByUser((previous) => ({
-      ...previous,
-      [userId]: [...(previous[userId] ?? []), { description: '', amount: '', currencyCode: 'ARS', fxRate: '1' }],
-    }));
-  };
-
-  const removeIncomeDraft = (userId: string, index: number) => {
-    setIncomeDraftsByUser((previous) => {
-      const nextRows = [...(previous[userId] ?? [])];
-      nextRows.splice(index, 1);
-      return { ...previous, [userId]: nextRows };
-    });
-  };
-
-  const requestRemoveIncomeDraft = (userId: string, index: number) => {
-    const description = (incomeDraftsByUser[userId]?.[index]?.description ?? '').trim();
-    setPendingIncomeRemoval({
-      userId,
-      index,
-      description: description || 'this income',
-    });
-  };
-
-  const confirmRemoveIncomeDraft = () => {
-    if (!pendingIncomeRemoval) {
-      return;
-    }
-
-    removeIncomeDraft(pendingIncomeRemoval.userId, pendingIncomeRemoval.index);
+    setEditor(null);
     setPendingIncomeRemoval(null);
-  };
+    setMessage(null);
+    setError(null);
+  }, [initialExchangeRates, initialIncomes, initialUsers]);
 
+  const previousMonth = useMemo(() => getPreviousMonth(month), [month]);
   const monthRateByCurrency = useMemo(
     () => new Map(exchangeRates.map((rate) => [rate.currencyCode, Number(rate.rateToArs)])),
     [exchangeRates],
@@ -350,119 +270,188 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
         return 0;
       }
 
-      const currencyCode = draft.currencyCode.trim().toUpperCase();
-      const monthRate = monthRateByCurrency.get(currencyCode);
-      const fallbackFxRate = draft.fxRate || (monthRate !== undefined ? String(monthRate) : '');
-      const fxRate = currencyCode === 'ARS' ? 1 : Number(fallbackFxRate || NaN);
-      if (!Number.isFinite(fxRate)) {
-        return 0;
-      }
-
-      return amount * fxRate;
+      const savedMonthRate = monthRateByCurrency.get(draft.currencyCode);
+      const fxRate =
+        draft.currencyCode === 'ARS' ? 1 : Number(draft.fxRate || savedMonthRate || NaN);
+      return Number.isFinite(fxRate) ? amount * fxRate : 0;
     },
     [monthRateByCurrency],
   );
 
-  const total = useMemo(
-    () => Object.values(incomeDraftsByUser).flat().reduce((sum, row) => sum + parseIncomeAmountToArs(row), 0),
-    [incomeDraftsByUser, parseIncomeAmountToArs],
-  );
-
   const totalByUser = useMemo(() => {
     const totals: Record<string, number> = {};
-
     for (const user of users) {
-      totals[user.id] = (incomeDraftsByUser[user.id] ?? []).reduce((sum, row) => sum + parseIncomeAmountToArs(row), 0);
+      totals[user.id] = (incomeDraftsByUser[user.id] ?? []).reduce(
+        (sum, draft) => sum + parseIncomeAmountToArs(draft),
+        0,
+      );
     }
-
     return totals;
   }, [incomeDraftsByUser, parseIncomeAmountToArs, users]);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const total = useMemo(
+    () => users.reduce((sum, user) => sum + (totalByUser[user.id] ?? 0), 0),
+    [totalByUser, users],
+  );
 
+  const partnerSummaries = useMemo(() => {
+    const positiveTotal = users.reduce(
+      (sum, user) => sum + Math.max(totalByUser[user.id] ?? 0, 0),
+      0,
+    );
+    return users.map((user, index) => {
+      const userTotal = totalByUser[user.id] ?? 0;
+      return {
+        percentage: total === 0 ? 0 : (userTotal / total) * 100,
+        tone: getPartnerTone(index),
+        user,
+        userTotal,
+        visualPercentage:
+          positiveTotal === 0
+            ? 100 / Math.max(users.length, 1)
+            : (Math.max(userTotal, 0) / positiveTotal) * 100,
+      };
+    });
+  }, [total, totalByUser, users]);
+
+  const isBusy = savingUserId !== null || copyingPrevious;
+
+  const openAddIncome = (userId: string) => {
     setError(null);
     setMessage(null);
+    setEditor({
+      draft: { amount: '', currencyCode: 'ARS', description: '', fxRate: '1' },
+      index: null,
+      userId,
+    });
+  };
 
-    const payloadByUser: Record<
-      string,
-      Array<{ description: string; amount: number; currencyCode: string; fxRate?: number }>
-    > = {};
-
-    for (const user of users) {
-      const entries = incomeDraftsByUser[user.id] ?? [];
-      const entriesPayload: Array<{ description: string; amount: number; currencyCode: string; fxRate?: number }> = [];
-
-      for (const entry of entries) {
-        const description = entry.description.trim();
-
-        if (description === '' && entry.amount.trim() === '') {
-          continue;
-        }
-
-        if (description === '') {
-          setError(copy.descriptionRequired(user.name));
-          return;
-        }
-
-        if (entry.amount.trim() === '') {
-          setError(copy.amountRequired(user.name));
-          return;
-        }
-
-        const currencyCode = toSupportedCurrencyCode(entry.currencyCode);
-
-        const amount = Number(entry.amount);
-        if (!Number.isFinite(amount)) {
-          setError(copy.amountInvalid(user.name));
-          return;
-        }
-
-        const explicitFxRate = entry.fxRate.trim() === '' ? undefined : Number(entry.fxRate);
-        if (currencyCode !== 'ARS' && explicitFxRate !== undefined && (!Number.isFinite(explicitFxRate) || explicitFxRate <= 0)) {
-          setError(copy.fxRateInvalid(user.name));
-          return;
-        }
-
-        entriesPayload.push({ description, amount, currencyCode, fxRate: explicitFxRate });
-      }
-
-      payloadByUser[user.id] = entriesPayload;
-    }
-
-    try {
-      setSaving(true);
-      await Promise.all(
-        users.map((user) =>
-          replaceIncomesForUser({
-            month,
-            userId: user.id,
-            entries: payloadByUser[user.id] ?? [],
-          }),
-        ),
-      );
-      setMessage(copy.incomeSaved);
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : copy.saveFailed);
+  const openEditIncome = (userId: string, index: number) => {
+    const draft = incomeDraftsByUser[userId]?.[index];
+    if (!draft) {
       return;
     }
+    setError(null);
+    setMessage(null);
+    setEditor({ draft: { ...draft }, index, userId });
+  };
+
+  const buildPayload = (user: User, rows: IncomeDraft[]) => {
+    const entries: Array<{
+      description: string;
+      amount: number;
+      currencyCode: string;
+      fxRate?: number;
+    }> = [];
+
+    for (const row of rows) {
+      const description = row.description.trim();
+      if (!description) {
+        return { error: copy.descriptionRequired(user.name), entries: null };
+      }
+      if (!row.amount.trim()) {
+        return { error: copy.amountRequired(user.name), entries: null };
+      }
+
+      const amount = Number(row.amount);
+      if (!Number.isFinite(amount)) {
+        return { error: copy.amountInvalid(user.name), entries: null };
+      }
+
+      const fxRate =
+        row.currencyCode === 'ARS' || !row.fxRate.trim() ? undefined : Number(row.fxRate);
+      if (
+        row.currencyCode !== 'ARS' &&
+        (fxRate === undefined || !Number.isFinite(fxRate) || fxRate <= 0)
+      ) {
+        return { error: copy.fxRateInvalid(user.name), entries: null };
+      }
+
+      entries.push({
+        amount,
+        currencyCode: row.currencyCode,
+        description,
+        ...(fxRate === undefined ? {} : { fxRate }),
+      });
+    }
+
+    return { error: null, entries };
+  };
+
+  const persistUserRows = async (
+    userId: string,
+    rows: IncomeDraft[],
+    successMessage: string,
+  ): Promise<boolean> => {
+    const user = users.find((candidate) => candidate.id === userId);
+    if (!user) {
+      return false;
+    }
+
+    const payload = buildPayload(user, rows);
+    if (!payload.entries) {
+      setError(payload.error);
+      return false;
+    }
 
     try {
-      await load();
-    } catch (refreshError) {
-      setError(
-        refreshError instanceof Error
-          ? `${copy.savedRefreshFailed} ${refreshError.message}`
-          : copy.savedRefreshFailed,
-      );
+      setSavingUserId(userId);
+      setError(null);
+      setMessage(null);
+      const savedIncomes = await replaceIncomesForUser({ month, userId, entries: payload.entries });
+      const savedRows = buildIncomeDrafts([user], savedIncomes)[userId] ?? [];
+      setIncomeDraftsByUser((previous) => ({ ...previous, [userId]: savedRows }));
+      setExchangeRates((previous) => mergeExchangeRatesFromIncomes(previous, savedIncomes, month));
+      setEditor(null);
+      setMessage(successMessage);
+      return true;
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : copy.saveFailed);
+      return false;
     } finally {
-      setSaving(false);
+      setSavingUserId(null);
     }
   };
 
-  const copyFromPreviousMonth = useCallback(async () => {
+  const saveEditor = async () => {
+    if (!editor) {
+      return;
+    }
+
+    const currentRows = incomeDraftsByUser[editor.userId] ?? [];
+    const nextRows =
+      editor.index === null
+        ? [...currentRows, editor.draft]
+        : currentRows.map((row, index) => (index === editor.index ? editor.draft : row));
+    await persistUserRows(
+      editor.userId,
+      nextRows,
+      editor.index === null ? copy.incomeSaved : copy.incomeUpdated,
+    );
+  };
+
+  const confirmRemoveIncome = async () => {
+    if (!pendingIncomeRemoval) {
+      return;
+    }
+
+    const rows = incomeDraftsByUser[pendingIncomeRemoval.userId] ?? [];
+    const nextRows = rows.filter((_, index) => index !== pendingIncomeRemoval.index);
+    const removed = await persistUserRows(
+      pendingIncomeRemoval.userId,
+      nextRows,
+      copy.incomeRemoved,
+    );
+    if (removed) {
+      setPendingIncomeRemoval(null);
+    }
+  };
+
+  const copyFromPreviousMonth = async () => {
     if (Object.values(incomeDraftsByUser).some((rows) => rows.length > 0)) {
-      const shouldOverwrite = window.confirm(copy.overwriteConfirm(previousMonth));
+      const shouldOverwrite = window.confirm(
+        copy.overwriteConfirm(formatMonth(previousMonth, locale)),
+      );
       if (!shouldOverwrite) {
         return;
       }
@@ -472,386 +461,309 @@ export function IncomesClient({ month, initialUsers, initialIncomes, initialExch
       setCopyingPrevious(true);
       setError(null);
       setMessage(null);
+      setEditor(null);
       const previousIncomes = await getIncomes(previousMonth);
-
       if (previousIncomes.length === 0) {
-        setMessage(copy.noPreviousIncomes(previousMonth));
+        setMessage(copy.noPreviousIncomes(formatMonth(previousMonth, locale)));
         return;
       }
 
-      setIncomeDraftsByUser(buildIncomeDrafts(users, previousIncomes));
-      setMessage(copy.previousLoaded(previousMonth, month));
+      const previousDrafts = buildIncomeDrafts(users, previousIncomes);
+      const payloads = users.map((user) => {
+        const payload = buildPayload(user, previousDrafts[user.id] ?? []);
+        if (!payload.entries) {
+          throw new Error(payload.error ?? copy.saveFailed);
+        }
+        return replaceIncomesForUser({ month, userId: user.id, entries: payload.entries });
+      });
+      const savedByUser = await Promise.all(payloads);
+      const savedIncomes = savedByUser.flat();
+      setIncomeDraftsByUser(buildIncomeDrafts(users, savedIncomes));
+      setExchangeRates((previous) => mergeExchangeRatesFromIncomes(previous, savedIncomes, month));
+      setMessage(
+        copy.previousApplied(
+          formatMonth(previousMonth, locale, false),
+          formatMonth(month, locale, false),
+        ),
+      );
     } catch (copyError) {
+      try {
+        const currentIncomes = await getIncomes(month);
+        setIncomeDraftsByUser(buildIncomeDrafts(users, currentIncomes));
+      } catch {
+        // Keep the last confirmed local state if reconciliation is unavailable.
+      }
       setError(copyError instanceof Error ? copyError.message : copy.previousLoadFailed);
     } finally {
       setCopyingPrevious(false);
     }
-  }, [copy, incomeDraftsByUser, month, previousMonth, users]);
+  };
 
   return (
     <AppShell
       compact
-      month={month}
-      title={copy.title}
-      subtitle={copy.subtitle}
+      containerClassName="max-w-[1480px]"
       locale={locale}
-      rightSlot={<MonthSelector month={month} locale={locale} />}
+      month={month}
+      rightSlot={<MonthSelector locale={locale} month={month} />}
+      subtitle={copy.subtitle}
+      title={copy.title}
+      unframed
     >
       {pendingIncomeRemoval ? (
         <ConfirmationDialog
+          busy={savingUserId === pendingIncomeRemoval.userId}
           cancelLabel={shared.cancel}
           confirmLabel={copy.removeIncome}
           message={copy.removeMessage(pendingIncomeRemoval.description)}
           onCancel={() => setPendingIncomeRemoval(null)}
-          onConfirm={confirmRemoveIncomeDraft}
+          onConfirm={() => void confirmRemoveIncome()}
           title={copy.confirmRemoval}
         />
       ) : null}
-      <form className="space-y-6" onSubmit={onSubmit}>
-        {loading ? (
-          <p aria-live="polite" className="text-sm text-slate-600">
-            {shared.loading}
-          </p>
-        ) : null}
+
+      <div className="space-y-4">
         {error ? (
-          <div aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div
+            aria-live="assertive"
+            className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
         {message ? (
-          <div aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          <div
+            aria-live="polite"
+            className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+            role="status"
+          >
             {message}
           </div>
         ) : null}
-        <div className="flex justify-end">
+
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-ink-strong">{copy.incomeByPartner}</h2>
+            <p className="mt-1 text-sm text-ink-muted">{copy.incomeByPartnerHelp}</p>
+          </div>
           <button
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isBusy}
+            onClick={() => void copyFromPreviousMonth()}
             type="button"
-            onClick={copyFromPreviousMonth}
-            disabled={loading || saving || copyingPrevious}
-            className={subtleButtonClass}
           >
-            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4">
-              <path
-                d="M4.17 10a5.83 5.83 0 1 0 1.71-4.12"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.8"
-              />
-              <path d="M4.17 3.33v2.55h2.55" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+            <svg
+              aria-hidden="true"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M4 12a8 8 0 1 0 2.3-5.7" />
+              <path d="M4 4v5h5" />
             </svg>
-            <span className="truncate">
-              {copyingPrevious ? copy.loadingPrevious : copy.usePrevious(previousMonth)}
-            </span>
+            {copyingPrevious
+              ? copy.loadingPrevious
+              : copy.usePrevious(formatMonth(previousMonth, locale, false))}
           </button>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-          <div className={`${surfaceClass} p-6 md:p-8`}>
-            <p className="text-sm font-semibold uppercase tracking-[0.09em] text-slate-500 md:text-base">
-              {copy.totalCombinedIncome}
+        <section className="grid gap-5 rounded-2xl border border-brand-100 bg-white p-5 shadow-sm md:grid-cols-[minmax(0,0.8fr)_minmax(24rem,1.2fr)] md:items-center md:p-6">
+          <div>
+            <p className="text-sm font-semibold text-ink-muted">{copy.totalCombinedIncome}</p>
+            <p className="mt-2 text-[clamp(2rem,5vw,3rem)] font-bold leading-none tracking-[-0.03em] text-ink-strong tabular-nums">
+              <span className="mr-2 text-xs font-bold tracking-[0.08em] text-ink-soft">ARS</span>
+              {formatArs(total, locale)}
             </p>
-            <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-              <p className="text-4xl font-bold tracking-tight text-brand-600">{formatMoney(total, locale)}</p>
-            </div>
           </div>
 
-          <aside className="rounded-3xl bg-brand-600 p-6 text-brand-50 shadow-md shadow-brand-700/25 md:p-8">
-            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-brand-600">
-                i
-              </span>
-              {copy.exchangeRates}
-            </div>
-            <p className="text-sm leading-relaxed text-brand-100">
-              {copy.exchangeRatesHelp}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ink-muted">
+              {copy.fairSplitFor(formatMonth(month, locale, false))}
             </p>
-          </aside>
-        </div>
+            <div
+              aria-label={partnerSummaries
+                .map(
+                  ({ percentage, user }) => `${user.name} ${formatPercentage(percentage, locale)}%`,
+                )
+                .join(', ')}
+              className="mt-3 flex h-10 overflow-hidden rounded-xl bg-slate-100"
+              role="img"
+            >
+              {partnerSummaries.map(({ percentage, tone, user, visualPercentage }) => (
+                <span
+                  key={user.id}
+                  className={`flex min-w-0 items-center px-3 text-xs font-bold text-white ${tone.segment}`}
+                  style={{ width: `${visualPercentage}%` }}
+                  title={`${user.name} ${formatPercentage(percentage, locale)}%`}
+                >
+                  <span className="truncate">{user.name}</span>
+                  <span className="ml-1">{formatPercentage(percentage, locale)}%</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
 
-        <div className="space-y-4">
-          {users.map((user) => (
-            <section key={user.id} className={`${surfaceClass} overflow-hidden`}>
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4 md:px-6 md:py-5">
-                <div className="flex min-w-0 items-center gap-4">
-                  <span
-                    aria-hidden="true"
-                    className={`inline-flex h-10 w-10 flex-none items-center justify-center rounded-full border text-base font-bold ${getUserInitialToneClass(
-                      user.id,
-                    )}`}
-                  >
-                    {getUserInitial(user.name)}
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="truncate text-lg font-bold leading-tight text-slate-800">{user.name}</h3>
-                    <p className="text-xs text-slate-500">
-                      {copy.totalForUser}: <span className="font-semibold text-slate-800">{formatMoney(totalByUser[user.id] ?? 0, locale)}</span>
-                    </p>
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          {partnerSummaries.map(({ percentage, tone, user, userTotal }) => {
+            const rows = incomeDraftsByUser[user.id] ?? [];
+            const activeEditor = editor?.userId === user.id ? editor : null;
+            const busy = savingUserId === user.id;
+
+            return (
+              <section
+                key={user.id}
+                aria-busy={busy}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-4 bg-slate-50/80 px-4 py-4 md:px-5">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      aria-hidden="true"
+                      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${tone.avatar}`}
+                    >
+                      {getUserInitial(user.name)}
+                    </span>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-bold text-ink-strong">{user.name}</h3>
+                      <p className="text-xs text-ink-soft">
+                        {copy.shareOfHousehold(formatPercentage(percentage, locale))}
+                      </p>
+                    </div>
                   </div>
+                  <p className="pt-1 text-right text-sm font-bold text-ink-strong tabular-nums">
+                    <span className="mr-1 text-xs tracking-[0.08em] text-ink-soft">ARS</span>
+                    {formatArs(userTotal, locale)}
+                  </p>
                 </div>
 
-                <button type="button" onClick={() => addIncomeDraft(user.id)} className={subtleButtonClass}>
-                  <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4">
-                    <path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-                  </svg>
-                  {copy.addIncome}
-                </button>
-              </div>
+                {rows.length === 0 && !activeEditor ? (
+                  <p className="border-t border-slate-100 px-4 py-5 text-sm text-ink-muted md:px-5">
+                    {copy.noEntries}
+                  </p>
+                ) : null}
 
-              <div className="hidden grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] border-b border-slate-200 px-6 py-3 text-xs font-semibold uppercase tracking-wider text-ink-soft md:grid">
-                <span>{copy.description}</span>
-                <span>{copy.amount}</span>
-                <span>{copy.currency}</span>
-                <span>{copy.fxRate}</span>
-                <span className="sr-only">{shared.actions}</span>
-              </div>
-
-              {(incomeDraftsByUser[user.id] ?? []).length === 0 ? (
-                <p className="px-5 py-4 text-sm text-slate-500 md:px-6">{copy.noEntries}</p>
-              ) : null}
-
-              <div>
-                {(incomeDraftsByUser[user.id] ?? []).map((row, index) => {
-                  const amountValue = Number(row.amount);
-                  const isNegativeIncome = Number.isFinite(amountValue) && amountValue < 0;
-                  const amountToneClass = isNegativeIncome ? 'text-red-600' : 'text-slate-800';
-                  const descriptionToneClass = isNegativeIncome ? 'text-red-600' : 'text-slate-700';
-                  return (
-                    <div
-                      key={row.id ?? `${user.id}-${index}`}
-                      className="border-b border-slate-100 px-3 py-3 last:border-b-0 md:grid md:grid-cols-[1.8fr_1.9fr_0.7fr_0.7fr_auto] md:gap-2 md:px-6 md:py-2"
-                    >
-                      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:hidden">
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="text"
-                            name={`income-description-${user.id}-${index}`}
-                            aria-label={copy.descriptionFor(user.name, index + 1)}
-                            autoComplete="off"
-                            value={row.description}
-                            onChange={(event) => updateDraftDescription(user.id, index, event.target.value)}
-                            className={`${fieldClass} ${descriptionToneClass}`}
-                            placeholder={copy.description}
-                          />
-                          <div className="relative shrink-0" data-mobile-income-menu>
-                            <button
-                              aria-expanded={openMobileActionMenuId === `${user.id}-${index}`}
-                              aria-haspopup="menu"
-                              aria-label={copy.moreActionsFor(row.description || copy.rowFallbackLabel(index + 1))}
-                              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                              onClick={() =>
-                                setOpenMobileActionMenuId((current) =>
-                                  current === `${user.id}-${index}` ? null : `${user.id}-${index}`,
-                                )
-                              }
-                              type="button"
-                            >
-                              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                <circle cx="5" cy="12" fill="currentColor" r="1.75" />
-                                <circle cx="12" cy="12" fill="currentColor" r="1.75" />
-                                <circle cx="19" cy="12" fill="currentColor" r="1.75" />
-                              </svg>
-                            </button>
-                            {openMobileActionMenuId === `${user.id}-${index}` ? (
-                              <div
-                                className="absolute right-0 top-12 z-20 min-w-[10rem] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg shadow-slate-900/10"
-                                role="menu"
-                              >
-                                <ActionButton
-                                  action="remove"
-                                  aria-label={copy.removeIncomeRow}
-                                  className="w-full justify-start"
-                                  onClick={() => {
-                                    setOpenMobileActionMenuId(null);
-                                    requestRemoveIncomeDraft(user.id, index);
-                                  }}
-                                >
-                                  {copy.removeIncome}
-                                </ActionButton>
-                              </div>
+                <div>
+                  {rows.map((row, index) => {
+                    const amountArs = parseIncomeAmountToArs(row);
+                    const isNegative = Number(row.amount) < 0;
+                    return (
+                      <div
+                        key={row.id ?? `${user.id}-${index}`}
+                        className={`grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto_44px] items-center gap-3 border-t border-slate-100 px-4 py-3 md:px-5 ${
+                          isNegative ? 'bg-rose-50/45' : ''
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-bold text-ink-strong">
+                              {row.description}
+                            </p>
+                            {isNegative ? (
+                              <span className="inline-flex min-h-6 items-center rounded-full bg-rose-100 px-2 text-xs font-bold text-rose-700">
+                                {copy.deduction}
+                              </span>
                             ) : null}
                           </div>
+                          <p className="mt-1 truncate text-xs text-ink-soft">
+                            {isNegative
+                              ? copy.deductionDescription
+                              : row.currencyCode === 'ARS'
+                                ? `${copy.monthlyIncome} · ARS`
+                                : `${row.currencyCode} ${formatArs(Number(row.amount), locale)} · ${copy.fxRate} ${formatRate(row.fxRate, locale)}`}
+                          </p>
                         </div>
-
-                        <div>
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">{copy.amount}</p>
-                          <div className="relative mt-2">
-                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
-                            <input
-                              type="text"
-                              name={`income-amount-${user.id}-${index}`}
-                              aria-label={copy.amountFor(user.name, index + 1)}
-                              autoComplete="off"
-                              inputMode="decimal"
-                              value={row.amount}
-                              onChange={(event) => updateDraftAmount(user.id, index, event.target.value)}
-                              className={`${moneyFieldClass} py-3 text-lg ${amountToneClass}`}
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <div className="min-w-[120px] flex-1">
-                            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">
-                              {copy.currency}
-                            </label>
-                            <select
-                              name={`income-currency-${user.id}-${index}`}
-                              aria-label={copy.currencyFor(user.name, index + 1)}
-                              value={row.currencyCode}
-                              onChange={(event) =>
-                                updateDraftCurrencyCode(user.id, index, event.target.value as SupportedCurrencyCode)
-                              }
-                              className={fieldClass}
-                            >
-                              {supportedCurrencyCodes.map((currencyCode) => (
-                                <option key={currencyCode} value={currencyCode}>
-                                  {currencyCode}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {row.currencyCode === 'ARS' ? (
-                            <div className="flex min-w-[120px] flex-1 items-end">
-                              <div className="inline-flex min-h-11 w-full items-center rounded-full bg-slate-100 px-3 text-sm font-medium text-slate-600">
-                                FX 1
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="min-w-[140px] flex-1">
-                              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-soft">
-                                {copy.fxRate}
-                              </label>
-                              <div className="relative">
-                                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
-                                <input
-                                  type="text"
-                                  name={`income-fx-${user.id}-${index}`}
-                                  aria-label={copy.fxRateFor(user.name, index + 1)}
-                                  autoComplete="off"
-                                  inputMode="decimal"
-                                  value={row.fxRate}
-                                  onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
-                                  className={moneyFieldClass}
-                                  placeholder={copy.fxRate}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="hidden md:block">
-                        <input
-                          type="text"
-                          name={`income-description-${user.id}-${index}`}
-                          aria-label={copy.descriptionFor(user.name, index + 1)}
-                          autoComplete="off"
-                          value={row.description}
-                          onChange={(event) => updateDraftDescription(user.id, index, event.target.value)}
-                          className={`${fieldClass} ${descriptionToneClass}`}
-                          placeholder={copy.description}
-                        />
-                      </div>
-
-                      <div className="relative hidden w-full md:block">
-                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
-                        <input
-                          type="text"
-                          name={`income-amount-${user.id}-${index}`}
-                          aria-label={copy.amountFor(user.name, index + 1)}
-                          autoComplete="off"
-                          inputMode="decimal"
-                          value={row.amount}
-                          onChange={(event) => updateDraftAmount(user.id, index, event.target.value)}
-                          className={`${moneyFieldClass} ${amountToneClass}`}
-                          placeholder="0.00"
-                        />
-                      </div>
-
-                      <div className="hidden md:contents">
-                        <div>
-                          <select
-                            name={`income-currency-${user.id}-${index}`}
-                            aria-label={copy.currencyFor(user.name, index + 1)}
-                            value={row.currencyCode}
-                            onChange={(event) =>
-                              updateDraftCurrencyCode(user.id, index, event.target.value as SupportedCurrencyCode)
-                            }
-                            className={fieldClass}
-                          >
-                            {supportedCurrencyCodes.map((currencyCode) => (
-                              <option key={currencyCode} value={currencyCode}>
-                                {currencyCode}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <div className="relative">
-                            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-ink-soft">$</span>
-                            <input
-                              type="text"
-                              name={`income-fx-${user.id}-${index}`}
-                              aria-label={copy.fxRateFor(user.name, index + 1)}
-                              autoComplete="off"
-                              inputMode="decimal"
-                              value={row.currencyCode === 'ARS' ? '1' : row.fxRate}
-                              onChange={(event) => updateDraftFxRate(user.id, index, event.target.value)}
-                              disabled={row.currencyCode === 'ARS'}
-                              className={`${moneyFieldClass} ${
-                                row.currencyCode === 'ARS'
-                                  ? 'cursor-not-allowed border-slate-300 bg-slate-100 text-ink-soft shadow-none disabled:opacity-100'
-                                  : ''
-                              }`}
-                              placeholder={copy.fxRate}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="hidden items-center justify-end md:flex md:justify-center">
-                        <ActionButton
-                          action="remove"
-                          onClick={() => requestRemoveIncomeDraft(user.id, index)}
+                        <p
+                          className={`text-right text-sm font-bold tabular-nums ${isNegative ? 'text-rose-700' : 'text-ink-strong'}`}
                         >
-                          {shared.remove}
-                        </ActionButton>
+                          <span className="mr-1 text-xs tracking-[0.06em] text-ink-soft">ARS</span>
+                          {formatArs(amountArs, locale)}
+                        </p>
+                        <button
+                          aria-label={copy.editIncome(row.description)}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-ink-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50"
+                          disabled={isBusy}
+                          onClick={() => openEditIncome(user.id, index)}
+                          type="button"
+                        >
+                          <svg
+                            aria-hidden="true"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                          </svg>
+                        </button>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
+                    );
+                  })}
+                </div>
 
-        <div className={`${surfaceClass} flex flex-col items-start justify-between gap-3 px-4 py-4 md:flex-row md:items-center md:px-5`}>
-          {hasUnsavedChanges ? (
-            <button
-              type="button"
-              onClick={discardChanges}
-              disabled={saving}
-              className={subtleButtonClass}
-            >
-              {copy.discardChanges}
-            </button>
-          ) : (
-            <span aria-hidden="true" />
-          )}
-          <button
-            type="submit"
-            disabled={saving}
-            className={primaryButtonClass}
-          >
-            {saving ? shared.saving : copy.saveIncomes}
-          </button>
+                {activeEditor ? (
+                  <IncomeEntryForm
+                    key={`${activeEditor.userId}-${activeEditor.index ?? 'new'}`}
+                    busy={busy}
+                    copy={copy}
+                    draft={activeEditor.draft}
+                    exchangeRates={exchangeRates}
+                    isEditing={activeEditor.index !== null}
+                    locale={locale}
+                    onCancel={() => setEditor(null)}
+                    onChange={(draft) =>
+                      setEditor((current) => (current ? { ...current, draft } : current))
+                    }
+                    onRemove={
+                      activeEditor.index === null
+                        ? undefined
+                        : () =>
+                            setPendingIncomeRemoval({
+                              description:
+                                activeEditor.draft.description ||
+                                copy.rowFallbackLabel(activeEditor.index! + 1),
+                              index: activeEditor.index!,
+                              userId: user.id,
+                            })
+                    }
+                    onSave={() => void saveEditor()}
+                    shared={shared}
+                    user={user}
+                  />
+                ) : (
+                  <button
+                    className="m-3 inline-flex min-h-11 w-[calc(100%-1.5rem)] items-center justify-center gap-2 rounded-xl border border-dashed border-brand-200 bg-brand-50/40 px-4 py-2 text-sm font-bold text-brand-700 hover:border-brand-400 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={isBusy}
+                    onClick={() => openAddIncome(user.id)}
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeWidth="2.2"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    {copy.addIncomeFor(user.name)}
+                  </button>
+                )}
+              </section>
+            );
+          })}
         </div>
-      </form>
+      </div>
     </AppShell>
   );
 }

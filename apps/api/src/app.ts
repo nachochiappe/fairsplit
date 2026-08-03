@@ -2118,7 +2118,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
               monthRateByCurrency.set(currencyCode, fxRateUsed);
             } else {
               throw new Error(
-                `Missing FX rate for ${currencyCode} in ${parsed.data.month}. Configure monthly FX or provide an override.`,
+                `Missing exchange rate for ${currencyCode} in ${parsed.data.month}. Configure a monthly exchange rate or provide an override.`,
               );
             }
           }
@@ -2144,7 +2144,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         return createdIncomes;
       });
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith('Missing FX rate')) {
+      if (error instanceof Error && error.message.startsWith('Missing exchange rate')) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500);
@@ -2390,7 +2390,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
     if (!fxRateUsed) {
       return res.status(400).json({
-        error: `Missing FX rate for ${currencyCode} in ${parsed.data.month}. Configure monthly FX or provide an override.`,
+        error: `Missing exchange rate for ${currencyCode} in ${parsed.data.month}. Configure a monthly exchange rate or provide an override.`,
       });
     }
 
@@ -2491,7 +2491,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       });
       if (!resolvedFxRate) {
         return res.status(400).json({
-          error: `Missing FX rate for ${resolvedCurrencyCode} in ${existing.month}. Configure monthly FX or provide an override.`,
+          error: `Missing exchange rate for ${resolvedCurrencyCode} in ${existing.month}. Configure a monthly exchange rate or provide an override.`,
         });
       }
       payload = {
