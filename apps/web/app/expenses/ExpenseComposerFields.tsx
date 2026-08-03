@@ -226,7 +226,7 @@ function useComposerState(form: UseFormReturn<ExpenseForm>, exchangeRates: Excha
     }
 
     form.setValue('installmentCount', 2);
-    form.setValue('installmentEntryMode', 'perInstallment');
+    form.setValue('installmentEntryMode', 'total');
     form.setValue('totalAmount', undefined);
   }, [form, installmentEnabled]);
 
