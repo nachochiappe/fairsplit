@@ -4,26 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { TitleMark } from '../../../components/TitleMark';
 import type { AuthLinkResponse } from '../../../lib/api';
-
-function parseHashParams(hash: string): URLSearchParams {
-  const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-  return new URLSearchParams(raw);
-}
-
-function getAccessTokenFromCallbackUrl(): string | null {
-  const hash = parseHashParams(window.location.hash);
-  const hashToken = hash.get('access_token');
-  if (hashToken && hashToken.trim().length > 0) {
-    return hashToken;
-  }
-
-  const queryToken = new URLSearchParams(window.location.search).get('access_token');
-  if (queryToken && queryToken.trim().length > 0) {
-    return queryToken;
-  }
-
-  return null;
-}
+import { consumeCallbackAccessToken } from './callback-url';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -32,7 +13,9 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const run = async () => {
       try {
-        const accessToken = getAccessTokenFromCallbackUrl();
+        const accessToken = consumeCallbackAccessToken(window.location.href, (safeUrl) => {
+          window.history.replaceState(window.history.state, '', safeUrl);
+        });
         if (!accessToken) {
           throw new Error('Missing access token in callback URL.');
         }
