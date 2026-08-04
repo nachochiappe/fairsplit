@@ -87,13 +87,9 @@ const boundedWebauthnRecordSchema = z
     message: `record must contain at most ${API_FIELD_LIMITS.webauthnRecordKeys} fields`,
   });
 
-export const monthQuerySchema = z.object({
-  month: monthSchema,
-  hydrate: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
-    .optional(),
-});
+export const monthQuerySchema = z.object({ month: monthSchema });
+const expenseMonthQuerySchema = monthQuerySchema.strict();
+const materializeExpenseMonthSchema = z.object({ month: monthSchema }).strict();
 export const expenseListQuerySchema = z.object({
   month: monthSchema,
   search: z.string().trim().min(1).max(API_FIELD_LIMITS.search).optional(),
@@ -104,10 +100,6 @@ export const expenseListQuerySchema = z.object({
   sortDir: z.enum(['asc', 'desc']).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   cursor: entityIdSchema.optional(),
-  hydrate: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
-    .optional(),
   includeCount: z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
@@ -116,7 +108,7 @@ export const expenseListQuerySchema = z.object({
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
     .optional(),
-}).superRefine((value, ctx) => {
+}).strict().superRefine((value, ctx) => {
   if (value.cursor && !value.limit) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -2292,13 +2284,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const shouldHydrate = parsed.data.hydrate ?? !parsed.data.cursor;
     const shouldIncludeCount = parsed.data.includeCount ?? true;
-    const generationWarnings: string[] = [];
-    if (shouldHydrate) {
-      generationWarnings.push(...(await ensureFixedExpensesForMonth(parsed.data.month, auth.householdId)));
-      await ensureInstallmentsForMonth(parsed.data.month, auth.householdId);
-    }
 
     const baseWhere: Record<string, unknown> = { month: parsed.data.month, householdId: auth.householdId };
     if (parsed.data.search) {
@@ -2409,7 +2395,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
       return res.json({
         month: parsed.data.month,
-        warnings: generationWarnings,
+        warnings: [],
         expenses: expenses.map((expense) => serializeExpense(expense)),
         totals,
         pagination: {
@@ -2425,7 +2411,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     return res.json({
       month: parsed.data.month,
-      warnings: generationWarnings,
+      warnings: [],
       expenses: expenses.map((expense) => serializeExpense(expense)),
       totals,
       pagination: null,
@@ -2469,6 +2455,23 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     return res.json(suggestions);
+  });
+
+  app.post('/api/expenses/materialize', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = materializeExpenseMonthSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const warnings = await ensureFixedExpensesForMonth(parsed.data.month, auth.householdId);
+    await ensureInstallmentsForMonth(parsed.data.month, auth.householdId);
+
+    return res.json({ month: parsed.data.month, warnings });
   });
 
   app.post('/api/expenses', async (req: Request, res: Response) => {
@@ -2700,19 +2703,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return;
     }
 
-    const parsed = monthQuerySchema.safeParse(req.query);
+    const parsed = expenseMonthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const month = parsed.data.month;
-    const shouldHydrate = parsed.data.hydrate ?? true;
-    const warnings: string[] = [];
-    if (shouldHydrate) {
-      warnings.push(...(await ensureFixedExpensesForMonth(month, auth.householdId)));
-      await ensureInstallmentsForMonth(month, auth.householdId);
-    }
-
     const where = { month, householdId: auth.householdId };
     const [categoryGroups, userGroups] = await Promise.all([
       prisma.expense.groupBy({ by: ['categoryId'], where, _sum: { amountArs: true } }),
@@ -2755,7 +2751,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     return res.json({
       month,
-      warnings,
+      warnings: [],
       totalArs: toMoneyString(total),
       byCategory,
       byUser,
@@ -2768,19 +2764,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return;
     }
 
-    const parsed = monthQuerySchema.safeParse(req.query);
+    const parsed = expenseMonthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const month = parsed.data.month;
-    const shouldHydrate = parsed.data.hydrate ?? true;
-
-    if (shouldHydrate) {
-      await ensureFixedExpensesForMonth(month, auth.householdId);
-      await ensureInstallmentsForMonth(month, auth.householdId);
-    }
-
     const [users, incomes, expenses] = await Promise.all([
       prisma.user.findMany({ where: { householdId: auth.householdId }, orderBy: { createdAt: 'asc' } }),
       prisma.monthlyIncome.findMany({ where: { month, householdId: auth.householdId } }),

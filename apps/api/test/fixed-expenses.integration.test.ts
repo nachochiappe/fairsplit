@@ -14,6 +14,14 @@ let testCategoryId = '';
 let householdId = '';
 let sessionToken = '';
 
+async function materializeMonth(month: string) {
+  const response = await request(app)
+    .post('/api/expenses/materialize')
+    .set('x-fairsplit-session', sessionToken)
+    .send({ month });
+  expect(response.status).toBe(200);
+}
+
 describe('fixed recurring expenses', () => {
   beforeAll(async () => {
     const suffix = Date.now().toString(36);
@@ -84,6 +92,7 @@ describe('fixed recurring expenses', () => {
     const templateId = createResponse.body.fixed.templateId as string;
     expect(templateId).toBeTruthy();
 
+    await materializeMonth(monthA);
     const previousMonthResponse = await request(app)
       .get('/api/expenses')
       .set('x-fairsplit-session', sessionToken)
@@ -94,6 +103,7 @@ describe('fixed recurring expenses', () => {
     );
     expect(previousMonthRecurringRows).toHaveLength(0);
 
+    await materializeMonth(monthC);
     const nextMonthResponse = await request(app)
       .get('/api/expenses')
       .set('x-fairsplit-session', sessionToken)
@@ -147,6 +157,7 @@ describe('fixed recurring expenses', () => {
     );
     expect(monthBRecurringRows).toHaveLength(0);
 
+    await materializeMonth(monthC);
     const monthCAfterDelete = await request(app)
       .get('/api/expenses')
       .set('x-fairsplit-session', sessionToken)
@@ -174,8 +185,8 @@ describe('fixed recurring expenses', () => {
     const templateId = createResponse.body.fixed.templateId as string;
     expect(templateId).toBeTruthy();
 
-    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthC });
-    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthD });
+    await materializeMonth(monthC);
+    await materializeMonth(monthD);
 
     const monthCBeforeDelete = await request(app)
       .get('/api/expenses')
@@ -239,7 +250,7 @@ describe('fixed recurring expenses', () => {
     const templateId = createResponse.body.fixed.templateId as string;
     expect(templateId).toBeTruthy();
 
-    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthC });
+    await materializeMonth(monthC);
 
     const monthCBeforeDelete = await request(app)
       .get('/api/expenses')

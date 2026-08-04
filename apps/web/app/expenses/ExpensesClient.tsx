@@ -28,6 +28,7 @@ import {
   getExchangeRates,
   getExpenses,
   getSettlement,
+  materializeExpenseMonth,
   updateExpense,
   User,
 } from '../../lib/api';
@@ -310,6 +311,7 @@ export function ExpensesClient({
   const expenseFormRef = useRef<HTMLFormElement | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const mutationTokenRef = useRef(0);
+  const materializedMonthRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchBatchSizeRef.current = fetchBatchSize;
@@ -970,24 +972,22 @@ export function ExpensesClient({
         };
         let hasNoIncomeSettlement = false;
 
+        const materialization = await materializeExpenseMonth(month);
         const [fixedData, oneTimeData, installmentData, totalsData, rates, settlement] =
           await Promise.all([
             getExpenses(month, {
               ...sharedQuery,
               type: 'fixed',
-              hydrate: true,
               includeCount: true,
             }),
             getExpenses(month, {
               ...sharedQuery,
               type: 'oneTime',
-              hydrate: false,
               includeCount: false,
             }),
             getExpenses(month, {
               ...sharedQuery,
               type: 'installment',
-              hydrate: false,
               includeCount: false,
             }),
             getExpenses(month, {
@@ -995,13 +995,12 @@ export function ExpensesClient({
               sortBy: 'date',
               sortDir: 'desc',
               limit: 1,
-              hydrate: false,
               includeCount: false,
               includeTotals: true,
             }),
             includeRates ? getExchangeRates(month) : Promise.resolve<ExchangeRate[] | null>(null),
             includeSettlement
-              ? getSettlement(month, undefined, { hydrate: false }).catch((error: unknown) => {
+              ? getSettlement(month).catch((error: unknown) => {
                   const message =
                     error instanceof Error ? error.message : copy.settlementLoadFailed;
                   if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
@@ -1043,6 +1042,7 @@ export function ExpensesClient({
         ]);
         const nextWarnings = Array.from(
           new Set([
+            ...materialization.warnings,
             ...fixedData.warnings,
             ...oneTimeData.warnings,
             ...installmentData.warnings,
@@ -1057,7 +1057,6 @@ export function ExpensesClient({
           const allExpensesResult = await getExpenses(month, {
             sortBy: 'date',
             sortDir: 'desc',
-            hydrate: false,
             includeCount: false,
           });
           nextTotalExpensesArs = sumExpensesArs(allExpensesResult.expenses);
@@ -1146,6 +1145,26 @@ export function ExpensesClient({
   ]);
 
   useEffect(() => {
+    if (materializedMonthRef.current === month) {
+      return;
+    }
+    materializedMonthRef.current = month;
+
+    let cancelled = false;
+
+    void fetchMonthData({ includeRates: false, includeSettlement: true }).catch((loadError) => {
+      if (!cancelled) {
+        materializedMonthRef.current = null;
+        setError(loadError instanceof Error ? loadError.message : copy.settlementLoadFailed);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [copy.settlementLoadFailed, fetchMonthData, month]);
+
+  useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, SEARCH_DEBOUNCE_MS);
@@ -1168,7 +1187,6 @@ export function ExpensesClient({
           sortBy: 'date',
           sortDir: 'desc',
           limit: 1,
-          hydrate: false,
           includeCount: false,
           includeTotals: true,
         });
@@ -1273,7 +1291,6 @@ export function ExpensesClient({
               sortDir: 'desc',
               limit: fetchBatchSize,
               cursor: paginationForSection.nextCursor,
-              hydrate: false,
               includeCount: false,
             });
             loadedExpenses = mergeUniqueExpenses([...loadedExpenses, ...page.expenses]);

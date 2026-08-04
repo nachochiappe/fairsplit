@@ -82,9 +82,13 @@ export interface ExpenseListQuery {
   sortDir?: 'asc' | 'desc';
   limit?: number;
   cursor?: string;
-  hydrate?: boolean;
   includeCount?: boolean;
   includeTotals?: boolean;
+}
+
+export interface ExpenseMaterializationResponse {
+  month: string;
+  warnings: string[];
 }
 
 export interface Category {
@@ -380,9 +384,6 @@ export async function getExpenses(
   if (query?.cursor) {
     params.set('cursor', query.cursor);
   }
-  if (query?.hydrate !== undefined) {
-    params.set('hydrate', String(query.hydrate));
-  }
   if (query?.includeCount !== undefined) {
     params.set('includeCount', String(query.includeCount));
   }
@@ -391,6 +392,18 @@ export async function getExpenses(
   }
   const response = await fetchFromApi(`${API_BASE_URL}/expenses?${params.toString()}`, init ?? { cache: 'no-store' });
   return parseResponse<ExpenseListResponse>(response);
+}
+
+export async function materializeExpenseMonth(month: string): Promise<ExpenseMaterializationResponse> {
+  const endpoint =
+    typeof window === 'undefined' ? `${API_BASE_URL}/expenses/materialize` : '/api/expenses/materialize';
+  const response = await fetchFromApi(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ month }),
+  });
+
+  return parseResponse<ExpenseMaterializationResponse>(response);
 }
 
 export async function getExpenseDescriptionSuggestions(query: string, init?: NextRequestInit): Promise<string[]> {
@@ -641,12 +654,8 @@ export async function upsertExchangeRate(payload: {
 export async function getSettlement(
   month: string,
   init?: NextRequestInit,
-  options?: { hydrate?: boolean },
 ): Promise<SettlementResponse> {
   const params = new URLSearchParams({ month });
-  if (options?.hydrate !== undefined) {
-    params.set('hydrate', String(options.hydrate));
-  }
   const response = await fetchFromApi(
     `${API_BASE_URL}/settlement?${params.toString()}`,
     init ?? { cache: 'no-store' },
@@ -657,12 +666,8 @@ export async function getSettlement(
 export async function getExpenseTotals(
   month: string,
   init?: NextRequestInit,
-  options?: { hydrate?: boolean },
 ): Promise<ExpenseTotalsResponse> {
   const params = new URLSearchParams({ month });
-  if (options?.hydrate !== undefined) {
-    params.set('hydrate', String(options.hydrate));
-  }
   const response = await fetchFromApi(
     `${API_BASE_URL}/expense-totals?${params.toString()}`,
     init ?? { cache: 'no-store' },

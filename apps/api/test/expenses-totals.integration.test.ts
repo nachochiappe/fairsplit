@@ -15,7 +15,7 @@ async function getTotals(query: Record<string, unknown> = {}) {
   const response = await request(app)
     .get('/api/expenses')
     .set('x-fairsplit-session', sessionToken)
-    .query({ month, limit: 1, hydrate: false, includeCount: false, includeTotals: true, ...query });
+    .query({ month, limit: 1, includeCount: false, includeTotals: true, ...query });
 
   expect(response.status).toBe(200);
   return response.body.totals;
