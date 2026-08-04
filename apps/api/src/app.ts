@@ -884,7 +884,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         // A discoverable credential is what makes the usernameless sign-in
         // button work: the browser can offer the account without an email.
         residentKey: 'required',
-        userVerification: 'preferred',
+        userVerification: 'required',
       },
     });
 
@@ -913,9 +913,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         expectedChallenge: (challenge) => consumeChallenge(challenge, 'registration', user.userId),
         expectedOrigin: config.origins,
         expectedRPID: config.rpId,
-        // Registration asks for user verification but does not demand it, so
-        // security keys without a PIN can still be enrolled.
-        requireUserVerification: false,
+        requireUserVerification: true,
       });
     } catch (error) {
       res.status(400);
@@ -1006,7 +1004,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     // passkey exists for any given email.
     const options = await generateAuthenticationOptions({
       rpID: config.rpId,
-      userVerification: 'preferred',
+      userVerification: 'required',
     });
 
     await storeChallenge(options.challenge, 'authentication', null);
@@ -1065,7 +1063,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         expectedChallenge: (challenge) => consumeChallenge(challenge, 'authentication', null),
         expectedOrigin: config.origins,
         expectedRPID: config.rpId,
-        requireUserVerification: false,
+        requireUserVerification: true,
         credential: {
           id: passkey.credentialId,
           publicKey: toCredentialPublicKey(passkey.publicKey),
