@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHmac } from 'node:crypto';
 import {
   SUPABASE_USER_ENDPOINT_TIMEOUT_MS,
   verifySupabaseAccessToken,
 } from '../src/lib/supabase-auth';
 
 const originalEnv = { ...process.env };
+
+function toBase64Url(value: object): string {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+}
 
 describe('verifySupabaseAccessToken', () => {
   beforeEach(() => {
@@ -60,5 +65,34 @@ describe('verifySupabaseAccessToken', () => {
     const expectation = expect(verification).rejects.toMatchObject({ name: 'AbortError' });
     await vi.advanceTimersByTimeAsync(SUPABASE_USER_ENDPOINT_TIMEOUT_MS);
     await expectation;
+  });
+
+  it('verifies a local HS256 fixture without calling the remote endpoint', async () => {
+    const jwtSecret = 'fairsplit-test-supabase-jwt-secret';
+    process.env.SUPABASE_JWT_SECRET = jwtSecret;
+    process.env.SUPABASE_JWT_AUDIENCE = 'authenticated';
+    delete process.env.SUPABASE_JWT_ISSUER;
+    delete process.env.SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const header = toBase64Url({ alg: 'HS256', typ: 'JWT' });
+    const payload = toBase64Url({
+      sub: 'test-auth-user',
+      email: 'USER@example.com',
+      aud: 'authenticated',
+      exp: Math.floor(Date.now() / 1000) + 300,
+    });
+    const signature = createHmac('sha256', jwtSecret)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
+
+    await expect(verifySupabaseAccessToken(`${header}.${payload}.${signature}`)).resolves.toEqual({
+      authUserId: 'test-auth-user',
+      email: 'user@example.com',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
