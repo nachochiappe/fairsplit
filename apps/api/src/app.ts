@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import 'express-async-errors';
 import { randomBytes } from 'node:crypto';
-import cors from 'cors';
 import Decimal from 'decimal.js';
 import express, { type ErrorRequestHandler, Express, Request, Response } from 'express';
 import { prisma } from '@fairsplit/db';
@@ -40,6 +39,7 @@ import {
   type CachedUserContext,
 } from './lib/user-context-cache';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
+import { createRateLimit, hashedRateLimitKey, requestIpKey } from './lib/rate-limit';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -529,6 +529,16 @@ function normalizeInviteCode(rawCode: string): string {
 
 const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+const AUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX = 30;
+const AUTH_TOKEN_RATE_LIMIT_MAX = 5;
+const PASSKEY_CREDENTIAL_RATE_LIMIT_MAX = 10;
+const AUTHENTICATED_SECURITY_RATE_LIMIT_MAX = 20;
+const INVITE_CREATE_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const INVITE_CREATE_RATE_LIMIT_MAX = 10;
+const INVITE_JOIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const INVITE_JOIN_RATE_LIMIT_MAX = 10;
+
 function generateInviteCode(length = 8): string {
   const bytes = randomBytes(length);
   let code = '';
@@ -547,14 +557,72 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   };
 
   app.use(createApiHttpLogger(logger));
-  app.use(cors());
   app.use(express.json());
+
+  // Browser traffic reaches the API through the same-origin Next.js BFF. The
+  // API deliberately emits no CORS headers, so browsers cannot call it from an
+  // arbitrary origin even if the API's network endpoint is publicly reachable.
+  const authLinkIpLimit = createRateLimit({
+    limit: AUTH_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: requestIpKey,
+  });
+  const authLinkTokenLimit = createRateLimit({
+    limit: AUTH_TOKEN_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'auth-token',
+      typeof request.body?.accessToken === 'string' ? request.body.accessToken : undefined,
+      requestIpKey(request),
+    ),
+  });
+  const passkeyLoginIpLimit = createRateLimit({
+    limit: AUTH_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: requestIpKey,
+  });
+  const passkeyCredentialLimit = createRateLimit({
+    limit: PASSKEY_CREDENTIAL_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'passkey-credential',
+      typeof request.body?.response?.id === 'string' ? request.body.response.id : undefined,
+      requestIpKey(request),
+    ),
+  });
+  const passkeyRegistrationLimit = createRateLimit({
+    limit: AUTHENTICATED_SECURITY_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'session',
+      request.get('x-fairsplit-session'),
+      requestIpKey(request),
+    ),
+  });
+  const inviteCreateLimit = createRateLimit({
+    limit: INVITE_CREATE_RATE_LIMIT_MAX,
+    windowMs: INVITE_CREATE_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'session',
+      request.get('x-fairsplit-session'),
+      requestIpKey(request),
+    ),
+  });
+  const inviteJoinLimit = createRateLimit({
+    limit: INVITE_JOIN_RATE_LIMIT_MAX,
+    windowMs: INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'session',
+      request.get('x-fairsplit-session'),
+      requestIpKey(request),
+    ),
+  });
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true });
   });
 
-  app.post('/api/auth/link', async (req: Request, res: Response) => {
+  app.post('/api/auth/link', authLinkIpLimit, authLinkTokenLimit, async (req: Request, res: Response) => {
     const parsed = authLinkSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -774,7 +842,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
   });
 
-  app.post('/api/auth/passkeys/registration/options', async (req: Request, res: Response) => {
+  app.post('/api/auth/passkeys/registration/options', passkeyRegistrationLimit, async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
     if (!user) {
       return;
@@ -824,7 +892,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.json(options);
   });
 
-  app.post('/api/auth/passkeys/registration/verify', async (req: Request, res: Response) => {
+  app.post('/api/auth/passkeys/registration/verify', passkeyRegistrationLimit, async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
     if (!user) {
       return;
@@ -927,7 +995,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.status(204).send();
   });
 
-  app.post('/api/auth/passkeys/authentication/options', async (req: Request, res: Response) => {
+  app.post('/api/auth/passkeys/authentication/options', passkeyLoginIpLimit, async (req: Request, res: Response) => {
     const config = resolveWebAuthnConfig(req, res);
     if (!config) {
       return;
@@ -945,7 +1013,11 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.json(options);
   });
 
-  app.post('/api/auth/passkeys/authentication/verify', async (req: Request, res: Response) => {
+  app.post(
+    '/api/auth/passkeys/authentication/verify',
+    passkeyLoginIpLimit,
+    passkeyCredentialLimit,
+    async (req: Request, res: Response) => {
     const parsed = passkeyAuthenticationVerifySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -1028,7 +1100,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
 
     return res.json(buildAuthSessionResponse(passkey.user, false, sessionSecret));
-  });
+    },
+  );
 
   app.get('/api/household/setup-status', async (req: Request, res: Response) => {
     const auth = await requireUserContext(req, res);
@@ -1043,7 +1116,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
   });
 
-  app.post('/api/household/invites', async (req: Request, res: Response) => {
+  app.post('/api/household/invites', inviteCreateLimit, async (req: Request, res: Response) => {
     const auth = await requireAuthContext(req, res);
     if (!auth) {
       return;
@@ -1080,7 +1153,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.status(500).json({ error: 'Failed to create invite code. Please retry.' });
   });
 
-  app.post('/api/household/join-with-code', async (req: Request, res: Response) => {
+  app.post('/api/household/join-with-code', inviteJoinLimit, async (req: Request, res: Response) => {
     const auth = await requireUserContext(req, res);
     if (!auth) {
       return;
