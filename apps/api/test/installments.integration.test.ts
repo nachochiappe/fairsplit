@@ -13,6 +13,14 @@ let testCategoryId = '';
 let householdId = '';
 let sessionToken = '';
 
+async function materializeMonth(month: string) {
+  const response = await request(app)
+    .post('/api/expenses/materialize')
+    .set('x-fairsplit-session', sessionToken)
+    .send({ month });
+  expect(response.status).toBe(200);
+}
+
 describe('installment expenses', () => {
   beforeAll(async () => {
     const suffix = Date.now().toString(36);
@@ -96,6 +104,7 @@ describe('installment expenses', () => {
       }),
     );
 
+    await materializeMonth(monthB);
     const mayResponse = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
     expect(mayResponse.status).toBe(200);
     const maySeriesExpense = mayResponse.body.expenses.find(
@@ -113,6 +122,7 @@ describe('installment expenses', () => {
     );
     expect(repeatSeriesMatches).toHaveLength(1);
 
+    await materializeMonth(monthC);
     const juneResponse = await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthC });
     expect(juneResponse.status).toBe(200);
     const juneSeriesExpense = juneResponse.body.expenses.find(
@@ -141,8 +151,8 @@ describe('installment expenses', () => {
     const createdId = createResponse.body.id as string;
     const createdSeriesId = createResponse.body.installment.seriesId as string;
 
-    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthB });
-    await request(app).get('/api/expenses').set('x-fairsplit-session', sessionToken).query({ month: monthC });
+    await materializeMonth(monthB);
+    await materializeMonth(monthC);
 
     const updateResponse = await request(app).put(`/api/expenses/${createdId}`).set('x-fairsplit-session', sessionToken).send({
       description: 'Phone Updated',

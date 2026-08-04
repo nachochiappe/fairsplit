@@ -95,7 +95,7 @@ describe('GET /api/expense-totals', () => {
     const response = await request(app)
       .get('/api/expense-totals')
       .set('x-fairsplit-session', sessionToken)
-      .query({ month, hydrate: false });
+      .query({ month });
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -115,7 +115,7 @@ describe('GET /api/expense-totals', () => {
     const response = await request(app)
       .get('/api/expense-totals')
       .set('x-fairsplit-session', sessionToken)
-      .query({ month, hydrate: false });
+      .query({ month });
 
     expect(response.status).toBe(200);
     expect(response.body.totalArs).toBe('830.50');
@@ -145,7 +145,7 @@ describe('GET /api/expense-totals', () => {
     });
   });
 
-  it('includes recurring rows it generates when hydrating a fresh month', async () => {
+  it('keeps every GET side-effect free and materializes a fresh month only through POST', async () => {
     const template = await prisma.expenseTemplate.create({
       data: {
         description: 'Streaming',
@@ -160,24 +160,35 @@ describe('GET /api/expense-totals', () => {
     });
 
     try {
-      // Without hydration the month is still empty...
-      const dry = await request(app)
-        .get('/api/expense-totals')
-        .set('x-fairsplit-session', sessionToken)
-        .query({ month, hydrate: false });
-      expect(dry.status).toBe(200);
-      expect(dry.body.totalArs).toBe('0.00');
+      for (const path of ['/api/expenses', '/api/expense-totals', '/api/settlement']) {
+        const read = await request(app)
+          .get(path)
+          .set('x-fairsplit-session', sessionToken)
+          .query({ month });
+        expect(read.status).toBe(200);
+      }
+      expect(await prisma.expense.count({ where: { householdId, month, templateId: template.id } })).toBe(0);
 
-      // ...and hydrating has to generate the row *and* count it in the same
-      // response, otherwise a caller reading totals concurrently with generation
-      // sees a short month.
-      const hydrated = await request(app)
+      const legacyHydration = await request(app)
         .get('/api/expense-totals')
         .set('x-fairsplit-session', sessionToken)
         .query({ month, hydrate: true });
-      expect(hydrated.status).toBe(200);
-      expect(hydrated.body.totalArs).toBe('42.00');
-      expect(hydrated.body.byUser).toEqual({ [primaryUserId]: '42.00' });
+      expect(legacyHydration.status).toBe(400);
+
+      const materialized = await request(app)
+        .post('/api/expenses/materialize')
+        .set('x-fairsplit-session', sessionToken)
+        .send({ month });
+      expect(materialized.status).toBe(200);
+      expect(materialized.body).toEqual({ month, warnings: [] });
+
+      const totals = await request(app)
+        .get('/api/expense-totals')
+        .set('x-fairsplit-session', sessionToken)
+        .query({ month });
+      expect(totals.status).toBe(200);
+      expect(totals.body.totalArs).toBe('42.00');
+      expect(totals.body.byUser).toEqual({ [primaryUserId]: '42.00' });
     } finally {
       await prisma.expense.deleteMany({ where: { templateId: template.id } });
       await prisma.expenseTemplate.delete({ where: { id: template.id } });

@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  MAX_DESCRIPTION_LENGTH,
+  MAX_FX_RATE,
+  MAX_INSTALLMENT_COUNT,
+  MAX_MONEY_AMOUNT,
+} from '@fairsplit/shared';
 
 export const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
 export type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
@@ -30,19 +36,19 @@ export function getDayFromDateInput(value: string): number | null {
 export const expenseSchema = z
   .object({
     date: z.string().date(),
-    description: z.string().min(1),
+    description: z.string().trim().min(1).max(MAX_DESCRIPTION_LENGTH),
     categoryId: z.string().min(1),
-    amount: z.coerce.number().min(0).optional(),
+    amount: z.coerce.number().finite().min(0).max(MAX_MONEY_AMOUNT).optional(),
     currencyCode: currencyCodeSchema,
-    fxRate: z.coerce.number().gt(0).optional(),
+    fxRate: z.coerce.number().finite().gt(0).max(MAX_FX_RATE).optional(),
     paidByUserId: z.string().min(1),
     fixedEnabled: z.boolean().default(false),
     nextMonthExpense: z.boolean().default(false),
     applyToFuture: z.boolean().default(true),
     installmentEnabled: z.boolean().default(false),
-    installmentCount: z.coerce.number().int().min(2).optional(),
+    installmentCount: z.coerce.number().int().min(2).max(MAX_INSTALLMENT_COUNT).optional(),
     installmentEntryMode: z.enum(['perInstallment', 'total']).optional(),
-    totalAmount: z.coerce.number().min(0).optional(),
+    totalAmount: z.coerce.number().finite().min(0).max(MAX_MONEY_AMOUNT).optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.installmentEnabled && value.amount === undefined) {

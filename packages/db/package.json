@@ -7,16 +7,16 @@
   "scripts": {
     "dev": "echo 'No dev server for @fairsplit/db'",
     "build": "pnpm prisma:generate && tsc -p tsconfig.json",
-    "test": "echo 'No tests for @fairsplit/db'",
+    "test": "node --import tsx --test test/database-url.test.ts",
     "lint": "echo 'No lint step for @fairsplit/db'",
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^6.4.1"
+    "@prisma/client": "^6.19.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
-    "prisma": "^6.4.1",
+    "prisma": "^6.19.3",
     "tsx": "^4.19.2"
   }
 }

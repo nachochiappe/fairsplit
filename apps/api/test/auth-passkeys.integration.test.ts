@@ -114,6 +114,47 @@ describe('passkey sign-in', () => {
     expect(afterSignIn.body.passkeys[0].lastUsedAt).not.toBeNull();
   });
 
+  it('rejects registration when the authenticator does not verify the user', async () => {
+    const authenticator = new SoftwareAuthenticator();
+    const options = await requestRegistrationOptions(sessionToken);
+    expect(options.status).toBe(200);
+    expect(options.body.authenticatorSelection.userVerification).toBe('required');
+
+    const rejected = await request(app)
+      .post('/api/auth/passkeys/registration/verify')
+      .set('x-fairsplit-session', sessionToken)
+      .send({
+        response: authenticator.createAttestationResponse(options.body.challenge, RP_ID, ORIGIN, {
+          userVerified: false,
+        }),
+      });
+
+    expect(rejected.status).toBe(400);
+    expect(
+      await prisma.userPasskey.findUnique({ where: { credentialId: authenticator.credentialIdBase64Url } }),
+    ).toBeNull();
+  });
+
+  it('rejects sign-in when the authenticator does not verify the user', async () => {
+    const authenticator = new SoftwareAuthenticator();
+    await enrol(authenticator, sessionToken);
+
+    const options = await requestAuthenticationOptions();
+    expect(options.status).toBe(200);
+    expect(options.body.userVerification).toBe('required');
+
+    const signIn = await request(app)
+      .post('/api/auth/passkeys/authentication/verify')
+      .send({
+        response: authenticator.createAssertionResponse(options.body.challenge, RP_ID, ORIGIN, userId, {
+          userVerified: false,
+        }),
+      });
+
+    expect(signIn.status).toBe(401);
+    expect(signIn.body.error).toBe('Could not sign in with this passkey.');
+  });
+
   it('issues a working session even when a logout was just recorded', async () => {
     const authenticator = new SoftwareAuthenticator();
     await enrol(authenticator, sessionToken);

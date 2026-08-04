@@ -53,9 +53,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   let expenseTotals: ExpenseTotalsResponse | null = null;
 
   try {
-    // Two tiers, not one: the `hydrate: true` read generates this month's recurring
-    // and installment rows, and settlement has to observe them or it reports a
-    // short month total on the first visit to a month.
     [users, incomes, expenseTotals] = await withServerApiLogging(
       requestId,
       { month, route: '/dashboard', step: 'bootstrap' },
@@ -63,14 +60,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         Promise.all([
           getUsers(serverReadInit),
           getIncomes(month, serverReadInit),
-          getExpenseTotals(month, serverReadInit, { hydrate: true }),
+          getExpenseTotals(month, serverReadInit),
         ]),
     );
     settlementResult = await withServerApiLogging(
       requestId,
       { month, route: '/dashboard', step: 'settlement' },
       () =>
-        getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
+        getSettlement(month, serverReadInit).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to load settlement';
           if (message.includes('Cannot calculate settlement when total income is non-positive')) {
             return null;

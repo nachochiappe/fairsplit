@@ -5,6 +5,8 @@ interface SupabaseAuthIdentity {
   email: string;
 }
 
+export const SUPABASE_USER_ENDPOINT_TIMEOUT_MS = 5_000;
+
 function normalizeAccessToken(rawToken: string): string {
   const trimmed = rawToken.trim();
   const bearerPrefix = /^Bearer\s+/i;
@@ -96,24 +98,33 @@ async function verifyWithSupabaseUserEndpoint(accessToken: string): Promise<Supa
     return null;
   }
 
-  const response = await fetch(`${supabaseUrl.replace(/\/+$/g, '')}/auth/v1/user`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      apikey: supabaseApiKey,
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SUPABASE_USER_ENDPOINT_TIMEOUT_MS);
+  timeout.unref();
 
-  if (!response.ok) {
-    return null;
-  }
+  try {
+    const response = await fetch(`${supabaseUrl.replace(/\/+$/g, '')}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        apikey: supabaseApiKey,
+      },
+      signal: controller.signal,
+    });
 
-  const payload = (await response.json()) as { id?: unknown; email?: unknown };
-  const authUserId = typeof payload.id === 'string' ? payload.id : null;
-  const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : null;
-  if (!authUserId || !email) {
-    return null;
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { id?: unknown; email?: unknown };
+    const authUserId = typeof payload.id === 'string' ? payload.id : null;
+    const email = typeof payload.email === 'string' ? payload.email.toLowerCase() : null;
+    if (!authUserId || !email) {
+      return null;
+    }
+    return { authUserId, email };
+  } finally {
+    clearTimeout(timeout);
   }
-  return { authUserId, email };
 }
 
 export async function verifySupabaseAccessToken(accessToken: string): Promise<SupabaseAuthIdentity | null> {

@@ -1,10 +1,7 @@
 import Decimal from 'decimal.js';
 import { ApplyScope, monthToDate } from '@fairsplit/shared';
 import { prisma } from '@fairsplit/db';
-
-function toArsAmount(amountOriginal: string, fxRate: string): string {
-  return new Decimal(amountOriginal).mul(fxRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
-}
+import { computeArsAmount } from './money';
 
 export async function resolveFxRateForMonth(options: {
   month: string;
@@ -123,7 +120,7 @@ export async function ensureFixedExpensesForMonth(month: string, householdId: st
 
     const fxRateUsed = monthRate ?? template.fxRate.toFixed(6);
     const amountOriginal = template.amountOriginal.toFixed(2);
-    const amountArs = toArsAmount(amountOriginal, fxRateUsed);
+    const amountArs = computeArsAmount(amountOriginal, fxRateUsed);
     const householdId = template.householdId ?? template.paidByUser.householdId;
     if (!householdId) {
       warnings.push(`Recurring expense \"${template.description}\" was skipped because it has no household context.`);
@@ -258,8 +255,4 @@ export async function applyTemplateValuesToFutureMonths(options: {
       });
     }
   });
-}
-
-export function computeArsAmount(amountOriginal: number | string, fxRate: string): string {
-  return toArsAmount(new Decimal(amountOriginal).toFixed(2), fxRate);
 }

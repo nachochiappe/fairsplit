@@ -1,9 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatMoney, formatPercent } from '../../lib/currency';
-import { type AppLocale, type Income, type SettlementResponse, type User } from '../../lib/api';
+import {
+  materializeExpenseMonth,
+  type AppLocale,
+  type Income,
+  type SettlementResponse,
+  type User,
+} from '../../lib/api';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   MonthNavigationPendingProvider,
   useMonthNavigationPending,
@@ -64,6 +71,9 @@ function DashboardClientContent({
   locale,
 }: DashboardClientProps) {
   const [isCategoryChartExpanded, setIsCategoryChartExpanded] = useState(false);
+  const [materializationMessage, setMaterializationMessage] = useState<string | null>(null);
+  const materializedMonthRef = useRef<string | null>(null);
+  const router = useRouter();
   const { isPending } = useMonthNavigationPending();
   const copy = t(locale).dashboard;
   const usersById = Object.fromEntries(users.map((user) => [user.id, user]));
@@ -71,6 +81,36 @@ function DashboardClientContent({
   for (const income of incomes) {
     incomeByUser[income.userId] = (incomeByUser[income.userId] ?? 0) + Number(income.amountArs);
   }
+
+  useEffect(() => {
+    if (materializedMonthRef.current === month) {
+      return;
+    }
+    materializedMonthRef.current = month;
+
+    let cancelled = false;
+    void materializeExpenseMonth(month)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setMaterializationMessage(result.warnings.length > 0 ? result.warnings.join(' ') : null);
+        router.refresh();
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        materializedMonthRef.current = null;
+        setMaterializationMessage(
+          error instanceof Error ? error.message : 'Failed to prepare monthly expenses.',
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [month, router]);
 
   return (
     <main
@@ -120,6 +160,11 @@ function DashboardClientContent({
               </Link>
             </p>
           </div>
+        ) : null}
+        {materializationMessage ? (
+          <p className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+            {materializationMessage}
+          </p>
         ) : null}
         <section className="grid gap-5 md:grid-cols-3">
           <MetricCard label={copy.totalIncome} value={formatMoney(settlement.totalIncome, locale)} />

@@ -10,13 +10,10 @@ import {
   UpdateExpenseInput,
 } from '@fairsplit/shared';
 import { prisma } from '@fairsplit/db';
+import { computeArsAmount } from './money';
 
 type ExpenseRow = Awaited<ReturnType<typeof prisma.expense.findFirstOrThrow>>;
 type ExpenseWithPaidBy = any;
-
-function toArsAmount(amountOriginal: string, fxRate: string): string {
-  return new Decimal(amountOriginal).mul(fxRate).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toFixed(2);
-}
 
 function normalizeCurrencyCode(value: string) {
   const parsed = currencyCodeSchema.safeParse(value);
@@ -135,7 +132,7 @@ export async function ensureInstallmentsForMonth(month: string, householdId: str
     const schedule = buildScheduleFromSeries(anchor);
     const amountOriginal = schedule[targetInstallmentNumber - 1];
     const fxRateUsed = sourceRow.fxRateUsed.toFixed(6);
-    const amountArs = toArsAmount(amountOriginal, fxRateUsed);
+    const amountArs = computeArsAmount(amountOriginal, fxRateUsed);
 
     await prisma.expense.createMany({
       data: [
@@ -303,7 +300,7 @@ export async function propagateInstallmentUpdate(existing: ExpenseRow, payload: 
       const amountOriginal = schedule[row.installmentNumber - 1];
       const fxRateUsed = nextFxRate ?? row.fxRateUsed.toFixed(6);
       const currencyCode = nextCurrencyCode ?? row.currencyCode;
-      const amountArs = toArsAmount(amountOriginal, fxRateUsed);
+      const amountArs = computeArsAmount(amountOriginal, fxRateUsed);
       await tx.expense.update({
         where: { id: row.id },
         data: {
@@ -383,7 +380,7 @@ function toSingleExpenseUpdateData(existing: ExpenseRow, payload: UpdateExpenseI
     ...(payload.amount !== undefined && !payload.installment?.enabled
       ? {
           amountOriginal: new Decimal(payload.amount).toFixed(2),
-          amountArs: toArsAmount(
+          amountArs: computeArsAmount(
             new Decimal(payload.amount).toFixed(2),
             payload.fxRate !== undefined ? new Decimal(payload.fxRate).toFixed(6) : existing.fxRateUsed.toFixed(6),
           ),
@@ -393,7 +390,7 @@ function toSingleExpenseUpdateData(existing: ExpenseRow, payload: UpdateExpenseI
     payload.fxRate !== undefined &&
     !payload.installment?.enabled
       ? {
-          amountArs: toArsAmount(existing.amountOriginal.toFixed(2), new Decimal(payload.fxRate).toFixed(6)),
+          amountArs: computeArsAmount(existing.amountOriginal.toFixed(2), new Decimal(payload.fxRate).toFixed(6)),
         }
       : {}),
     ...(payload.paidByUserId ? { paidByUserId: payload.paidByUserId } : {}),
@@ -402,7 +399,7 @@ function toSingleExpenseUpdateData(existing: ExpenseRow, payload: UpdateExpenseI
     ...(nextInstallment
       ? {
           amountOriginal: nextInstallment.amountOriginal,
-          amountArs: toArsAmount(
+          amountArs: computeArsAmount(
             nextInstallment.amountOriginal,
             payload.fxRate !== undefined ? new Decimal(payload.fxRate).toFixed(6) : existing.fxRateUsed.toFixed(6),
           ),

@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import 'express-async-errors';
 import { randomBytes } from 'node:crypto';
-import cors from 'cors';
 import Decimal from 'decimal.js';
 import express, { type ErrorRequestHandler, Express, Request, Response } from 'express';
 import { prisma } from '@fairsplit/db';
@@ -11,6 +10,9 @@ import {
   calculateSettlement,
   currencyCodeSchema,
   createExpenseSchema,
+  fxRateInputSchema,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_ENTITY_ID_LENGTH,
   monthSchema,
   replaceIncomeEntriesSchema,
   updateExpenseSchema,
@@ -26,11 +28,11 @@ import {
 } from './lib/installments';
 import {
   applyTemplateValuesToFutureMonths,
-  computeArsAmount,
   deleteFixedExpense,
   ensureFixedExpensesForMonth,
   resolveFxRateForMonth,
 } from './lib/fixed-expenses';
+import { computeArsAmount } from './lib/money';
 import { createApiHttpLogger, createApiLogger } from './lib/logger';
 import { getSessionSecret, issueSessionToken, verifySessionToken, type SessionClaims } from './lib/session';
 import {
@@ -40,6 +42,7 @@ import {
   type CachedUserContext,
 } from './lib/user-context-cache';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
+import { createRateLimit, hashedRateLimitKey, requestIpKey } from './lib/rate-limit';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -65,27 +68,38 @@ import {
   userIdToUserHandle,
 } from './lib/webauthn';
 
-const monthQuerySchema = z.object({
+export const API_FIELD_LIMITS = {
+  accessToken: 8_192,
+  color: 32,
+  icon: 64,
+  name: 120,
+  search: MAX_DESCRIPTION_LENGTH,
+  sortOrder: 1_000_000,
+  webauthnCredential: 4_096,
+  webauthnRecordKeys: 64,
+} as const;
+
+export const entityIdSchema = z.string().min(1).max(MAX_ENTITY_ID_LENGTH);
+const nameSchema = z.string().trim().min(1).max(API_FIELD_LIMITS.name);
+const boundedWebauthnRecordSchema = z
+  .record(z.unknown())
+  .refine((value) => Object.keys(value).length <= API_FIELD_LIMITS.webauthnRecordKeys, {
+    message: `record must contain at most ${API_FIELD_LIMITS.webauthnRecordKeys} fields`,
+  });
+
+export const monthQuerySchema = z.object({ month: monthSchema });
+const expenseMonthQuerySchema = monthQuerySchema.strict();
+const materializeExpenseMonthSchema = z.object({ month: monthSchema }).strict();
+export const expenseListQuerySchema = z.object({
   month: monthSchema,
-  hydrate: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
-    .optional(),
-});
-const expenseListQuerySchema = z.object({
-  month: monthSchema,
-  search: z.string().trim().min(1).optional(),
-  categoryId: z.string().min(1).optional(),
-  paidByUserId: z.string().min(1).optional(),
+  search: z.string().trim().min(1).max(API_FIELD_LIMITS.search).optional(),
+  categoryId: entityIdSchema.optional(),
+  paidByUserId: entityIdSchema.optional(),
   type: z.enum(['oneTime', 'fixed', 'installment']).optional(),
   sortBy: z.enum(['date', 'description', 'category', 'amountArs', 'paidBy']).optional(),
   sortDir: z.enum(['asc', 'desc']).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
-  cursor: z.string().min(1).optional(),
-  hydrate: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
-    .optional(),
+  cursor: entityIdSchema.optional(),
   includeCount: z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
@@ -94,7 +108,7 @@ const expenseListQuerySchema = z.object({
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
     .optional(),
-}).superRefine((value, ctx) => {
+}).strict().superRefine((value, ctx) => {
   if (value.cursor && !value.limit) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -103,7 +117,7 @@ const expenseListQuerySchema = z.object({
     });
   }
 });
-const expenseDescriptionSuggestionQuerySchema = z.object({
+export const expenseDescriptionSuggestionQuerySchema = z.object({
   q: z.string().trim().min(2).max(120),
   limit: z.coerce.number().int().min(1).max(20).default(8),
 });
@@ -124,61 +138,73 @@ function withExpenseTypeConstraint(
   return where;
 }
 const localeSchema = z.enum(['es', 'en']);
-const createUserSchema = z.object({ name: z.string().min(1), locale: localeSchema.optional() });
-const updateUserSchema = z.object({
-  name: z.string().trim().min(1).optional(),
+export const createUserSchema = z.object({ name: nameSchema, locale: localeSchema.optional() });
+export const updateUserSchema = z.object({
+  name: nameSchema.optional(),
   locale: localeSchema.optional(),
 }).refine((value) => value.name !== undefined || value.locale !== undefined, {
   message: 'At least one profile field is required.',
 });
-const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
-const createCategorySchema = z.object({
-  name: z.string().trim().min(1),
-  superCategoryId: z.string().min(1).nullable().optional(),
+export const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
+export const createCategorySchema = z.object({
+  name: nameSchema,
+  superCategoryId: entityIdSchema.nullable().optional(),
 });
-const renameCategorySchema = z.object({ name: z.string().trim().min(1) });
-const archiveCategorySchema = z.object({ replacementCategoryId: z.string().min(1).optional() });
-const createSuperCategorySchema = z.object({
-  name: z.string().trim().min(1),
-  color: z.string().trim().min(1).optional(),
-  icon: z.string().trim().min(1).optional(),
-  sortOrder: z.coerce.number().int().optional(),
+export const renameCategorySchema = z.object({ name: nameSchema });
+export const archiveCategorySchema = z.object({ replacementCategoryId: entityIdSchema.optional() });
+export const createSuperCategorySchema = z.object({
+  name: nameSchema,
+  color: z.string().trim().min(1).max(API_FIELD_LIMITS.color).optional(),
+  icon: z.string().trim().min(1).max(API_FIELD_LIMITS.icon).optional(),
+  sortOrder: z.coerce
+    .number()
+    .int()
+    .min(-API_FIELD_LIMITS.sortOrder)
+    .max(API_FIELD_LIMITS.sortOrder)
+    .optional(),
 });
-const updateSuperCategorySchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  color: z.string().trim().min(1).optional(),
-  icon: z.string().trim().min(1).optional(),
-  sortOrder: z.coerce.number().int().optional(),
+export const updateSuperCategorySchema = z.object({
+  name: nameSchema.optional(),
+  color: z.string().trim().min(1).max(API_FIELD_LIMITS.color).optional(),
+  icon: z.string().trim().min(1).max(API_FIELD_LIMITS.icon).optional(),
+  sortOrder: z.coerce
+    .number()
+    .int()
+    .min(-API_FIELD_LIMITS.sortOrder)
+    .max(API_FIELD_LIMITS.sortOrder)
+    .optional(),
 });
-const archiveSuperCategorySchema = z.object({ replacementSuperCategoryId: z.string().min(1).optional() });
-const assignCategorySuperCategorySchema = z.object({ superCategoryId: z.string().min(1).nullable() });
-const upsertMonthlyExchangeRateSchema = z.object({
+export const archiveSuperCategorySchema = z.object({
+  replacementSuperCategoryId: entityIdSchema.optional(),
+});
+export const assignCategorySuperCategorySchema = z.object({ superCategoryId: entityIdSchema.nullable() });
+export const upsertMonthlyExchangeRateSchema = z.object({
   month: monthSchema,
   currencyCode: currencyCodeSchema,
-  rateToArs: z.coerce.number().gt(0),
+  rateToArs: fxRateInputSchema,
 });
-const authLinkSchema = z.object({
-  accessToken: z.string().trim().min(1),
-  name: z.string().trim().min(1).optional(),
+export const authLinkSchema = z.object({
+  accessToken: z.string().trim().min(1).max(API_FIELD_LIMITS.accessToken),
+  name: nameSchema.optional(),
 });
-const joinHouseholdWithCodeSchema = z.object({
+export const joinHouseholdWithCodeSchema = z.object({
   code: z.string().trim().min(4).max(64),
 });
 // The WebAuthn response envelopes are validated by @simplewebauthn/server, so
 // Zod only has to confirm we were handed an object of the right rough shape.
-const webauthnResponseSchema = z.object({
-  id: z.string().min(1),
-  rawId: z.string().min(1),
+export const webauthnResponseSchema = z.object({
+  id: z.string().min(1).max(API_FIELD_LIMITS.webauthnCredential),
+  rawId: z.string().min(1).max(API_FIELD_LIMITS.webauthnCredential),
   type: z.literal('public-key'),
-  response: z.record(z.unknown()),
-  clientExtensionResults: z.record(z.unknown()).optional(),
-  authenticatorAttachment: z.string().optional(),
+  response: boundedWebauthnRecordSchema,
+  clientExtensionResults: boundedWebauthnRecordSchema.optional(),
+  authenticatorAttachment: z.string().max(32).optional(),
 });
-const passkeyRegistrationVerifySchema = z.object({
+export const passkeyRegistrationVerifySchema = z.object({
   response: webauthnResponseSchema,
   label: z.string().trim().min(1).max(PASSKEY_LABEL_MAX_LENGTH).optional(),
 });
-const passkeyAuthenticationVerifySchema = z.object({
+export const passkeyAuthenticationVerifySchema = z.object({
   response: webauthnResponseSchema,
 });
 
@@ -529,6 +555,16 @@ function normalizeInviteCode(rawCode: string): string {
 
 const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
+const AUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX = 30;
+const AUTH_TOKEN_RATE_LIMIT_MAX = 5;
+const PASSKEY_CREDENTIAL_RATE_LIMIT_MAX = 10;
+const AUTHENTICATED_SECURITY_RATE_LIMIT_MAX = 20;
+const INVITE_CREATE_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const INVITE_CREATE_RATE_LIMIT_MAX = 10;
+const INVITE_JOIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const INVITE_JOIN_RATE_LIMIT_MAX = 10;
+
 function generateInviteCode(length = 8): string {
   const bytes = randomBytes(length);
   let code = '';
@@ -547,14 +583,78 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   };
 
   app.use(createApiHttpLogger(logger));
-  app.use(cors());
   app.use(express.json());
+  app.param('id', (_req, res, next, id) => {
+    if (!entityIdSchema.safeParse(id).success) {
+      return res.status(400).json({ error: `Resource id must be at most ${MAX_ENTITY_ID_LENGTH} characters.` });
+    }
+    return next();
+  });
+
+  // Browser traffic reaches the API through the same-origin Next.js BFF. The
+  // API deliberately emits no CORS headers, so browsers cannot call it from an
+  // arbitrary origin even if the API's network endpoint is publicly reachable.
+  const authLinkIpLimit = createRateLimit({
+    limit: AUTH_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: requestIpKey,
+  });
+  const authLinkTokenLimit = createRateLimit({
+    limit: AUTH_TOKEN_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'auth-token',
+      typeof request.body?.accessToken === 'string' ? request.body.accessToken : undefined,
+      requestIpKey(request),
+    ),
+  });
+  const passkeyLoginIpLimit = createRateLimit({
+    limit: AUTH_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: requestIpKey,
+  });
+  const passkeyCredentialLimit = createRateLimit({
+    limit: PASSKEY_CREDENTIAL_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'passkey-credential',
+      typeof request.body?.response?.id === 'string' ? request.body.response.id : undefined,
+      requestIpKey(request),
+    ),
+  });
+  const passkeyRegistrationLimit = createRateLimit({
+    limit: AUTHENTICATED_SECURITY_RATE_LIMIT_MAX,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'session',
+      request.get('x-fairsplit-session'),
+      requestIpKey(request),
+    ),
+  });
+  const inviteCreateLimit = createRateLimit({
+    limit: INVITE_CREATE_RATE_LIMIT_MAX,
+    windowMs: INVITE_CREATE_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'session',
+      request.get('x-fairsplit-session'),
+      requestIpKey(request),
+    ),
+  });
+  const inviteJoinLimit = createRateLimit({
+    limit: INVITE_JOIN_RATE_LIMIT_MAX,
+    windowMs: INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
+    key: (request) => hashedRateLimitKey(
+      'session',
+      request.get('x-fairsplit-session'),
+      requestIpKey(request),
+    ),
+  });
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true });
   });
 
-  app.post('/api/auth/link', async (req: Request, res: Response) => {
+  app.post('/api/auth/link', authLinkIpLimit, authLinkTokenLimit, async (req: Request, res: Response) => {
     const parsed = authLinkSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -774,7 +874,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
   });
 
-  app.post('/api/auth/passkeys/registration/options', async (req: Request, res: Response) => {
+  app.post('/api/auth/passkeys/registration/options', passkeyRegistrationLimit, async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
     if (!user) {
       return;
@@ -816,7 +916,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         // A discoverable credential is what makes the usernameless sign-in
         // button work: the browser can offer the account without an email.
         residentKey: 'required',
-        userVerification: 'preferred',
+        userVerification: 'required',
       },
     });
 
@@ -824,7 +924,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.json(options);
   });
 
-  app.post('/api/auth/passkeys/registration/verify', async (req: Request, res: Response) => {
+  app.post('/api/auth/passkeys/registration/verify', passkeyRegistrationLimit, async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
     if (!user) {
       return;
@@ -845,9 +945,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         expectedChallenge: (challenge) => consumeChallenge(challenge, 'registration', user.userId),
         expectedOrigin: config.origins,
         expectedRPID: config.rpId,
-        // Registration asks for user verification but does not demand it, so
-        // security keys without a PIN can still be enrolled.
-        requireUserVerification: false,
+        requireUserVerification: true,
       });
     } catch (error) {
       res.status(400);
@@ -927,7 +1025,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.status(204).send();
   });
 
-  app.post('/api/auth/passkeys/authentication/options', async (req: Request, res: Response) => {
+  app.post('/api/auth/passkeys/authentication/options', passkeyLoginIpLimit, async (req: Request, res: Response) => {
     const config = resolveWebAuthnConfig(req, res);
     if (!config) {
       return;
@@ -938,14 +1036,18 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     // passkey exists for any given email.
     const options = await generateAuthenticationOptions({
       rpID: config.rpId,
-      userVerification: 'preferred',
+      userVerification: 'required',
     });
 
     await storeChallenge(options.challenge, 'authentication', null);
     return res.json(options);
   });
 
-  app.post('/api/auth/passkeys/authentication/verify', async (req: Request, res: Response) => {
+  app.post(
+    '/api/auth/passkeys/authentication/verify',
+    passkeyLoginIpLimit,
+    passkeyCredentialLimit,
+    async (req: Request, res: Response) => {
     const parsed = passkeyAuthenticationVerifySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
@@ -993,7 +1095,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         expectedChallenge: (challenge) => consumeChallenge(challenge, 'authentication', null),
         expectedOrigin: config.origins,
         expectedRPID: config.rpId,
-        requireUserVerification: false,
+        requireUserVerification: true,
         credential: {
           id: passkey.credentialId,
           publicKey: toCredentialPublicKey(passkey.publicKey),
@@ -1028,7 +1130,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
 
     return res.json(buildAuthSessionResponse(passkey.user, false, sessionSecret));
-  });
+    },
+  );
 
   app.get('/api/household/setup-status', async (req: Request, res: Response) => {
     const auth = await requireUserContext(req, res);
@@ -1043,7 +1146,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
   });
 
-  app.post('/api/household/invites', async (req: Request, res: Response) => {
+  app.post('/api/household/invites', inviteCreateLimit, async (req: Request, res: Response) => {
     const auth = await requireAuthContext(req, res);
     if (!auth) {
       return;
@@ -1080,7 +1183,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.status(500).json({ error: 'Failed to create invite code. Please retry.' });
   });
 
-  app.post('/api/household/join-with-code', async (req: Request, res: Response) => {
+  app.post('/api/household/join-with-code', inviteJoinLimit, async (req: Request, res: Response) => {
     const auth = await requireUserContext(req, res);
     if (!auth) {
       return;
@@ -2147,6 +2250,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       if (error instanceof Error && error.message.startsWith('Missing exchange rate')) {
         return res.status(400).json({ error: error.message });
       }
+      if (error instanceof RangeError) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500);
       logErrorAndDisableAutoLog(req, res, error, 'Failed to save incomes');
       return res.status(500).json({ error: 'Failed to save incomes.' });
@@ -2178,13 +2284,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const shouldHydrate = parsed.data.hydrate ?? !parsed.data.cursor;
     const shouldIncludeCount = parsed.data.includeCount ?? true;
-    const generationWarnings: string[] = [];
-    if (shouldHydrate) {
-      generationWarnings.push(...(await ensureFixedExpensesForMonth(parsed.data.month, auth.householdId)));
-      await ensureInstallmentsForMonth(parsed.data.month, auth.householdId);
-    }
 
     const baseWhere: Record<string, unknown> = { month: parsed.data.month, householdId: auth.householdId };
     if (parsed.data.search) {
@@ -2295,7 +2395,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
       return res.json({
         month: parsed.data.month,
-        warnings: generationWarnings,
+        warnings: [],
         expenses: expenses.map((expense) => serializeExpense(expense)),
         totals,
         pagination: {
@@ -2311,7 +2411,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     return res.json({
       month: parsed.data.month,
-      warnings: generationWarnings,
+      warnings: [],
       expenses: expenses.map((expense) => serializeExpense(expense)),
       totals,
       pagination: null,
@@ -2357,6 +2457,23 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.json(suggestions);
   });
 
+  app.post('/api/expenses/materialize', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = materializeExpenseMonthSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const warnings = await ensureFixedExpensesForMonth(parsed.data.month, auth.householdId);
+    await ensureInstallmentsForMonth(parsed.data.month, auth.householdId);
+
+    return res.json({ month: parsed.data.month, warnings });
+  });
+
   app.post('/api/expenses', async (req: Request, res: Response) => {
     const auth = await requireAuthContext(req, res);
     if (!auth) {
@@ -2395,7 +2512,15 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const installmentPayload = resolveCreateExpenseAmount(parsed.data);
-    const amountArs = computeArsAmount(installmentPayload.amountOriginal, fxRateUsed);
+    let amountArs: string;
+    try {
+      amountArs = computeArsAmount(installmentPayload.amountOriginal, fxRateUsed);
+    } catch (error) {
+      if (error instanceof RangeError) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
 
     let templateId: string | null = null;
     if (parsed.data.fixed?.enabled) {
@@ -2578,19 +2703,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return;
     }
 
-    const parsed = monthQuerySchema.safeParse(req.query);
+    const parsed = expenseMonthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const month = parsed.data.month;
-    const shouldHydrate = parsed.data.hydrate ?? true;
-    const warnings: string[] = [];
-    if (shouldHydrate) {
-      warnings.push(...(await ensureFixedExpensesForMonth(month, auth.householdId)));
-      await ensureInstallmentsForMonth(month, auth.householdId);
-    }
-
     const where = { month, householdId: auth.householdId };
     const [categoryGroups, userGroups] = await Promise.all([
       prisma.expense.groupBy({ by: ['categoryId'], where, _sum: { amountArs: true } }),
@@ -2633,7 +2751,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     return res.json({
       month,
-      warnings,
+      warnings: [],
       totalArs: toMoneyString(total),
       byCategory,
       byUser,
@@ -2646,19 +2764,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return;
     }
 
-    const parsed = monthQuerySchema.safeParse(req.query);
+    const parsed = expenseMonthQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
     const month = parsed.data.month;
-    const shouldHydrate = parsed.data.hydrate ?? true;
-
-    if (shouldHydrate) {
-      await ensureFixedExpensesForMonth(month, auth.householdId);
-      await ensureInstallmentsForMonth(month, auth.householdId);
-    }
-
     const [users, incomes, expenses] = await Promise.all([
       prisma.user.findMany({ where: { householdId: auth.householdId }, orderBy: { createdAt: 'asc' } }),
       prisma.monthlyIncome.findMany({ where: { month, householdId: auth.householdId } }),

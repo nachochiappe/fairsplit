@@ -84,6 +84,15 @@ export interface SoftwareAuthenticatorOptions {
   useSignCounter?: boolean;
 }
 
+export interface AuthenticatorResponseOptions {
+  /** Set to false to exercise ceremonies where the authenticator did not verify the user. */
+  userVerified?: boolean;
+}
+
+function withUserVerification(flags: number, userVerified: boolean): number {
+  return userVerified ? flags | FLAG_USER_VERIFIED : flags;
+}
+
 export class SoftwareAuthenticator {
   readonly credentialId: Buffer;
   private readonly privateKey: KeyObject;
@@ -115,7 +124,12 @@ export class SoftwareAuthenticator {
     this.signCount = Math.max(0, this.signCount - 1);
   }
 
-  createAttestationResponse(challenge: string, rpId: string, origin: string) {
+  createAttestationResponse(
+    challenge: string,
+    rpId: string,
+    origin: string,
+    options: AuthenticatorResponseOptions = {},
+  ) {
     const clientDataJSON = buildClientDataJSON('webauthn.create', challenge, origin);
     const credentialIdLength = Buffer.alloc(2);
     credentialIdLength.writeUInt16BE(this.credentialId.length, 0);
@@ -127,7 +141,7 @@ export class SoftwareAuthenticator {
     ]);
     const authData = buildAuthData(
       rpId,
-      FLAG_USER_PRESENT | FLAG_USER_VERIFIED | FLAG_ATTESTED_CREDENTIAL_DATA,
+      withUserVerification(FLAG_USER_PRESENT | FLAG_ATTESTED_CREDENTIAL_DATA, options.userVerified ?? true),
       this.nextSignCount(),
       attestedCredentialData,
     );
@@ -151,9 +165,19 @@ export class SoftwareAuthenticator {
     };
   }
 
-  createAssertionResponse(challenge: string, rpId: string, origin: string, userHandle: string | null) {
+  createAssertionResponse(
+    challenge: string,
+    rpId: string,
+    origin: string,
+    userHandle: string | null,
+    options: AuthenticatorResponseOptions = {},
+  ) {
     const clientDataJSON = buildClientDataJSON('webauthn.get', challenge, origin);
-    const authData = buildAuthData(rpId, FLAG_USER_PRESENT | FLAG_USER_VERIFIED, this.nextSignCount());
+    const authData = buildAuthData(
+      rpId,
+      withUserVerification(FLAG_USER_PRESENT, options.userVerified ?? true),
+      this.nextSignCount(),
+    );
     const signatureBase = Buffer.concat([authData, createHash('sha256').update(clientDataJSON).digest()]);
     const signature = createSign('sha256').update(signatureBase).sign(this.privateKey);
 

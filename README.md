@@ -164,11 +164,27 @@ docker compose up -d
 - `apps/api/.env`
 - `packages/db/.env`
 
+Both the web and API environments require the same randomly generated session
+secret. Generate one with `openssl rand -base64 48` and set it as
+`FAIRSPLIT_SESSION_SECRET`; placeholder and built-in development keys are
+rejected.
+
+Use the loopback database URLs from `.env.example` for both API and Prisma
+configuration. Non-production API processes refuse remote database hosts, and
+the development and test URLs must name separate databases.
+
 4. Prepare the database.
 
 ```bash
 pnpm db:generate     # Prisma client
 pnpm db:reset-test   # build the local test database from supabase/migrations
+```
+
+The application database must also have the migration history applied. For a
+new local Docker database, run:
+
+```bash
+./scripts/migrations.sh replay postgresql://postgres:postgres@localhost:5433/fairsplit
 ```
 
 Migrations reach production by merging to `main` — the Supabase GitHub
@@ -194,4 +210,6 @@ pnpm build
 pnpm lint
 ```
 
-Note: API integration tests require `TEST_DATABASE_URL` and will fail if it is missing or matches `DATABASE_URL`.
+Note: API integration tests require a local `TEST_DATABASE_URL` and will fail if
+it is missing or matches `DATABASE_URL`. Remote `DATABASE_URL` values are only
+accepted when `NODE_ENV=production`.

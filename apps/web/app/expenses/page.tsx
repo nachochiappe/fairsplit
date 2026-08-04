@@ -46,10 +46,6 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
     SERVER_READ_CACHE,
     sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
   );
-  // Two tiers, not one: the `hydrate: true` read is what generates this month's
-  // recurring and installment rows, so anything that counts or sums the month has
-  // to wait for it. Everything that doesn't depend on generation rides along in
-  // tier one instead of blocking behind its own round trip.
   const [users, fixedData, categories, exchangeRates] = await withSessionRecovery(() =>
     withServerApiLogging(requestId, { month, route: '/expenses', step: 'bootstrap' }, async () =>
       Promise.all([
@@ -61,7 +57,6 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
             sortBy: 'date',
             sortDir: 'desc',
             limit: INITIAL_EXPENSES_PAGE_SIZE,
-            hydrate: true,
             includeCount: true,
           },
           serverReadInit,
@@ -85,7 +80,6 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
             sortBy: 'date',
             sortDir: 'desc',
             limit: INITIAL_EXPENSES_PAGE_SIZE,
-            hydrate: false,
             includeCount: false,
           },
           serverReadInit,
@@ -97,7 +91,6 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
             sortBy: 'date',
             sortDir: 'desc',
             limit: INITIAL_EXPENSES_PAGE_SIZE,
-            hydrate: false,
             includeCount: false,
           },
           serverReadInit,
@@ -108,7 +101,6 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
             sortBy: 'date',
             sortDir: 'desc',
             limit: 1,
-            hydrate: false,
             includeCount: false,
             includeTotals: true,
           },
@@ -117,7 +109,7 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
         // Settlement throws when the household has expenses but no income. That is a
         // legitimate state on the expenses screen, so it resolves to null and the
         // month total falls back to the unfiltered subtotal we already asked for.
-        getSettlement(month, serverReadInit, { hydrate: false }).catch((error: unknown) => {
+        getSettlement(month, serverReadInit).catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to load settlement';
           if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
             return null;
