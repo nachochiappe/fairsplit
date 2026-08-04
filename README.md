@@ -164,6 +164,11 @@ docker compose up -d
 - `apps/api/.env`
 - `packages/db/.env`
 
+Both the web and API environments require the same randomly generated session
+secret. Generate one with `openssl rand -base64 48` and set it as
+`FAIRSPLIT_SESSION_SECRET`; placeholder and built-in development keys are
+rejected.
+
 4. Prepare the database.
 
 ```bash

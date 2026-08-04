@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { isSecureSessionSecret, SESSION_SECRET_CONFIGURATION_ERROR } from '@fairsplit/shared';
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
@@ -47,8 +48,10 @@ function sign(payloadB64: string, secret: string): string {
   return digest.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function hasValidSecret(secret: string | undefined): secret is string {
-  return typeof secret === 'string' && secret.trim().length >= 32;
+function assertValidSecret(secret: string | undefined): asserts secret is string {
+  if (!isSecureSessionSecret(secret, { allowTestSecret: process.env.NODE_ENV === 'test' })) {
+    throw new Error(SESSION_SECRET_CONFIGURATION_ERROR);
+  }
 }
 
 export function issueSessionToken(
@@ -60,12 +63,16 @@ export function issueSessionToken(
   },
   secret: string,
 ): string {
+  assertValidSecret(secret);
+
   const now = Math.floor(Date.now() / 1000);
   // Logout invalidates every session issued at or before `sessionRevokedAt`.
   // A passkey sign-in can land in the same second as the logout that preceded
   // it, so nudge `iat` past the revocation rather than handing back a token the
   // very next request would reject.
-  const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
+  const revokedAt = user.sessionRevokedAt
+    ? Math.floor(user.sessionRevokedAt.getTime() / 1000)
+    : null;
   const issuedAt = revokedAt !== null ? Math.max(now, revokedAt + 1) : now;
   const claims: SessionClaims = {
     v: SESSION_CLAIMS_VERSION,
@@ -82,9 +89,7 @@ export function issueSessionToken(
 }
 
 export function verifySessionToken(token: string, secret: string): SessionClaims | null {
-  if (!hasValidSecret(secret)) {
-    throw new Error('FAIRSPLIT_SESSION_SECRET is required and must be at least 32 characters.');
-  }
+  assertValidSecret(secret);
 
   const [payloadB64, signature] = token.split('.');
   if (!payloadB64 || !signature || token.split('.').length !== 2) {
@@ -94,7 +99,10 @@ export function verifySessionToken(token: string, secret: string): SessionClaims
   const expected = sign(payloadB64, secret);
   const signatureBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expected);
-  if (signatureBuffer.length !== expectedBuffer.length || !timingSafeEqual(signatureBuffer, expectedBuffer)) {
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
     return null;
   }
 
@@ -140,11 +148,6 @@ export function verifySessionToken(token: string, secret: string): SessionClaims
 
 export function getSessionSecret(): string {
   const secret = process.env.FAIRSPLIT_SESSION_SECRET;
-  if (hasValidSecret(secret)) {
-    return secret;
-  }
-  if (process.env.NODE_ENV !== 'production') {
-    return 'fairsplit-local-dev-session-secret-unsafe-change-me';
-  }
-  throw new Error('FAIRSPLIT_SESSION_SECRET is required and must be at least 32 characters.');
+  assertValidSecret(secret);
+  return secret;
 }

@@ -1,4 +1,5 @@
 import { SESSION_CLAIMS_VERSION, type SessionPayload } from './session';
+import { isSecureSessionSecret, SESSION_SECRET_CONFIGURATION_ERROR } from '@fairsplit/shared';
 
 function fromBase64Url(value: string): string | null {
   if (!value || /[^A-Za-z0-9\-_]/.test(value)) {
@@ -20,10 +21,7 @@ function toBase64Url(bytes: Uint8Array): string {
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 function timingSafeEqualString(a: string, b: string): boolean {
@@ -38,15 +36,12 @@ function timingSafeEqualString(a: string, b: string): boolean {
   return result === 0;
 }
 
-function getSessionSecret(): string | null {
+function getSessionSecret(): string {
   const configured = process.env.FAIRSPLIT_SESSION_SECRET;
-  if (configured && configured.trim().length >= 32) {
-    return configured;
+  if (!isSecureSessionSecret(configured, { allowTestSecret: process.env.NODE_ENV === 'test' })) {
+    throw new Error(SESSION_SECRET_CONFIGURATION_ERROR);
   }
-  if (process.env.NODE_ENV !== 'production') {
-    return 'fairsplit-local-dev-session-secret-unsafe-change-me';
-  }
-  return null;
+  return configured;
 }
 
 async function sign(payloadB64: string, secret: string): Promise<string> {
@@ -61,9 +56,11 @@ async function sign(payloadB64: string, secret: string): Promise<string> {
   return toBase64Url(new Uint8Array(signature));
 }
 
-export async function verifySessionCookieToken(token: string | undefined): Promise<SessionPayload | null> {
+export async function verifySessionCookieToken(
+  token: string | undefined,
+): Promise<SessionPayload | null> {
   const secret = getSessionSecret();
-  if (!secret || !token) {
+  if (!token) {
     return null;
   }
 
