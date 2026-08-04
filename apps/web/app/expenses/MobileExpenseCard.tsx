@@ -82,30 +82,6 @@ function MobileExpenseCardComponent({
           <p className="mt-1 text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
             {formatMobileExpenseDate(expense.date, locale)}
           </p>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {showKindChip ? (
-              <span className="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
-                {getExpenseKindLabel(copy.expenses, expense)}
-              </span>
-            ) : null}
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-              {expense.categoryName}
-            </span>
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-              {expense.paidByUserName}
-            </span>
-          </div>
-
-          {expense.currencyCode !== 'ARS' ? (
-            <p className="mt-3 text-xs text-slate-600">
-              {copy.expenses.originalAmount(
-                expense.currencyCode,
-                formatMoney(expense.amountOriginal, locale),
-                formatFxRate(expense.fxRateUsed),
-              )}
-            </p>
-          ) : null}
         </div>
 
         <div className="flex shrink-0 items-start gap-2">
@@ -123,6 +99,30 @@ function MobileExpenseCardComponent({
           />
         </div>
       </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {showKindChip ? (
+          <span className="inline-flex items-center whitespace-nowrap rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+            {getExpenseKindLabel(copy.expenses, expense)}
+          </span>
+        ) : null}
+        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+          {expense.categoryName}
+        </span>
+        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+          {expense.paidByUserName}
+        </span>
+      </div>
+
+      {expense.currencyCode !== 'ARS' ? (
+        <p className="mt-3 text-xs text-slate-600">
+          {copy.expenses.originalAmount(
+            expense.currencyCode,
+            formatMoney(expense.amountOriginal, locale),
+            formatFxRate(expense.fxRateUsed),
+          )}
+        </p>
+      ) : null}
     </article>
   );
 }
