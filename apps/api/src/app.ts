@@ -10,6 +10,9 @@ import {
   calculateSettlement,
   currencyCodeSchema,
   createExpenseSchema,
+  fxRateInputSchema,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_ENTITY_ID_LENGTH,
   monthSchema,
   replaceIncomeEntriesSchema,
   updateExpenseSchema,
@@ -25,11 +28,11 @@ import {
 } from './lib/installments';
 import {
   applyTemplateValuesToFutureMonths,
-  computeArsAmount,
   deleteFixedExpense,
   ensureFixedExpensesForMonth,
   resolveFxRateForMonth,
 } from './lib/fixed-expenses';
+import { computeArsAmount } from './lib/money';
 import { createApiHttpLogger, createApiLogger } from './lib/logger';
 import { getSessionSecret, issueSessionToken, verifySessionToken, type SessionClaims } from './lib/session';
 import {
@@ -65,23 +68,42 @@ import {
   userIdToUserHandle,
 } from './lib/webauthn';
 
-const monthQuerySchema = z.object({
+export const API_FIELD_LIMITS = {
+  accessToken: 8_192,
+  color: 32,
+  icon: 64,
+  name: 120,
+  search: MAX_DESCRIPTION_LENGTH,
+  sortOrder: 1_000_000,
+  webauthnCredential: 4_096,
+  webauthnRecordKeys: 64,
+} as const;
+
+export const entityIdSchema = z.string().min(1).max(MAX_ENTITY_ID_LENGTH);
+const nameSchema = z.string().trim().min(1).max(API_FIELD_LIMITS.name);
+const boundedWebauthnRecordSchema = z
+  .record(z.unknown())
+  .refine((value) => Object.keys(value).length <= API_FIELD_LIMITS.webauthnRecordKeys, {
+    message: `record must contain at most ${API_FIELD_LIMITS.webauthnRecordKeys} fields`,
+  });
+
+export const monthQuerySchema = z.object({
   month: monthSchema,
   hydrate: z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
     .optional(),
 });
-const expenseListQuerySchema = z.object({
+export const expenseListQuerySchema = z.object({
   month: monthSchema,
-  search: z.string().trim().min(1).optional(),
-  categoryId: z.string().min(1).optional(),
-  paidByUserId: z.string().min(1).optional(),
+  search: z.string().trim().min(1).max(API_FIELD_LIMITS.search).optional(),
+  categoryId: entityIdSchema.optional(),
+  paidByUserId: entityIdSchema.optional(),
   type: z.enum(['oneTime', 'fixed', 'installment']).optional(),
   sortBy: z.enum(['date', 'description', 'category', 'amountArs', 'paidBy']).optional(),
   sortDir: z.enum(['asc', 'desc']).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
-  cursor: z.string().min(1).optional(),
+  cursor: entityIdSchema.optional(),
   hydrate: z
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
@@ -103,7 +125,7 @@ const expenseListQuerySchema = z.object({
     });
   }
 });
-const expenseDescriptionSuggestionQuerySchema = z.object({
+export const expenseDescriptionSuggestionQuerySchema = z.object({
   q: z.string().trim().min(2).max(120),
   limit: z.coerce.number().int().min(1).max(20).default(8),
 });
@@ -124,61 +146,73 @@ function withExpenseTypeConstraint(
   return where;
 }
 const localeSchema = z.enum(['es', 'en']);
-const createUserSchema = z.object({ name: z.string().min(1), locale: localeSchema.optional() });
-const updateUserSchema = z.object({
-  name: z.string().trim().min(1).optional(),
+export const createUserSchema = z.object({ name: nameSchema, locale: localeSchema.optional() });
+export const updateUserSchema = z.object({
+  name: nameSchema.optional(),
   locale: localeSchema.optional(),
 }).refine((value) => value.name !== undefined || value.locale !== undefined, {
   message: 'At least one profile field is required.',
 });
-const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
-const createCategorySchema = z.object({
-  name: z.string().trim().min(1),
-  superCategoryId: z.string().min(1).nullable().optional(),
+export const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
+export const createCategorySchema = z.object({
+  name: nameSchema,
+  superCategoryId: entityIdSchema.nullable().optional(),
 });
-const renameCategorySchema = z.object({ name: z.string().trim().min(1) });
-const archiveCategorySchema = z.object({ replacementCategoryId: z.string().min(1).optional() });
-const createSuperCategorySchema = z.object({
-  name: z.string().trim().min(1),
-  color: z.string().trim().min(1).optional(),
-  icon: z.string().trim().min(1).optional(),
-  sortOrder: z.coerce.number().int().optional(),
+export const renameCategorySchema = z.object({ name: nameSchema });
+export const archiveCategorySchema = z.object({ replacementCategoryId: entityIdSchema.optional() });
+export const createSuperCategorySchema = z.object({
+  name: nameSchema,
+  color: z.string().trim().min(1).max(API_FIELD_LIMITS.color).optional(),
+  icon: z.string().trim().min(1).max(API_FIELD_LIMITS.icon).optional(),
+  sortOrder: z.coerce
+    .number()
+    .int()
+    .min(-API_FIELD_LIMITS.sortOrder)
+    .max(API_FIELD_LIMITS.sortOrder)
+    .optional(),
 });
-const updateSuperCategorySchema = z.object({
-  name: z.string().trim().min(1).optional(),
-  color: z.string().trim().min(1).optional(),
-  icon: z.string().trim().min(1).optional(),
-  sortOrder: z.coerce.number().int().optional(),
+export const updateSuperCategorySchema = z.object({
+  name: nameSchema.optional(),
+  color: z.string().trim().min(1).max(API_FIELD_LIMITS.color).optional(),
+  icon: z.string().trim().min(1).max(API_FIELD_LIMITS.icon).optional(),
+  sortOrder: z.coerce
+    .number()
+    .int()
+    .min(-API_FIELD_LIMITS.sortOrder)
+    .max(API_FIELD_LIMITS.sortOrder)
+    .optional(),
 });
-const archiveSuperCategorySchema = z.object({ replacementSuperCategoryId: z.string().min(1).optional() });
-const assignCategorySuperCategorySchema = z.object({ superCategoryId: z.string().min(1).nullable() });
-const upsertMonthlyExchangeRateSchema = z.object({
+export const archiveSuperCategorySchema = z.object({
+  replacementSuperCategoryId: entityIdSchema.optional(),
+});
+export const assignCategorySuperCategorySchema = z.object({ superCategoryId: entityIdSchema.nullable() });
+export const upsertMonthlyExchangeRateSchema = z.object({
   month: monthSchema,
   currencyCode: currencyCodeSchema,
-  rateToArs: z.coerce.number().gt(0),
+  rateToArs: fxRateInputSchema,
 });
-const authLinkSchema = z.object({
-  accessToken: z.string().trim().min(1),
-  name: z.string().trim().min(1).optional(),
+export const authLinkSchema = z.object({
+  accessToken: z.string().trim().min(1).max(API_FIELD_LIMITS.accessToken),
+  name: nameSchema.optional(),
 });
-const joinHouseholdWithCodeSchema = z.object({
+export const joinHouseholdWithCodeSchema = z.object({
   code: z.string().trim().min(4).max(64),
 });
 // The WebAuthn response envelopes are validated by @simplewebauthn/server, so
 // Zod only has to confirm we were handed an object of the right rough shape.
-const webauthnResponseSchema = z.object({
-  id: z.string().min(1),
-  rawId: z.string().min(1),
+export const webauthnResponseSchema = z.object({
+  id: z.string().min(1).max(API_FIELD_LIMITS.webauthnCredential),
+  rawId: z.string().min(1).max(API_FIELD_LIMITS.webauthnCredential),
   type: z.literal('public-key'),
-  response: z.record(z.unknown()),
-  clientExtensionResults: z.record(z.unknown()).optional(),
-  authenticatorAttachment: z.string().optional(),
+  response: boundedWebauthnRecordSchema,
+  clientExtensionResults: boundedWebauthnRecordSchema.optional(),
+  authenticatorAttachment: z.string().max(32).optional(),
 });
-const passkeyRegistrationVerifySchema = z.object({
+export const passkeyRegistrationVerifySchema = z.object({
   response: webauthnResponseSchema,
   label: z.string().trim().min(1).max(PASSKEY_LABEL_MAX_LENGTH).optional(),
 });
-const passkeyAuthenticationVerifySchema = z.object({
+export const passkeyAuthenticationVerifySchema = z.object({
   response: webauthnResponseSchema,
 });
 
@@ -558,6 +592,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
   app.use(createApiHttpLogger(logger));
   app.use(express.json());
+  app.param('id', (_req, res, next, id) => {
+    if (!entityIdSchema.safeParse(id).success) {
+      return res.status(400).json({ error: `Resource id must be at most ${MAX_ENTITY_ID_LENGTH} characters.` });
+    }
+    return next();
+  });
 
   // Browser traffic reaches the API through the same-origin Next.js BFF. The
   // API deliberately emits no CORS headers, so browsers cannot call it from an
@@ -2218,6 +2258,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       if (error instanceof Error && error.message.startsWith('Missing exchange rate')) {
         return res.status(400).json({ error: error.message });
       }
+      if (error instanceof RangeError) {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500);
       logErrorAndDisableAutoLog(req, res, error, 'Failed to save incomes');
       return res.status(500).json({ error: 'Failed to save incomes.' });
@@ -2466,7 +2509,15 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const installmentPayload = resolveCreateExpenseAmount(parsed.data);
-    const amountArs = computeArsAmount(installmentPayload.amountOriginal, fxRateUsed);
+    let amountArs: string;
+    try {
+      amountArs = computeArsAmount(installmentPayload.amountOriginal, fxRateUsed);
+    } catch (error) {
+      if (error instanceof RangeError) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
 
     let templateId: string | null = null;
     if (parsed.data.fixed?.enabled) {
