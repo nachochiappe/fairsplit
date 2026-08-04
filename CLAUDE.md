@@ -157,10 +157,13 @@ typecheck and the suite on every PR, against a throwaway Postgres. It sets only
 CI can reach production. The web build is not duplicated there — Vercel already
 builds every PR.
 
-`DATABASE_URL` points at **production** — local development reads and writes live
-data. Only `TEST_DATABASE_URL` uses the docker Postgres, and it names the database
-`fairsplit`, not `fairsplit_test`. `pnpm db:reset-test` rebuilds it from the
-history and refuses any non-local URL.
+Local development must use the Docker Postgres: `DATABASE_URL` names the local
+`fairsplit` application database and `TEST_DATABASE_URL` names the separate
+local `fairsplit_test` database. Non-production application processes refuse
+remote database hosts at startup. `pnpm db:reset-test` rebuilds the test database
+from the migration history and refuses any non-local URL. Production receives
+its managed database URL only with `NODE_ENV=production`; migrations still reach
+it exclusively through the Supabase GitHub integration.
 
 `SuperCategory.householdId IS NULL` means "global, available to every
 household" — it is a value with meaning, not a missing value. Do not make that
