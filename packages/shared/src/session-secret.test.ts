@@ -7,7 +7,7 @@ import {
 
 describe('isSecureSessionSecret', () => {
   it('accepts an explicit sufficiently long secret', () => {
-    expect(isSecureSessionSecret('zK9eW7pL4vN2cR8mQ5xB1sD6gH3jF0aT')).toBe(true);
+    expect(isSecureSessionSecret('fairsplit-example-secure-session-secret-not-real')).toBe(true);
   });
 
   it('rejects missing, short, and padded secrets', () => {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_SECRET_CONFIGURATION_ERROR, TEST_SESSION_SECRET } from '@fairsplit/shared';
 import { verifySessionCookieToken } from './session-server';
 
-const SECURE_SESSION_SECRET = 'zK9eW7pL4vN2cR8mQ5xB1sD6gH3jF0aT';
+const SECURE_SESSION_SECRET = 'fairsplit-example-secure-session-secret-not-real';
 
 afterEach(() => {
   vi.unstubAllEnvs();
