@@ -24,7 +24,7 @@ function maybeSetCsrfCookie(request: NextRequest, response: NextResponse, logged
   return response;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const session = await verifySessionCookieToken(request.cookies.get(SESSION_COOKIE)?.value);
   const loggedIn = session !== null;

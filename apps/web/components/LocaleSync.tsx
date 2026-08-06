@@ -7,8 +7,8 @@ import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE_SECONDS } from '../lib/locale-cook
 
 /**
  * Keeps the document language and the locale cookie in step with the locale the
- * server resolved for this render. The cookie is what lets the next SSR pass
- * emit the correct `<html lang>` before any user data has been fetched.
+ * server resolved for this render. Keeping this client-side leaves the root
+ * layout static so every route can reuse it during instant navigations.
  */
 export function LocaleSync({ locale }: { locale: AppLocale }) {
   useEffect(() => {

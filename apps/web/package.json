@@ -2,6 +2,7 @@
   "name": "@fairsplit/web",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "scripts": {
     "prebuild": "pnpm --filter @fairsplit/logging build",
     "dev": "next dev -p 3000",
@@ -9,16 +10,16 @@
     "prestart": "pnpm --filter @fairsplit/logging build",
     "start": "next start -p 3000",
     "test": "vitest run",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@fairsplit/logging": "workspace:*",
     "@fairsplit/shared": "workspace:*",
     "@hookform/resolvers": "^3.10.0",
     "@simplewebauthn/browser": "^13.3.0",
-    "next": "^15.5.22",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "next": "16.3.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
     "react-hook-form": "^7.54.2",
     "zod": "^3.24.2"
   },
@@ -28,7 +29,7 @@
     "@types/react-dom": "^19.0.3",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.20.1",
-    "eslint-config-next": "^15.5.22",
+    "eslint-config-next": "16.3.0",
     "postcss": "^8.5.23",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
