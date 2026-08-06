@@ -3,7 +3,7 @@ export const CSRF_COOKIE = 'fairsplit_csrf';
 
 /**
  * Route that clears the auth cookies and sends the user to sign in. Reached
- * whenever the API rejects a session the middleware still considers valid.
+ * whenever the API rejects a session the proxy still considers valid.
  */
 export const SESSION_EXPIRED_PATH = '/session-expired';
 

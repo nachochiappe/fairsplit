@@ -77,7 +77,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         }),
     );
   } catch (error) {
-    // A revoked session is not an outage: the middleware cleared this request on
+    // A revoked session is not an outage: the proxy cleared this request on
     // signature alone, so recovery is to drop the cookie and sign in again.
     if (isSessionExpiredError(error)) {
       redirect(SESSION_EXPIRED_PATH);

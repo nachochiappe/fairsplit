@@ -4,7 +4,7 @@ import { CSRF_COOKIE, SESSION_COOKIE } from '../../lib/session';
 /**
  * Drops a session the API has already rejected.
  *
- * The middleware only checks the cookie's signature and expiry, so a session
+ * The proxy only checks the cookie's signature and expiry, so a session
  * revoked server-side (logging out revokes every session for the account, on
  * every device) still looks valid to it: the user gets routed into the app and
  * every request 401s. Clearing the cookies here is what turns that dead end

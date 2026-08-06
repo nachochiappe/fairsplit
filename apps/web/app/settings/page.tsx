@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { connection } from 'next/server';
 import { getCategories, getPasskeys, getSuperCategories, getUser, getUsers } from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
@@ -10,8 +11,9 @@ import { resolveLocale } from '../../lib/i18n';
 const SERVER_READ_CACHE = { next: { revalidate: 15 } } as const;
 
 export default async function SettingsPage() {
-  const month = getCurrentMonth();
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
+  await connection();
+  const month = getCurrentMonth();
   const session = await verifySessionCookieToken(sessionToken);
   const requestId = await getServerRequestId();
   const serverReadInit = buildServerApiInit(

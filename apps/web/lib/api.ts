@@ -229,7 +229,7 @@ let sessionExpiredRedirectStarted = false;
 
 /**
  * Browser half of 401 recovery. `/session-expired` clears the cookies the
- * middleware would otherwise keep trusting and sends the user to sign in.
+ * proxy would otherwise keep trusting and sends the user to sign in.
  */
 function startSessionExpiredRedirect(): void {
   if (typeof window === 'undefined' || sessionExpiredRedirectStarted) {

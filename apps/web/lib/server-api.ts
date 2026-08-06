@@ -34,7 +34,7 @@ export function buildServerApiInit(
 
 /**
  * Sends the user to sign in when the API rejects the session cookie, instead of
- * letting a 401 surface as a backend outage on a page the middleware already
+ * letting a 401 surface as a backend outage on a page the proxy already
  * let through. Anything else propagates untouched.
  *
  * `redirect` throws, so this must wrap the API reads directly rather than sit

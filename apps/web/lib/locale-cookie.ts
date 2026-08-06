@@ -2,9 +2,9 @@ import type { AppLocale } from './api';
 
 /**
  * Display-preference mirror of `User.locale`. Not a credential, so it is
- * readable by the client: it lets the root layout emit the right `<html lang>`
- * without an extra API round trip, and gives pages a locale to fall back on
- * when the backend is unreachable.
+ * readable by the client: it keeps the document language in sync after
+ * hydration and gives pages a locale to fall back on when the backend is
+ * unreachable.
  */
 export const LOCALE_COOKIE = 'fairsplit-locale';
 
