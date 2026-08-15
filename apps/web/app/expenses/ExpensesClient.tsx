@@ -952,14 +952,20 @@ export function ExpensesClient({
     [resetForm, sortedActiveCategories],
   );
 
-  const fetchMonthData = useCallback(
+  // Reconciliation keeps the current ledger interactive by default. Callers must
+  // opt into a blocking state only when the currently rendered rows are unusable.
+  const reconcileMonthData = useCallback(
     async (options?: {
       includeRates?: boolean;
       includeSettlement?: boolean;
       mutationToken?: number;
+      showSectionLoading?: boolean;
     }) => {
       const allSectionKeys: ExpenseSectionKey[] = ['fixed', 'oneTime', 'installment'];
-      beginSectionLoading(allSectionKeys);
+      const showSectionLoading = options?.showSectionLoading ?? false;
+      if (showSectionLoading) {
+        beginSectionLoading(allSectionKeys);
+      }
 
       try {
         const includeRates = options?.includeRates ?? false;
@@ -1077,7 +1083,9 @@ export function ExpensesClient({
         sectionCacheFetchedAtRef.current = makeSectionTimestampMap(Date.now());
         invalidateSectionChunkState();
       } finally {
-        endSectionLoading(allSectionKeys);
+        if (showSectionLoading) {
+          endSectionLoading(allSectionKeys);
+        }
       }
     },
     [
@@ -1098,7 +1106,7 @@ export function ExpensesClient({
       failureMessage: string,
     ) => {
       try {
-        await fetchMonthData({ ...options, mutationToken });
+        await reconcileMonthData({ ...options, mutationToken, showSectionLoading: false });
       } catch (refreshError) {
         if (mutationToken !== mutationTokenRef.current) {
           return;
@@ -1110,7 +1118,7 @@ export function ExpensesClient({
         );
       }
     },
-    [fetchMonthData],
+    [reconcileMonthData],
   );
 
   useEffect(() => {
@@ -1152,7 +1160,12 @@ export function ExpensesClient({
 
     let cancelled = false;
 
-    void fetchMonthData({ includeRates: false, includeSettlement: true }).catch((loadError) => {
+    void reconcileMonthData({
+      includeRates: false,
+      includeSettlement: true,
+      mutationToken: mutationTokenRef.current,
+      showSectionLoading: false,
+    }).catch((loadError) => {
       if (!cancelled) {
         materializedMonthRef.current = null;
         setError(loadError instanceof Error ? loadError.message : copy.settlementLoadFailed);
@@ -1162,7 +1175,7 @@ export function ExpensesClient({
     return () => {
       cancelled = true;
     };
-  }, [copy.settlementLoadFailed, fetchMonthData, month]);
+  }, [copy.settlementLoadFailed, month, reconcileMonthData]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
