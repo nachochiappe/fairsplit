@@ -99,6 +99,18 @@ export const expenseSchema = z
 
 export type ExpenseForm = z.infer<typeof expenseSchema>;
 
+export function resolveInstallmentTotalAmountOnEnable({
+  amount,
+  installmentEntryMode,
+  totalAmount,
+}: Pick<ExpenseForm, 'amount' | 'installmentEntryMode' | 'totalAmount'>) {
+  if (installmentEntryMode !== 'total' || totalAmount !== undefined) {
+    return totalAmount;
+  }
+
+  return typeof amount === 'number' && Number.isFinite(amount) ? amount : totalAmount;
+}
+
 interface CreateExpenseFormDefaultsOptions {
   categoryId: string;
   paidByUserId: string;
