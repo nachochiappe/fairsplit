@@ -26,6 +26,7 @@ import {
   ExpenseForm,
   getDayFromDateInput,
   getTodayDateInputValue,
+  resolveInstallmentTotalAmountOnEnable,
   supportedCurrencyCodes,
   type SupportedCurrencyCode,
 } from './expense-form';
@@ -222,6 +223,19 @@ function useComposerState(form: UseFormReturn<ExpenseForm>, exchangeRates: Excha
 
   useEffect(() => {
     if (installmentEnabled) {
+      const totalAmountOnEnable = resolveInstallmentTotalAmountOnEnable({
+        amount: form.getValues('amount'),
+        installmentEntryMode: form.getValues('installmentEntryMode'),
+        totalAmount: form.getValues('totalAmount'),
+      });
+
+      if (totalAmountOnEnable !== form.getValues('totalAmount')) {
+        form.setValue('totalAmount', totalAmountOnEnable, {
+          shouldDirty: true,
+          shouldTouch: true,
+        });
+      }
+
       return;
     }
 

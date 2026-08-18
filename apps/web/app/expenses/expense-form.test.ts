@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_INSTALLMENT_COUNT } from '@fairsplit/shared';
-import { createExpenseFormDefaults, expenseSchema } from './expense-form';
+import {
+  createExpenseFormDefaults,
+  expenseSchema,
+  resolveInstallmentTotalAmountOnEnable,
+} from './expense-form';
 
 describe('expense form defaults', () => {
   it('keeps a fresh ARS expense valid when advanced fields mount', () => {
@@ -44,5 +48,27 @@ describe('expense form defaults', () => {
         installmentEntryMode: 'perInstallment',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('resolveInstallmentTotalAmountOnEnable', () => {
+  it('preserves the entered amount when enabling total-amount installments', () => {
+    expect(
+      resolveInstallmentTotalAmountOnEnable({
+        amount: 123.45,
+        installmentEntryMode: 'total',
+        totalAmount: undefined,
+      }),
+    ).toBe(123.45);
+  });
+
+  it('does not overwrite an existing total amount', () => {
+    expect(
+      resolveInstallmentTotalAmountOnEnable({
+        amount: 123.45,
+        installmentEntryMode: 'total',
+        totalAmount: 200,
+      }),
+    ).toBe(200);
   });
 });
