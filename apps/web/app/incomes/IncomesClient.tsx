@@ -502,7 +502,6 @@ export function IncomesClient({
   return (
     <AppShell
       compact
-      containerClassName="max-w-[1480px]"
       locale={locale}
       month={month}
       rightSlot={<MonthSelector locale={locale} month={month} />}

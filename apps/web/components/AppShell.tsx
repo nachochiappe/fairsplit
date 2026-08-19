@@ -16,7 +16,6 @@ interface AppShellProps {
   subtitle: string;
   locale: AppLocale;
   rightSlot?: ReactNode;
-  containerClassName?: string;
   compact?: boolean;
   unframed?: boolean;
   children: ReactNode;
@@ -28,7 +27,6 @@ export function AppShell({
   subtitle,
   locale,
   rightSlot,
-  containerClassName,
   compact = false,
   unframed = false,
   children,
@@ -41,7 +39,6 @@ export function AppShell({
         subtitle={subtitle}
         locale={locale}
         rightSlot={rightSlot}
-        containerClassName={containerClassName}
         compact={compact}
         unframed={unframed}
       >
@@ -57,7 +54,6 @@ function AppShellContent({
   subtitle,
   locale,
   rightSlot,
-  containerClassName,
   compact = false,
   unframed = false,
   children,
@@ -67,7 +63,7 @@ function AppShellContent({
   return (
     <main
       id="main-content"
-      className={`mx-auto min-h-screen w-full px-4 pb-28 md:px-6 md:pb-10 ${compact ? 'pt-5 md:pt-7' : 'pt-8 md:pt-10'} ${containerClassName ?? 'max-w-[1400px]'}`}
+      className={`mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 md:px-6 md:pb-10 ${compact ? 'pt-5 md:pt-7' : 'pt-8 md:pt-10'}`}
     >
       <header
         className={`${compact ? 'mb-5 gap-4 rounded-3xl px-4 py-4 md:px-6' : 'mb-7 gap-5 rounded-3xl p-6 md:p-9'} flex flex-col border border-stroke/80 bg-surface shadow-sm md:flex-row md:items-center md:justify-between`}
