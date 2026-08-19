@@ -9,6 +9,7 @@ import {
   entityIdSchema,
   expenseListQuerySchema,
   passkeyAuthenticationVerifySchema,
+  updateCategorySchema,
   updateSuperCategorySchema,
   upsertMonthlyExchangeRateSchema,
 } from '../src/app';
@@ -56,12 +57,18 @@ describe('API request field limits', () => {
       updateSuperCategorySchema.safeParse({ color: 'c'.repeat(API_FIELD_LIMITS.color + 1) })
         .success,
     ).toBe(false);
-    expect(
-      updateSuperCategorySchema.safeParse({ icon: 'i'.repeat(API_FIELD_LIMITS.icon + 1) }).success,
-    ).toBe(false);
+    expect(updateSuperCategorySchema.safeParse({ icon: 'plane' }).success).toBe(true);
+    expect(updateSuperCategorySchema.safeParse({ icon: 'rocket' }).success).toBe(false);
     expect(
       updateSuperCategorySchema.safeParse({ sortOrder: API_FIELD_LIMITS.sortOrder + 1 }).success,
     ).toBe(false);
+  });
+
+  it('accepts category icon updates only from the supported vocabulary', () => {
+    expect(createCategorySchema.safeParse({ name: 'Travel', icon: 'plane' }).success).toBe(true);
+    expect(createCategorySchema.safeParse({ name: 'Travel', icon: 'rocket' }).success).toBe(false);
+    expect(updateCategorySchema.safeParse({ icon: 'gift' }).success).toBe(true);
+    expect(updateCategorySchema.safeParse({}).success).toBe(false);
   });
 
   it('bounds WebAuthn credential fields and record sizes', () => {

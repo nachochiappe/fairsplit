@@ -1,8 +1,11 @@
 'use client';
 
+import { inferCategoryIcon, type CategoryIconKey } from '@fairsplit/shared';
 import { FormEvent, ReactNode, useMemo, useState } from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
+import { CategoryIcon } from '../../components/CategoryIcon';
+import { CategoryIconPicker } from '../../components/CategoryIconPicker';
 import { ViewportModal } from '../../components/ViewportModal';
 import {
   archiveCategory,
@@ -15,7 +18,7 @@ import {
   createSuperCategory,
   getCategories,
   getSuperCategories,
-  renameCategory,
+  updateCategory,
   type Passkey,
   SuperCategory,
   unarchiveCategory,
@@ -43,11 +46,13 @@ interface SettingsClientProps {
 
 type CategoryRenameDialogState = {
   category: Category;
+  nextIcon: CategoryIconKey;
   nextName: string;
 };
 
 type SuperCategoryRenameDialogState = {
   superCategory: SuperCategory;
+  nextIcon: CategoryIconKey;
   nextName: string;
 };
 
@@ -123,8 +128,13 @@ export function SettingsClient({
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [superCategories, setSuperCategories] = useState<SuperCategory[]>(initialSuperCategories);
   const [categoryName, setCategoryName] = useState('');
+  const [categoryIconOverride, setCategoryIconOverride] = useState<CategoryIconKey | null>(null);
+  const [showCategoryIcons, setShowCategoryIcons] = useState(false);
   const [categorySuperCategoryId, setCategorySuperCategoryId] = useState<string>('unassigned');
   const [superCategoryName, setSuperCategoryName] = useState('');
+  const [superCategoryIconOverride, setSuperCategoryIconOverride] =
+    useState<CategoryIconKey | null>(null);
+  const [showSuperCategoryIcons, setShowSuperCategoryIcons] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState(currentUserName ?? '');
   const [localeDraft, setLocaleDraft] = useState<AppLocale>(currentUserLocale);
   const [resolvedCurrentUserName, setResolvedCurrentUserName] = useState(currentUserName ?? '');
@@ -154,6 +164,10 @@ export function SettingsClient({
     useState<CategoryArchiveDialogState | null>(null);
   const copy = t(resolvedLocale).settings;
   const shared = t(resolvedLocale).common;
+  const suggestedCategoryIcon = inferCategoryIcon(categoryName);
+  const selectedCategoryIcon = categoryIconOverride ?? suggestedCategoryIcon;
+  const suggestedSuperCategoryIcon = inferCategoryIcon(superCategoryName);
+  const selectedSuperCategoryIcon = superCategoryIconOverride ?? suggestedSuperCategoryIcon;
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -183,6 +197,11 @@ export function SettingsClient({
       [...activeSuperCategories].sort(
         (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
       ),
+    [activeSuperCategories],
+  );
+
+  const activeSuperCategoryById = useMemo(
+    () => new Map(activeSuperCategories.map((superCategory) => [superCategory.id, superCategory])),
     [activeSuperCategories],
   );
 
@@ -310,9 +329,12 @@ export function SettingsClient({
       setCategoryError(null);
       await createCategory({
         name: categoryName.trim(),
+        icon: selectedCategoryIcon,
         superCategoryId: categorySuperCategoryId === 'unassigned' ? null : categorySuperCategoryId,
       });
       setCategoryName('');
+      setCategoryIconOverride(null);
+      setShowCategoryIcons(false);
       setCategorySuperCategoryId('unassigned');
     } catch (categoryError) {
       setCategoryError(
@@ -338,6 +360,7 @@ export function SettingsClient({
   const onRenameCategory = async (category: Category) => {
     setCategoryRenameDialog({
       category,
+      nextIcon: category.icon,
       nextName: category.name,
     });
   };
@@ -348,7 +371,10 @@ export function SettingsClient({
     }
 
     const nextName = categoryRenameDialog.nextName.trim();
-    if (!nextName || nextName === categoryRenameDialog.category.name) {
+    const unchanged =
+      nextName === categoryRenameDialog.category.name &&
+      categoryRenameDialog.nextIcon === categoryRenameDialog.category.icon;
+    if (!nextName || unchanged) {
       setCategoryRenameDialog(null);
       return;
     }
@@ -356,7 +382,10 @@ export function SettingsClient({
     try {
       setSaving(true);
       setCategoryError(null);
-      await renameCategory(categoryRenameDialog.category.id, { name: nextName });
+      await updateCategory(categoryRenameDialog.category.id, {
+        name: nextName,
+        icon: categoryRenameDialog.nextIcon,
+      });
       setCategoryRenameDialog(null);
     } catch (renameError) {
       setCategoryError(
@@ -489,9 +518,12 @@ export function SettingsClient({
           : 10;
       await createSuperCategory({
         name: superCategoryName.trim(),
+        icon: selectedSuperCategoryIcon,
         sortOrder: nextSortOrder,
       });
       setSuperCategoryName('');
+      setSuperCategoryIconOverride(null);
+      setShowSuperCategoryIcons(false);
     } catch (superCategoryError) {
       setSuperCategoryError(
         superCategoryError instanceof Error
@@ -522,6 +554,7 @@ export function SettingsClient({
     }
     setSuperCategoryRenameDialog({
       superCategory,
+      nextIcon: superCategory.icon,
       nextName: superCategory.name,
     });
   };
@@ -532,7 +565,10 @@ export function SettingsClient({
     }
 
     const nextName = superCategoryRenameDialog.nextName.trim();
-    if (!nextName || nextName === superCategoryRenameDialog.superCategory.name) {
+    const unchanged =
+      nextName === superCategoryRenameDialog.superCategory.name &&
+      superCategoryRenameDialog.nextIcon === superCategoryRenameDialog.superCategory.icon;
+    if (!nextName || unchanged) {
       setSuperCategoryRenameDialog(null);
       return;
     }
@@ -540,7 +576,10 @@ export function SettingsClient({
     try {
       setSaving(true);
       setSuperCategoryError(null);
-      await updateSuperCategory(superCategoryRenameDialog.superCategory.id, { name: nextName });
+      await updateSuperCategory(superCategoryRenameDialog.superCategory.id, {
+        name: nextName,
+        icon: superCategoryRenameDialog.nextIcon,
+      });
       setSuperCategoryRenameDialog(null);
     } catch (renameError) {
       setSuperCategoryError(
@@ -647,101 +686,11 @@ export function SettingsClient({
     return 'bg-slate-100 text-slate-600';
   };
 
-  const renderSuperCategoryIcon = (name: string, iconClassName = 'h-5 w-5 text-ink-soft') => {
-    const normalizedName = name.toLowerCase();
-
-    if (
-      normalizedName.includes('hous') ||
-      normalizedName.includes('rent') ||
-      normalizedName.includes('home')
-    ) {
-      return (
-        <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
-          <path d="M10.75 2.9a1.2 1.2 0 0 0-1.5 0l-6 5A1.2 1.2 0 0 0 4 10h1v5.25A1.75 1.75 0 0 0 6.75 17h1.5A1.75 1.75 0 0 0 10 15.25V13h0v2.25A1.75 1.75 0 0 0 11.75 17h1.5A1.75 1.75 0 0 0 15 15.25V10h1a1.2 1.2 0 0 0 .75-2.1l-6-5Z" />
-        </svg>
-      );
-    }
-
-    if (normalizedName.includes('financ') || normalizedName.includes('money')) {
-      return (
-        <svg
-          aria-hidden="true"
-          className={iconClassName}
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.8"
-          viewBox="0 0 20 20"
-        >
-          <circle cx="10" cy="10" r="7.25" />
-          <path d="M12.5 7.5c-.5-.7-1.35-1.1-2.45-1.1-1.35 0-2.3.68-2.3 1.7 0 2.65 4.5 1.15 4.5 3.8 0 1.02-.95 1.7-2.3 1.7-1.1 0-2-.42-2.55-1.18M10 4.9v10.2" />
-        </svg>
-      );
-    }
-
-    if (
-      normalizedName.includes('essent') ||
-      normalizedName.includes('grocer') ||
-      normalizedName.includes('shop')
-    ) {
-      return (
-        <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
-          <path d="M3.5 4.5a1 1 0 1 1 0-2h1.2c.46 0 .87.31.97.77l.4 1.73h9.18a1 1 0 0 1 .97 1.24l-1.13 4.8a1 1 0 0 1-.97.76H7.14l.23 1h7.13a1 1 0 1 1 0 2H6.56a1 1 0 0 1-.97-.77L4.14 6.5H3.5Zm3 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
-        </svg>
-      );
-    }
-
-    if (
-      normalizedName.includes('mobil') ||
-      normalizedName.includes('car') ||
-      normalizedName.includes('transport')
-    ) {
-      return (
-        <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
-          <path d="M4.8 5.5A2 2 0 0 1 6.72 4h6.56a2 2 0 0 1 1.92 1.5l1.15 4.6a2.5 2.5 0 0 1 .15.9V14a1 1 0 0 1-1 1h-1a2 2 0 1 1-4 0h-1a2 2 0 1 1-4 0h-1a1 1 0 0 1-1-1v-3a2.5 2.5 0 0 1 .15-.9L4.8 5.5ZM5.9 9h8.2l-.75-3h-6.7l-.75 3Z" />
-        </svg>
-      );
-    }
-
-    if (
-      normalizedName.includes('lifest') ||
-      normalizedName.includes('fun') ||
-      normalizedName.includes('entertain')
-    ) {
-      return (
-        <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
-          <path d="m10 2.3 1.91 3.87 4.27.62-3.09 3.01.73 4.26L10 12.05l-3.82 2.01.73-4.26-3.09-3.01 4.27-.62L10 2.3Z" />
-        </svg>
-      );
-    }
-
-    return (
-      <svg aria-hidden="true" className={iconClassName} fill="currentColor" viewBox="0 0 20 20">
-        <path d="M4.75 2.5h10.5A2.25 2.25 0 0 1 17.5 4.75v10.5a2.25 2.25 0 0 1-2.25 2.25H4.75A2.25 2.25 0 0 1 2.5 15.25V4.75A2.25 2.25 0 0 1 4.75 2.5Zm1.75 3a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2h-7Zm0 4a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2h-7Z" />
-      </svg>
-    );
-  };
-
   const getCategoryIconClasses = (category: Category) => {
     if (category.archivedAt) {
       return 'bg-stroke text-ink-soft';
     }
     return getSuperCategoryToneClasses(category.superCategoryName ?? '');
-  };
-
-  const renderMappedCategoryIcon = (superCategoryName: string | null, archived: boolean) => {
-    const normalizedName = (superCategoryName ?? '').toLowerCase();
-
-    if (archived) {
-      return (
-        <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M4.75 2.5h10.5A2.25 2.25 0 0 1 17.5 4.75v10.5a2.25 2.25 0 0 1-2.25 2.25H4.75A2.25 2.25 0 0 1 2.5 15.25V4.75A2.25 2.25 0 0 1 4.75 2.5Zm1.75 3a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2h-7Zm0 4a1 1 0 1 0 0 2h7a1 1 0 1 0 0-2h-7Z" />
-        </svg>
-      );
-    }
-
-    return renderSuperCategoryIcon(normalizedName, 'h-5 w-5 text-current');
   };
 
   return (
@@ -785,6 +734,28 @@ export function SettingsClient({
                 }
                 value={categoryRenameDialog.nextName}
               />
+              <div className="mt-4">
+                <CategoryIconPicker
+                  iconLabels={copy.iconNames}
+                  label={copy.iconLabel}
+                  onChange={(nextIcon) =>
+                    setCategoryRenameDialog((current) =>
+                      current ? { ...current, nextIcon } : current,
+                    )
+                  }
+                  onUseSuggestion={() =>
+                    setCategoryRenameDialog((current) =>
+                      current
+                        ? { ...current, nextIcon: inferCategoryIcon(current.nextName) }
+                        : current,
+                    )
+                  }
+                  suggestedIcon={inferCategoryIcon(categoryRenameDialog.nextName)}
+                  suggestionLabel={copy.suggestedIcon}
+                  useSuggestionLabel={copy.useSuggestedIcon}
+                  value={categoryRenameDialog.nextIcon}
+                />
+              </div>
               <DialogActions
                 busy={saving}
                 cancelLabel={shared.cancel}
@@ -829,6 +800,28 @@ export function SettingsClient({
                 }
                 value={superCategoryRenameDialog.nextName}
               />
+              <div className="mt-4">
+                <CategoryIconPicker
+                  iconLabels={copy.iconNames}
+                  label={copy.iconLabel}
+                  onChange={(nextIcon) =>
+                    setSuperCategoryRenameDialog((current) =>
+                      current ? { ...current, nextIcon } : current,
+                    )
+                  }
+                  onUseSuggestion={() =>
+                    setSuperCategoryRenameDialog((current) =>
+                      current
+                        ? { ...current, nextIcon: inferCategoryIcon(current.nextName) }
+                        : current,
+                    )
+                  }
+                  suggestedIcon={inferCategoryIcon(superCategoryRenameDialog.nextName)}
+                  suggestionLabel={copy.suggestedIcon}
+                  useSuggestionLabel={copy.useSuggestedIcon}
+                  value={superCategoryRenameDialog.nextIcon}
+                />
+              </div>
               <DialogActions
                 busy={saving}
                 cancelLabel={shared.cancel}
@@ -1146,12 +1139,22 @@ export function SettingsClient({
           </div>
 
           <form
-            className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-2"
+            className="mt-4 grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               void onCreateSuperCategory();
             }}
           >
+            <button
+              aria-expanded={showSuperCategoryIcons}
+              aria-label={copy.editIconAria(superCategoryName)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-300 bg-white text-ink-muted shadow-sm hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+              onClick={() => setShowSuperCategoryIcons((current) => !current)}
+              title={copy.editIconAria(superCategoryName)}
+              type="button"
+            >
+              <CategoryIcon icon={selectedSuperCategoryIcon} />
+            </button>
             <label className="sr-only" htmlFor="new-super-category">
               {copy.newSuperCategoryLabel}
             </label>
@@ -1182,6 +1185,20 @@ export function SettingsClient({
               </svg>
               <span className="hidden sm:inline xl:hidden 2xl:inline">{shared.add}</span>
             </button>
+            {showSuperCategoryIcons ? (
+              <div className="col-span-full rounded-xl border border-stroke bg-white p-3 shadow-sm">
+                <CategoryIconPicker
+                  iconLabels={copy.iconNames}
+                  label={copy.iconLabel}
+                  onChange={setSuperCategoryIconOverride}
+                  onUseSuggestion={() => setSuperCategoryIconOverride(null)}
+                  suggestedIcon={suggestedSuperCategoryIcon}
+                  suggestionLabel={copy.suggestedIcon}
+                  useSuggestionLabel={copy.useSuggestedIcon}
+                  value={selectedSuperCategoryIcon}
+                />
+              </div>
+            ) : null}
           </form>
 
           {superCategoryError ? (
@@ -1203,7 +1220,7 @@ export function SettingsClient({
                   aria-hidden="true"
                   className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${getSuperCategoryToneClasses(superCategory.name)}`}
                 >
-                  {renderSuperCategoryIcon(superCategory.name, 'h-5 w-5 text-current')}
+                  <CategoryIcon icon={superCategory.icon} />
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-ink-strong sm:text-base">
@@ -1318,7 +1335,17 @@ export function SettingsClient({
                 void onCreateCategory();
               }}
             >
-              <div>
+              <div className="flex min-w-0 gap-2">
+                <button
+                  aria-expanded={showCategoryIcons}
+                  aria-label={copy.editIconAria(categoryName)}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-300 bg-white text-ink-muted shadow-sm hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  onClick={() => setShowCategoryIcons((current) => !current)}
+                  title={copy.editIconAria(categoryName)}
+                  type="button"
+                >
+                  <CategoryIcon icon={selectedCategoryIcon} />
+                </button>
                 <label className="sr-only" htmlFor="new-category-name">
                   {copy.categoryNameLabel}
                 </label>
@@ -1355,6 +1382,20 @@ export function SettingsClient({
               >
                 {copy.addLabel}
               </button>
+              {showCategoryIcons ? (
+                <div className="rounded-xl border border-stroke bg-surface-muted/60 p-3 md:col-span-full">
+                  <CategoryIconPicker
+                    iconLabels={copy.iconNames}
+                    label={copy.iconLabel}
+                    onChange={setCategoryIconOverride}
+                    onUseSuggestion={() => setCategoryIconOverride(null)}
+                    suggestedIcon={suggestedCategoryIcon}
+                    suggestionLabel={copy.suggestedIcon}
+                    useSuggestionLabel={copy.useSuggestedIcon}
+                    value={selectedCategoryIcon}
+                  />
+                </div>
+              ) : null}
             </form>
 
             {categoryError ? (
@@ -1390,10 +1431,7 @@ export function SettingsClient({
                       aria-hidden="true"
                       className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${getCategoryIconClasses(category)}`}
                     >
-                      {renderMappedCategoryIcon(
-                        category.superCategoryName,
-                        Boolean(category.archivedAt),
-                      )}
+                      <CategoryIcon icon={category.icon} />
                     </span>
 
                     <div className="min-w-0 flex-1">
@@ -1439,10 +1477,15 @@ export function SettingsClient({
                         aria-hidden="true"
                         className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2"
                       >
-                        {renderSuperCategoryIcon(
-                          category.superCategoryName ?? '',
-                          'h-4 w-4 text-ink-soft',
-                        )}
+                        <CategoryIcon
+                          className="h-4 w-4 text-ink-soft"
+                          icon={
+                            category.superCategoryId
+                              ? (activeSuperCategoryById.get(category.superCategoryId)?.icon ??
+                                'dots')
+                              : 'dots'
+                          }
+                        />
                       </span>
                       <label className="sr-only" htmlFor={`group-${category.id}`}>
                         {copy.groupForCategory(category.name)}

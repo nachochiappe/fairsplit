@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import type { CategoryIconKey } from '@fairsplit/shared';
 import { redirect } from 'next/navigation';
 import { DashboardClient } from './DashboardClient';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
@@ -28,6 +29,7 @@ interface ExpenseCategorySlice {
   totalArs: number;
   superCategoryName: string | null;
   superCategoryColor: string | null;
+  superCategoryIcon: CategoryIconKey | null;
 }
 
 const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
@@ -168,6 +170,7 @@ function buildExpenseCategorySlices(byCategory: ExpenseCategoryTotal[]): Expense
       totalArs: Number(entry.totalArs),
       superCategoryName: entry.superCategoryName,
       superCategoryColor: entry.superCategoryColor,
+      superCategoryIcon: entry.superCategoryIcon,
     }))
     .filter((entry) => entry.totalArs > 0)
     .sort((a, b) => b.totalArs - a.totalArs);
