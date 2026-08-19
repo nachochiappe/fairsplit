@@ -1,6 +1,8 @@
 'use client';
 
+import type { CategoryIconKey } from '@fairsplit/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { formatMoney, formatPercent } from '../../lib/currency';
 import {
   materializeExpenseMonth,
@@ -32,6 +34,7 @@ interface DashboardClientProps {
     totalArs: number;
     superCategoryName: string | null;
     superCategoryColor: string | null;
+    superCategoryIcon: CategoryIconKey | null;
   }>;
   warning?: string | null;
   locale: AppLocale;
@@ -129,9 +132,7 @@ function DashboardClientContent({
                 <h1 className="text-2xl font-bold tracking-tight text-ink-strong md:text-3xl">
                   {copy.title}
                 </h1>
-                <p className="mt-1 max-w-2xl text-sm text-ink-muted md:mt-0">
-                  {copy.subtitle}
-                </p>
+                <p className="mt-1 max-w-2xl text-sm text-ink-muted md:mt-0">{copy.subtitle}</p>
               </div>
             </div>
           </div>
@@ -167,9 +168,18 @@ function DashboardClientContent({
           </p>
         ) : null}
         <section className="grid gap-5 md:grid-cols-3">
-          <MetricCard label={copy.totalIncome} value={formatMoney(settlement.totalIncome, locale)} />
-          <MetricCard label={copy.totalExpenses} value={formatMoney(settlement.totalExpenses, locale)} />
-          <MetricCard label={copy.expenseRatio} value={formatPercent(settlement.expenseRatio, locale)} />
+          <MetricCard
+            label={copy.totalIncome}
+            value={formatMoney(settlement.totalIncome, locale)}
+          />
+          <MetricCard
+            label={copy.totalExpenses}
+            value={formatMoney(settlement.totalExpenses, locale)}
+          />
+          <MetricCard
+            label={copy.expenseRatio}
+            value={formatPercent(settlement.expenseRatio, locale)}
+          />
         </section>
 
         <section className="overflow-hidden rounded-2xl border border-stroke/80 bg-surface shadow-sm">
@@ -177,9 +187,7 @@ function DashboardClientContent({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-xl font-semibold text-ink-strong">{copy.expensesByCategory}</h2>
-                <p className="mt-1 text-sm text-ink-muted">
-                  {copy.categoryDistribution}
-                </p>
+                <p className="mt-1 text-sm text-ink-muted">{copy.categoryDistribution}</p>
               </div>
               <button
                 aria-controls="expense-category-chart-content"
@@ -188,7 +196,9 @@ function DashboardClientContent({
                 type="button"
                 onClick={() => setIsCategoryChartExpanded((current) => !current)}
               >
-                <span className="truncate">{isCategoryChartExpanded ? copy.hideChart : copy.showChart}</span>
+                <span className="truncate">
+                  {isCategoryChartExpanded ? copy.hideChart : copy.showChart}
+                </span>
               </button>
             </div>
           </div>
@@ -230,9 +240,7 @@ function DashboardClientContent({
                       {formatMoney(absoluteDifference, locale)}
                     </p>
                     <p className="mt-1 text-sm text-ink-muted">
-                      {isPositiveDifference
-                        ? copy.coveredMore
-                        : copy.needsToSendThisMonth}
+                      {isPositiveDifference ? copy.coveredMore : copy.needsToSendThisMonth}
                     </p>
                   </div>
                   <dl className="space-y-3 border-t border-stroke/60 pt-3 text-sm">
@@ -378,6 +386,7 @@ function CategoryPieChart({
     totalArs: number;
     superCategoryName: string | null;
     superCategoryColor: string | null;
+    superCategoryIcon: CategoryIconKey | null;
   }>;
 }) {
   const copy = t(locale).dashboard;
@@ -390,7 +399,12 @@ function CategoryPieChart({
     groups[0]?.name ?? null,
   );
   const groupedTotals = useMemo(
-    () => groups.map((group) => ({ categoryName: group.name, totalArs: group.totalArs, color: group.color })),
+    () =>
+      groups.map((group) => ({
+        categoryName: group.name,
+        totalArs: group.totalArs,
+        color: group.color,
+      })),
     [groups],
   );
   const chartSize = 320;
@@ -457,7 +471,9 @@ function CategoryPieChart({
                   <p className="font-semibold text-ink-strong">
                     {index + 1}. {segment.categoryName}
                   </p>
-                  <p className="text-ink-muted">{copy.amountSpent(formatMoney(segment.totalArs, locale))}</p>
+                  <p className="text-ink-muted">
+                    {copy.amountSpent(formatMoney(segment.totalArs, locale))}
+                  </p>
                 </div>
                 <span className="shrink-0 font-semibold tabular-nums text-ink-strong">
                   {segment.percentage.toFixed(1)}%
@@ -533,14 +549,22 @@ function CategoryPieChart({
                 <span
                   aria-hidden="true"
                   className="flex h-11 w-11 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: `${group.color}22` }}
+                  style={{ backgroundColor: `${group.color}22`, color: group.color }}
                 >
-                  <SuperCategoryIcon color={group.color} name={group.name} />
+                  <CategoryIcon className="h-5 w-5" icon={group.icon} />
                 </span>
                 <div>
-                  <p className="text-xl font-semibold leading-tight text-ink-strong">{group.name}</p>
+                  <p className="text-xl font-semibold leading-tight text-ink-strong">
+                    {group.name}
+                  </p>
                   <p className="mt-1 text-sm text-ink-muted">
-                    {formatCountLabel(locale, group.categories.length, copy.categorySingular, copy.categoryPlural)}{' \u2022 '}
+                    {formatCountLabel(
+                      locale,
+                      group.categories.length,
+                      copy.categorySingular,
+                      copy.categoryPlural,
+                    )}
+                    {' \u2022 '}
                     {formatMoney(group.totalArs, locale)}
                   </p>
                 </div>
@@ -573,9 +597,7 @@ function CategoryPieChart({
                             className="h-2.5 w-2.5 rounded-full"
                             style={{ backgroundColor: group.color }}
                           />
-                          <span className="font-medium text-ink-base">
-                            {category.categoryName}
-                          </span>
+                          <span className="font-medium text-ink-base">{category.categoryName}</span>
                         </div>
                         <span className="font-semibold tabular-nums text-ink-strong">
                           {formatMoney(category.totalArs, locale)}
@@ -617,11 +639,13 @@ function buildSuperCategoryGroups(
     totalArs: number;
     superCategoryName: string | null;
     superCategoryColor: string | null;
+    superCategoryIcon: CategoryIconKey | null;
   }>,
   unassignedLabel: string,
 ): Array<{
   name: string;
   color: string;
+  icon: CategoryIconKey;
   totalArs: number;
   categories: Array<{ categoryName: string; totalArs: number }>;
 }> {
@@ -630,6 +654,7 @@ function buildSuperCategoryGroups(
     {
       name: string;
       color: string;
+      icon: CategoryIconKey;
       totalArs: number;
       categories: Array<{ categoryName: string; totalArs: number }>;
     }
@@ -640,6 +665,7 @@ function buildSuperCategoryGroups(
     const existing = grouped.get(superCategory) ?? {
       name: superCategory,
       color: getSuperCategoryAccentColor(superCategory, slice.superCategoryColor),
+      icon: slice.superCategoryIcon ?? 'dots',
       totalArs: 0,
       categories: [],
     };
@@ -662,74 +688,4 @@ function formatCompactMoney(value: number, locale: AppLocale): string {
     notation: 'compact',
     maximumFractionDigits: 1,
   }).format(value)}`;
-}
-
-function SuperCategoryIcon({ name, color }: { name: string; color: string }) {
-  const commonProps = {
-    fill: 'none',
-    stroke: color,
-    strokeWidth: 1.8,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  };
-
-  if (name === 'Housing') {
-    return (
-      <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <path {...commonProps} d="M3 9.5l7-5.5 7 5.5" />
-        <path {...commonProps} d="M5.5 8.5V16h9V8.5" />
-        <path {...commonProps} d="M8.5 16v-3.5h3V16" />
-      </svg>
-    );
-  }
-  if (name === 'Lifestyle') {
-    return (
-      <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <path
-          {...commonProps}
-          d="M10 16.5s-4.8-2.7-6.2-6.4c-.8-2 1-4.1 3.1-4.1 1.3 0 2.5.7 3.1 1.8.6-1.1 1.8-1.8 3.1-1.8 2.1 0 3.9 2.1 3.1 4.1-1.4 3.7-6.2 6.4-6.2 6.4z"
-        />
-      </svg>
-    );
-  }
-  if (name === 'Essentials') {
-    return (
-      <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <path {...commonProps} d="M3 5.5h2l1.3 6.2a1 1 0 001 .8h6.8a1 1 0 001-.7L17 7H6.2" />
-        <circle cx="8.2" cy="14.8" r="1" fill={color} />
-        <circle cx="13.6" cy="14.8" r="1" fill={color} />
-      </svg>
-    );
-  }
-  if (name === 'Mobility') {
-    return (
-      <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <path
-          {...commonProps}
-          d="M4 11.5h12l-1.2-4.2a1.2 1.2 0 00-1.1-.8H6.3a1.2 1.2 0 00-1.1.8L4 11.5z"
-        />
-        <path {...commonProps} d="M4 11.5V14m12-2.5V14" />
-        <circle cx="6.8" cy="14.3" r="1.3" fill={color} />
-        <circle cx="13.2" cy="14.3" r="1.3" fill={color} />
-      </svg>
-    );
-  }
-  if (name === 'Finance') {
-    return (
-      <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-        <rect {...commonProps} x="3.5" y="6" width="13" height="8" rx="1.5" />
-        <circle {...commonProps} cx="10" cy="10" r="1.8" />
-        <path {...commonProps} d="M6 10h.01M14 10h.01" />
-      </svg>
-    );
-  }
-  return (
-    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20">
-      <circle cx="10" cy="10" fill={color} r="3.5" />
-      <path
-        {...commonProps}
-        d="M10 3.5v2.2M10 14.3v2.2M3.5 10h2.2M14.3 10h2.2M5.3 5.3l1.6 1.6M13.1 13.1l1.6 1.6M14.7 5.3l-1.6 1.6M6.9 13.1l-1.6 1.6"
-      />
-    </svg>
-  );
 }

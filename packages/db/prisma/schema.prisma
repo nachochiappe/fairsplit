@@ -113,6 +113,7 @@ model MonthlyIncome {
 model Category {
   id               String            @id @default(cuid())
   name             String
+  icon             String            @default("receipt")
   householdId      String
   household        Household         @relation(fields: [householdId], references: [id], onDelete: SetNull)
   superCategoryId  String?
@@ -136,7 +137,7 @@ model SuperCategory {
   householdId String?
   household   Household? @relation(fields: [householdId], references: [id], onDelete: SetNull)
   color       String     @default("#64748b")
-  icon        String?
+  icon        String     @default("dots")
   sortOrder   Int        @default(0)
   isSystem    Boolean    @default(false)
   createdAt   DateTime   @default(now())

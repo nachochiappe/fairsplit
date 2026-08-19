@@ -1,4 +1,5 @@
 import { getCsrfCookieValueFromBrowser, SESSION_EXPIRED_PATH } from './session';
+import type { CategoryIconKey } from '@fairsplit/shared';
 
 export interface User {
   id: string;
@@ -94,6 +95,7 @@ export interface ExpenseMaterializationResponse {
 export interface Category {
   id: string;
   name: string;
+  icon: CategoryIconKey;
   archivedAt: string | null;
   expenseCount: number;
   fixedExpenseCount: number;
@@ -107,7 +109,7 @@ export interface SuperCategory {
   name: string;
   slug: string;
   color: string;
-  icon: string | null;
+  icon: CategoryIconKey;
   sortOrder: number;
   isSystem: boolean;
   archivedAt: string | null;
@@ -138,6 +140,7 @@ export interface ExpenseCategoryTotal {
   superCategoryId: string | null;
   superCategoryName: string | null;
   superCategoryColor: string | null;
+  superCategoryIcon: CategoryIconKey | null;
   totalArs: string;
 }
 
@@ -499,7 +502,11 @@ export async function getCategories(init?: NextRequestInit): Promise<Category[]>
   return parseResponse<Category[]>(response);
 }
 
-export async function createCategory(payload: { name: string; superCategoryId?: string | null }): Promise<Category> {
+export async function createCategory(payload: {
+  name: string;
+  icon: CategoryIconKey;
+  superCategoryId?: string | null;
+}): Promise<Category> {
   const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/categories` : '/api/categories';
   const response = await fetchFromApi(endpoint, {
     method: 'POST',
@@ -510,7 +517,10 @@ export async function createCategory(payload: { name: string; superCategoryId?: 
   return parseResponse<Category>(response);
 }
 
-export async function renameCategory(id: string, payload: { name: string }): Promise<Category> {
+export async function updateCategory(
+  id: string,
+  payload: Partial<{ name: string; icon: CategoryIconKey }>,
+): Promise<Category> {
   const endpoint =
     typeof window === 'undefined' ? `${API_BASE_URL}/categories/${id}` : `/api/categories/${encodeURIComponent(id)}`;
   const response = await fetchFromApi(endpoint, {
@@ -579,7 +589,7 @@ export async function getSuperCategories(init?: NextRequestInit): Promise<SuperC
 export async function createSuperCategory(payload: {
   name: string;
   color?: string;
-  icon?: string;
+  icon?: CategoryIconKey;
   sortOrder?: number;
 }): Promise<SuperCategory> {
   const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/super-categories` : '/api/super-categories';
@@ -594,7 +604,7 @@ export async function createSuperCategory(payload: {
 
 export async function updateSuperCategory(
   id: string,
-  payload: Partial<{ name: string; color: string; icon: string; sortOrder: number }>,
+  payload: Partial<{ name: string; color: string; icon: CategoryIconKey; sortOrder: number }>,
 ): Promise<SuperCategory> {
   const endpoint =
     typeof window === 'undefined'

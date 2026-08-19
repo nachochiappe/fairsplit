@@ -128,6 +128,7 @@ describe('GET /api/expense-totals', () => {
         totalArs: '750.50',
         superCategoryId,
         superCategoryColor: '#123456',
+        superCategoryIcon: 'dots',
       }),
     );
     expect(response.body.byCategory[1]).toEqual(
@@ -136,6 +137,7 @@ describe('GET /api/expense-totals', () => {
         totalArs: '80.00',
         superCategoryId: null,
         superCategoryColor: null,
+        superCategoryIcon: null,
       }),
     );
 

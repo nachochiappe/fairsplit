@@ -8,13 +8,16 @@ import type { Logger } from '@fairsplit/logging';
 import {
   applyScopeSchema,
   calculateSettlement,
+  CATEGORY_ICON_KEYS,
   currencyCodeSchema,
   createExpenseSchema,
   fxRateInputSchema,
+  inferCategoryIcon,
   MAX_DESCRIPTION_LENGTH,
   MAX_ENTITY_ID_LENGTH,
   monthSchema,
   replaceIncomeEntriesSchema,
+  resolveCategoryIcon,
   updateExpenseSchema,
 } from '@fairsplit/shared';
 import { z } from 'zod';
@@ -71,7 +74,6 @@ import {
 export const API_FIELD_LIMITS = {
   accessToken: 8_192,
   color: 32,
-  icon: 64,
   name: 120,
   search: MAX_DESCRIPTION_LENGTH,
   sortOrder: 1_000_000,
@@ -81,6 +83,7 @@ export const API_FIELD_LIMITS = {
 
 export const entityIdSchema = z.string().min(1).max(MAX_ENTITY_ID_LENGTH);
 const nameSchema = z.string().trim().min(1).max(API_FIELD_LIMITS.name);
+const categoryIconSchema = z.enum(CATEGORY_ICON_KEYS);
 const boundedWebauthnRecordSchema = z
   .record(z.unknown())
   .refine((value) => Object.keys(value).length <= API_FIELD_LIMITS.webauthnRecordKeys, {
@@ -148,14 +151,22 @@ export const updateUserSchema = z.object({
 export const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
 export const createCategorySchema = z.object({
   name: nameSchema,
+  icon: categoryIconSchema.optional(),
   superCategoryId: entityIdSchema.nullable().optional(),
 });
-export const renameCategorySchema = z.object({ name: nameSchema });
+export const updateCategorySchema = z
+  .object({
+    name: nameSchema.optional(),
+    icon: categoryIconSchema.optional(),
+  })
+  .refine((value) => value.name !== undefined || value.icon !== undefined, {
+    message: 'At least one category field is required.',
+  });
 export const archiveCategorySchema = z.object({ replacementCategoryId: entityIdSchema.optional() });
 export const createSuperCategorySchema = z.object({
   name: nameSchema,
   color: z.string().trim().min(1).max(API_FIELD_LIMITS.color).optional(),
-  icon: z.string().trim().min(1).max(API_FIELD_LIMITS.icon).optional(),
+  icon: categoryIconSchema.optional(),
   sortOrder: z.coerce
     .number()
     .int()
@@ -166,7 +177,7 @@ export const createSuperCategorySchema = z.object({
 export const updateSuperCategorySchema = z.object({
   name: nameSchema.optional(),
   color: z.string().trim().min(1).max(API_FIELD_LIMITS.color).optional(),
-  icon: z.string().trim().min(1).max(API_FIELD_LIMITS.icon).optional(),
+  icon: categoryIconSchema.optional(),
   sortOrder: z.coerce
     .number()
     .int()
@@ -274,6 +285,7 @@ function serializeCategory(
   category: {
     id: string;
     name: string;
+    icon: string;
     archivedAt: Date | null;
     superCategoryId: string | null;
     superCategory: { id: string; name: string; color: string } | null;
@@ -283,6 +295,7 @@ function serializeCategory(
   return {
     id: category.id,
     name: category.name,
+    icon: resolveCategoryIcon(category.icon, category.name),
     archivedAt: category.archivedAt?.toISOString() ?? null,
     expenseCount: category._count.expenses,
     fixedExpenseCount: category._count.expenseTemplates,
@@ -298,7 +311,7 @@ function serializeSuperCategory(
     name: string;
     slug: string;
     color: string;
-    icon: string | null;
+    icon: string;
     sortOrder: number;
     isSystem: boolean;
     archivedAt: Date | null;
@@ -310,7 +323,7 @@ function serializeSuperCategory(
     name: superCategory.name,
     slug: superCategory.slug,
     color: superCategory.color,
-    icon: superCategory.icon,
+    icon: resolveCategoryIcon(superCategory.icon, superCategory.name),
     sortOrder: superCategory.sortOrder,
     isSystem: superCategory.isSystem,
     archivedAt: superCategory.archivedAt?.toISOString() ?? null,
@@ -1656,6 +1669,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       const created = await prisma.category.create({
         data: {
           name: parsed.data.name,
+          icon: parsed.data.icon ?? inferCategoryIcon(parsed.data.name),
           householdId: auth.householdId,
           superCategoryId: parsed.data.superCategoryId ?? null,
         },
@@ -1689,7 +1703,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return;
     }
 
-    const parsed = renameCategorySchema.safeParse(req.body);
+    const parsed = updateCategorySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.flatten() });
     }
@@ -1705,7 +1719,10 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     try {
       const updated = await prisma.category.update({
         where: { id: category.id },
-        data: { name: parsed.data.name },
+        data: {
+          ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+          ...(parsed.data.icon !== undefined ? { icon: parsed.data.icon } : {}),
+        },
         include: {
           superCategory: {
             select: { id: true, name: true, color: true },
@@ -1728,8 +1745,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
         return res.status(409).json({ error: 'Category name already exists.' });
       }
       res.status(500);
-      logErrorAndDisableAutoLog(req, res, error, 'Failed to rename category');
-      return res.status(500).json({ error: 'Failed to rename category.' });
+      logErrorAndDisableAutoLog(req, res, error, 'Failed to update category');
+      return res.status(500).json({ error: 'Failed to update category.' });
     }
   });
 
@@ -1894,7 +1911,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
           slug,
           householdId: auth.householdId,
           color: parsed.data.color ?? '#64748b',
-          icon: parsed.data.icon ?? null,
+          icon: parsed.data.icon ?? inferCategoryIcon(parsed.data.name),
           sortOrder: parsed.data.sortOrder ?? 1000,
           isSystem: false,
         },
@@ -2721,7 +2738,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
           select: {
             id: true,
             name: true,
-            superCategory: { select: { id: true, name: true, color: true } },
+            superCategory: { select: { id: true, name: true, color: true, icon: true } },
           },
         })
       : [];
@@ -2739,6 +2756,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
           superCategoryId: category?.superCategory?.id ?? null,
           superCategoryName: category?.superCategory?.name ?? null,
           superCategoryColor: category?.superCategory?.color ?? null,
+          superCategoryIcon: category?.superCategory
+            ? resolveCategoryIcon(category.superCategory.icon, category.superCategory.name)
+            : null,
           totalArs: toMoneyString(groupSum),
         };
       })

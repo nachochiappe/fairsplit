@@ -200,6 +200,24 @@ describe('Super categories API', () => {
     expect(persisted.name).toBe('Renamed Custom Group');
   });
 
+  it('updates icons for household-owned categories and super categories', async () => {
+    const categoryResponse = await request(app)
+      .put(`/api/categories/${categoryId}`)
+      .set('x-fairsplit-session', sessionToken)
+      .send({ icon: 'gift' });
+
+    expect(categoryResponse.status).toBe(200);
+    expect(categoryResponse.body.icon).toBe('gift');
+
+    const superCategoryResponse = await request(app)
+      .put(`/api/super-categories/${customSuperCategoryBId}`)
+      .set('x-fairsplit-session', sessionToken)
+      .send({ icon: 'plane' });
+
+    expect(superCategoryResponse.status).toBe(200);
+    expect(superCategoryResponse.body.icon).toBe('plane');
+  });
+
   it('archives custom super categories and reassigns categories', async () => {
     await prisma.category.update({
       where: { id: categoryId },
