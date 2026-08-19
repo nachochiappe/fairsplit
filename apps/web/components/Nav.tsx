@@ -113,6 +113,7 @@ export function Nav({ month, locale }: { month: string; locale: AppLocale }) {
               } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2`}
               key={link.href}
               href={href}
+              prefetch={true}
               aria-current={isCurrent ? 'page' : undefined}
             >
               {link.icon}
@@ -135,6 +136,7 @@ export function Nav({ month, locale }: { month: string; locale: AppLocale }) {
               <Link
                 key={link.href}
                 href={href}
+                prefetch={true}
                 aria-current={isCurrent ? 'page' : undefined}
                 className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-[20px] px-2 py-2 text-center transition ${
                   isCurrent

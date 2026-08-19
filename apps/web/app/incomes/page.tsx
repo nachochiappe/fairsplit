@@ -1,7 +1,15 @@
 import { cookies } from 'next/headers';
+import { cacheLife } from 'next/cache';
+import { Suspense } from 'react';
 import { IncomesClient } from './IncomesClient';
+import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
 import { getExchangeRates, getIncomes, getUsers } from '../../lib/api';
-import { buildServerApiInit, getServerRequestId, withServerApiLogging, withSessionRecovery } from '../../lib/server-api';
+import {
+  buildServerApiInit,
+  getServerRequestId,
+  withServerApiLogging,
+  withSessionRecovery,
+} from '../../lib/server-api';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
 import { resolveLocaleForUser } from '../../lib/i18n';
@@ -10,17 +18,44 @@ interface IncomesPageProps {
   searchParams?: Promise<{ month?: string }>;
 }
 
-const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
+const SERVER_READ_INIT = { cache: 'no-store' } as const;
 
-export default async function IncomesPage({ searchParams }: IncomesPageProps) {
+export const instant = true;
+
+export default function IncomesPage(props: IncomesPageProps) {
+  return (
+    <Suspense fallback={<AppRouteSkeleton variant="incomes" />}>
+      <IncomesPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function IncomesPageContent({ searchParams }: IncomesPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
+  const { exchangeRates, incomes, locale, users } = await getIncomesPageData(month);
+
+  return (
+    <IncomesClient
+      month={month}
+      initialUsers={users}
+      initialIncomes={incomes}
+      initialExchangeRates={exchangeRates}
+      locale={locale}
+    />
+  );
+}
+
+async function getIncomesPageData(month: string) {
+  'use cache: private';
+  cacheLife({ stale: 30, revalidate: 30, expire: 60 });
+
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionCookieToken(sessionToken);
   const requestId = await getServerRequestId();
   const serverReadInit = buildServerApiInit(
     requestId,
-    SERVER_READ_CACHE,
+    SERVER_READ_INIT,
     sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
   );
 
@@ -34,13 +69,10 @@ export default async function IncomesPage({ searchParams }: IncomesPageProps) {
     ),
   );
 
-  return (
-    <IncomesClient
-      month={month}
-      initialUsers={users}
-      initialIncomes={incomes}
-      initialExchangeRates={exchangeRates}
-      locale={resolveLocaleForUser(users, session?.userId ?? null)}
-    />
-  );
+  return {
+    exchangeRates,
+    incomes,
+    locale: resolveLocaleForUser(users, session?.userId ?? null),
+    users,
+  };
 }
