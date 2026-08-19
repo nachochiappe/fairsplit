@@ -1,5 +1,8 @@
 import { cookies } from 'next/headers';
+import { cacheLife } from 'next/cache';
+import { Suspense } from 'react';
 import { ExpensesClient } from './ExpensesClient';
+import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
 import {
   Expense,
   getCategories,
@@ -23,9 +26,11 @@ interface ExpensesPageProps {
   searchParams?: Promise<{ month?: string }>;
 }
 
-const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
+const SERVER_READ_INIT = { cache: 'no-store' } as const;
 const INITIAL_EXPENSES_PAGE_SIZE = getSectionFetchBatchSize(DEFAULT_MAX_ROWS_PER_SECTION);
 const NO_INCOME_SETTLEMENT_ERROR = 'Cannot calculate settlement when total income is non-positive';
+
+export const instant = true;
 
 function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   const dedupedById = new Map<string, Expense>();
@@ -35,91 +40,29 @@ function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
   return Array.from(dedupedById.values());
 }
 
-export default async function ExpensesPage({ searchParams }: ExpensesPageProps) {
+export default function ExpensesPage(props: ExpensesPageProps) {
+  return (
+    <Suspense fallback={<AppRouteSkeleton variant="expenses" />}>
+      <ExpensesPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function ExpensesPageContent({ searchParams }: ExpensesPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
-  const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
-  const session = await verifySessionCookieToken(sessionToken);
-  const requestId = await getServerRequestId();
-  const serverReadInit = buildServerApiInit(
-    requestId,
-    SERVER_READ_CACHE,
-    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
-  );
-  const [users, fixedData, categories, exchangeRates] = await withSessionRecovery(() =>
-    withServerApiLogging(requestId, { month, route: '/expenses', step: 'bootstrap' }, async () =>
-      Promise.all([
-        getUsers(serverReadInit),
-        getExpenses(
-          month,
-          {
-            type: 'fixed',
-            sortBy: 'date',
-            sortDir: 'desc',
-            limit: INITIAL_EXPENSES_PAGE_SIZE,
-            includeCount: true,
-          },
-          serverReadInit,
-        ),
-        getCategories(serverReadInit),
-        getExchangeRates(month, serverReadInit),
-      ]),
-    ),
-  );
-  const sessionUserId = session?.userId ?? null;
-  const currentUserId =
-    sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
-  const locale = resolveLocaleForUser(users, sessionUserId);
-  const [oneTimeData, installmentData, totalsData, settlement] = await withSessionRecovery(() =>
-    withServerApiLogging(requestId, { month, route: '/expenses', step: 'month-totals' }, async () =>
-      Promise.all([
-        getExpenses(
-          month,
-          {
-            type: 'oneTime',
-            sortBy: 'date',
-            sortDir: 'desc',
-            limit: INITIAL_EXPENSES_PAGE_SIZE,
-            includeCount: false,
-          },
-          serverReadInit,
-        ),
-        getExpenses(
-          month,
-          {
-            type: 'installment',
-            sortBy: 'date',
-            sortDir: 'desc',
-            limit: INITIAL_EXPENSES_PAGE_SIZE,
-            includeCount: false,
-          },
-          serverReadInit,
-        ),
-        getExpenses(
-          month,
-          {
-            sortBy: 'date',
-            sortDir: 'desc',
-            limit: 1,
-            includeCount: false,
-            includeTotals: true,
-          },
-          serverReadInit,
-        ),
-        // Settlement throws when the household has expenses but no income. That is a
-        // legitimate state on the expenses screen, so it resolves to null and the
-        // month total falls back to the unfiltered subtotal we already asked for.
-        getSettlement(month, serverReadInit).catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : 'Failed to load settlement';
-          if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
-            return null;
-          }
-
-          throw error;
-        }),
-      ]),
-    ),
-  );
+  const {
+    categories,
+    currentUserId,
+    exchangeRates,
+    fixedData,
+    installmentData,
+    locale,
+    oneTimeData,
+    settlement,
+    totalsData,
+    users,
+  } = await getExpensesPageData(month);
 
   const noIncomeWarning = settlement === null ? t(locale).expenses.noIncomeWarning : null;
   const totalExpensesArs =
@@ -169,4 +112,105 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       locale={locale}
     />
   );
+}
+
+async function getExpensesPageData(month: string) {
+  'use cache: private';
+  cacheLife({ stale: 30, revalidate: 30, expire: 60 });
+
+  const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = await verifySessionCookieToken(sessionToken);
+  const requestId = await getServerRequestId();
+  const serverReadInit = buildServerApiInit(
+    requestId,
+    SERVER_READ_INIT,
+    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
+  );
+  const [
+    users,
+    fixedData,
+    categories,
+    exchangeRates,
+    oneTimeData,
+    installmentData,
+    totalsData,
+    settlement,
+  ] = await withSessionRecovery(() =>
+    withServerApiLogging(requestId, { month, route: '/expenses' }, () =>
+      Promise.all([
+        getUsers(serverReadInit),
+        getExpenses(
+          month,
+          {
+            type: 'fixed',
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: INITIAL_EXPENSES_PAGE_SIZE,
+            includeCount: true,
+          },
+          serverReadInit,
+        ),
+        getCategories(serverReadInit),
+        getExchangeRates(month, serverReadInit),
+        getExpenses(
+          month,
+          {
+            type: 'oneTime',
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: INITIAL_EXPENSES_PAGE_SIZE,
+            includeCount: false,
+          },
+          serverReadInit,
+        ),
+        getExpenses(
+          month,
+          {
+            type: 'installment',
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: INITIAL_EXPENSES_PAGE_SIZE,
+            includeCount: false,
+          },
+          serverReadInit,
+        ),
+        getExpenses(
+          month,
+          {
+            sortBy: 'date',
+            sortDir: 'desc',
+            limit: 1,
+            includeCount: false,
+            includeTotals: true,
+          },
+          serverReadInit,
+        ),
+        getSettlement(month, serverReadInit).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to load settlement';
+          if (message.includes(NO_INCOME_SETTLEMENT_ERROR)) {
+            return null;
+          }
+
+          throw error;
+        }),
+      ]),
+    ),
+  );
+  const sessionUserId = session?.userId ?? null;
+  const currentUserId =
+    sessionUserId && users.some((user) => user.id === sessionUserId) ? sessionUserId : null;
+  const locale = resolveLocaleForUser(users, sessionUserId);
+
+  return {
+    categories,
+    currentUserId,
+    exchangeRates,
+    fixedData,
+    installmentData,
+    locale,
+    oneTimeData,
+    settlement,
+    totalsData,
+    users,
+  };
 }

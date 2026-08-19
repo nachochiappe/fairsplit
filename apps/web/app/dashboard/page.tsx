@@ -1,7 +1,10 @@
 import { cookies } from 'next/headers';
+import { cacheLife } from 'next/cache';
 import type { CategoryIconKey } from '@fairsplit/shared';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { DashboardClient } from './DashboardClient';
+import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SESSION_COOKIE, SESSION_EXPIRED_PATH } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -14,7 +17,6 @@ import {
   getUsers,
   isSessionExpiredError,
   type ExpenseCategoryTotal,
-  type ExpenseTotalsResponse,
   type Income,
   type SettlementResponse,
   type User,
@@ -32,58 +34,35 @@ interface ExpenseCategorySlice {
   superCategoryIcon: CategoryIconKey | null;
 }
 
-const SERVER_READ_CACHE = { next: { revalidate: 60 } } as const;
+const SERVER_READ_INIT = { cache: 'no-store' } as const;
 
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+export const instant = true;
+
+export default function DashboardPage(props: DashboardPageProps) {
+  return (
+    <Suspense fallback={<AppRouteSkeleton variant="dashboard" />}>
+      <DashboardPageContent {...props} />
+    </Suspense>
+  );
+}
+
+async function DashboardPageContent({ searchParams }: DashboardPageProps) {
   const resolvedSearchParams = await searchParams;
   const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
-  const session = await verifySessionCookieToken(sessionToken);
-  // The user's locale lives behind the API, so a backend outage has to fall
-  // back to the cookie mirror written on the last successful render.
-  const fallbackLocale = parseLocaleCookie(cookieStore.get(LOCALE_COOKIE)?.value) ?? 'en';
-  const requestId = await getServerRequestId();
-  const serverReadInit = buildServerApiInit(
-    requestId,
-    SERVER_READ_CACHE,
-    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
-  );
-  let users: User[] = [];
-  let incomes: Income[] = [];
-  let settlementResult: SettlementResponse | null = null;
-  let expenseTotals: ExpenseTotalsResponse | null = null;
+  let pageData: Awaited<ReturnType<typeof getDashboardPageData>>;
 
   try {
-    [users, incomes, expenseTotals] = await withServerApiLogging(
-      requestId,
-      { month, route: '/dashboard', step: 'bootstrap' },
-      async () =>
-        Promise.all([
-          getUsers(serverReadInit),
-          getIncomes(month, serverReadInit),
-          getExpenseTotals(month, serverReadInit),
-        ]),
-    );
-    settlementResult = await withServerApiLogging(
-      requestId,
-      { month, route: '/dashboard', step: 'settlement' },
-      () =>
-        getSettlement(month, serverReadInit).catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : 'Failed to load settlement';
-          if (message.includes('Cannot calculate settlement when total income is non-positive')) {
-            return null;
-          }
-
-          throw error;
-        }),
-    );
+    pageData = await getDashboardPageData(month);
   } catch (error) {
     // A revoked session is not an outage: the proxy cleared this request on
     // signature alone, so recovery is to drop the cookie and sign in again.
     if (isSessionExpiredError(error)) {
       redirect(SESSION_EXPIRED_PATH);
     }
+    const cookieStore = await cookies();
+    // The user's locale lives behind the API, so a backend outage has to fall
+    // back to the cookie mirror written on the last successful render.
+    const fallbackLocale = parseLocaleCookie(cookieStore.get(LOCALE_COOKIE)?.value) ?? 'en';
     const message = error instanceof Error ? error.message : 'Failed to connect to API';
     const settlement = buildNoIncomeSettlement(month, [], [], {});
     return (
@@ -98,7 +77,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     );
   }
 
-  const locale = resolveLocaleForUser(users, session?.userId ?? null);
+  const { expenseTotals, incomes, locale, settlementResult, users } = pageData;
   let settlement: SettlementResponse;
   let warning: string | null = null;
 
@@ -120,6 +99,48 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       locale={locale}
     />
   );
+}
+
+async function getDashboardPageData(month: string) {
+  'use cache: private';
+  cacheLife({ stale: 30, revalidate: 30, expire: 60 });
+
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
+  const session = await verifySessionCookieToken(sessionToken);
+  const requestId = await getServerRequestId();
+  const serverReadInit = buildServerApiInit(
+    requestId,
+    SERVER_READ_INIT,
+    sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
+  );
+
+  const [users, incomes, expenseTotals, settlementResult] = await withServerApiLogging(
+    requestId,
+    { month, route: '/dashboard' },
+    () =>
+      Promise.all([
+        getUsers(serverReadInit),
+        getIncomes(month, serverReadInit),
+        getExpenseTotals(month, serverReadInit),
+        getSettlement(month, serverReadInit).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Failed to load settlement';
+          if (message.includes('Cannot calculate settlement when total income is non-positive')) {
+            return null;
+          }
+
+          throw error;
+        }),
+      ]),
+  );
+
+  return {
+    expenseTotals,
+    incomes,
+    locale: resolveLocaleForUser(users, session?.userId ?? null),
+    settlementResult,
+    users,
+  };
 }
 
 function buildNoIncomeSettlement(
@@ -155,8 +176,12 @@ function buildNoIncomeSettlement(
     totalExpenses: toMoney(totalExpenses),
     expenseRatio: totalIncome === 0 ? '0' : (totalExpenses / totalIncome).toFixed(6),
     fairShareByUser: Object.fromEntries(users.map((user) => [user.id, '0.00'])),
-    paidByUser: Object.fromEntries(users.map((user) => [user.id, toMoney(paidByUser[user.id] ?? 0)])),
-    differenceByUser: Object.fromEntries(users.map((user) => [user.id, toMoney(paidByUser[user.id] ?? 0)])),
+    paidByUser: Object.fromEntries(
+      users.map((user) => [user.id, toMoney(paidByUser[user.id] ?? 0)]),
+    ),
+    differenceByUser: Object.fromEntries(
+      users.map((user) => [user.id, toMoney(paidByUser[user.id] ?? 0)]),
+    ),
     transfer: null,
   };
 }

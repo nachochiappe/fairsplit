@@ -1924,9 +1924,7 @@ export function ExpensesClient({
         : (visibleSectionSummaries[0]?.subtotalArs ?? 0),
     [filteredSubtotalArs, selectedExpenseType, visibleSectionSummaries],
   );
-  const expenseTypeFilters = useMemo<
-    Array<{ key: ExpenseTypeFilter; label: string }>
-  >(
+  const expenseTypeFilters = useMemo<Array<{ key: ExpenseTypeFilter; label: string }>>(
     () => [
       { key: 'all', label: copy.allExpenseTypes },
       { key: 'oneTime', label: copy.kindOneTime },
@@ -2027,7 +2025,6 @@ export function ExpensesClient({
   return (
     <AppShell
       compact
-      containerClassName="max-w-[1480px]"
       month={month}
       title={copy.title}
       subtitle={copy.subtitle}
