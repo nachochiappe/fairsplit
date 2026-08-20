@@ -30,6 +30,7 @@ import {
   supportedCurrencyCodes,
   type SupportedCurrencyCode,
 } from './expense-form';
+import { AmountCalculator } from './AmountCalculator';
 
 const DESCRIPTION_SUGGESTION_DEBOUNCE_MS = 200;
 
@@ -337,6 +338,74 @@ interface ComposerFieldsProps {
   onCancel: () => void;
 }
 
+interface ControlledAmountFieldProps {
+  copy: ExpensesCopy;
+  form: UseFormReturn<ExpenseForm>;
+  inputClassName: string;
+  label: string;
+  labelClassName: string;
+  name: 'amount' | 'totalAmount';
+}
+
+function ControlledAmountField({
+  copy,
+  form,
+  inputClassName,
+  label,
+  labelClassName,
+  name,
+}: ControlledAmountFieldProps) {
+  const inputId = useId();
+
+  return (
+    <div className="block text-sm">
+      <label className={labelClassName} htmlFor={inputId}>
+        {label}
+      </label>
+      <Controller
+        control={form.control}
+        name={name}
+        render={({ field }) => (
+          <div className="relative">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500"
+            >
+              $
+            </span>
+            <input
+              className={`${inputClassName} pr-12`}
+              id={inputId}
+              min="0"
+              name={field.name}
+              onBlur={field.onBlur}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                field.onChange(nextValue === '' ? undefined : Number(nextValue));
+              }}
+              ref={field.ref}
+              step="0.01"
+              type="number"
+              value={field.value ?? ''}
+            />
+            <AmountCalculator
+              copy={copy.form.calculator}
+              onApply={(nextValue) => {
+                form.setValue(name, nextValue, {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                  shouldValidate: true,
+                });
+              }}
+              value={field.value}
+            />
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
 export function ExpenseComposerFields({
   form,
   copy,
@@ -369,73 +438,23 @@ export function ExpenseComposerFields({
   return (
     <>
       {installmentEnabled && installmentEntryMode === 'total' ? (
-        <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">
-            {copy.form.totalAmount}
-          </span>
-          <div className="relative">
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500"
-            >
-              $
-            </span>
-            <Controller
-              control={form.control}
-              name="totalAmount"
-              render={({ field }) => (
-                <input
-                  className={`${moneyInputClass} min-h-11 rounded-xl`}
-                  min="0"
-                  name={field.name}
-                  onBlur={field.onBlur}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                  }}
-                  ref={field.ref}
-                  step="0.01"
-                  type="number"
-                  value={field.value ?? ''}
-                />
-              )}
-            />
-          </div>
-        </label>
+        <ControlledAmountField
+          copy={copy}
+          form={form}
+          inputClassName={`${moneyInputClass} min-h-11 rounded-xl`}
+          label={copy.form.totalAmount}
+          labelClassName="mb-1 block text-xs font-medium text-slate-600"
+          name="totalAmount"
+        />
       ) : (
-        <label className="block text-sm">
-          <span className="mb-1 block text-xs font-medium text-slate-600">
-            {installmentEnabled ? copy.form.perInstallmentAmount : copy.form.amount}
-          </span>
-          <div className="relative">
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-3 inline-flex items-center text-slate-500"
-            >
-              $
-            </span>
-            <Controller
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <input
-                  className={`${moneyInputClass} min-h-11 rounded-xl`}
-                  min="0"
-                  name={field.name}
-                  onBlur={field.onBlur}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                  }}
-                  ref={field.ref}
-                  step="0.01"
-                  type="number"
-                  value={field.value ?? ''}
-                />
-              )}
-            />
-          </div>
-        </label>
+        <ControlledAmountField
+          copy={copy}
+          form={form}
+          inputClassName={`${moneyInputClass} min-h-11 rounded-xl`}
+          label={installmentEnabled ? copy.form.perInstallmentAmount : copy.form.amount}
+          labelClassName="mb-1 block text-xs font-medium text-slate-600"
+          name="amount"
+        />
       )}
       <ExpenseDescriptionField
         form={form}
@@ -760,37 +779,14 @@ export function MobileExpenseComposerFields({
               ))}
             </select>
           </label>
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.amount}</span>
-            <div className="relative">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500"
-              >
-                $
-              </span>
-              <Controller
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <input
-                    className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={field.value ?? ''}
-                    onBlur={field.onBlur}
-                    onChange={(event) => {
-                      const nextValue = event.target.value;
-                      field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                    }}
-                    name={field.name}
-                    ref={field.ref}
-                  />
-                )}
-              />
-            </div>
-          </label>
+          <ControlledAmountField
+            copy={copy}
+            form={form}
+            inputClassName={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+            label={copy.form.amount}
+            labelClassName={mobileFieldLabelClass}
+            name="amount"
+          />
         </div>
 
         {currencyCode !== 'ARS' ? (
@@ -931,37 +927,14 @@ export function MobileExpenseComposerFields({
             </select>
           </label>
           {installmentEntryMode === 'total' ? (
-            <label className="block text-sm">
-              <span className={mobileFieldLabelClass}>{copy.form.totalAmount}</span>
-              <div className="relative">
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500"
-                >
-                  $
-                </span>
-                <Controller
-                  control={form.control}
-                  name="totalAmount"
-                  render={({ field }) => (
-                    <input
-                      className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                      min="0"
-                      step="0.01"
-                      type="number"
-                      value={field.value ?? ''}
-                      onBlur={field.onBlur}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        field.onChange(nextValue === '' ? undefined : Number(nextValue));
-                      }}
-                      name={field.name}
-                      ref={field.ref}
-                    />
-                  )}
-                />
-              </div>
-            </label>
+            <ControlledAmountField
+              copy={copy}
+              form={form}
+              inputClassName={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+              label={copy.form.totalAmount}
+              labelClassName={mobileFieldLabelClass}
+              name="totalAmount"
+            />
           ) : null}
           {installmentPreview ? (
             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
