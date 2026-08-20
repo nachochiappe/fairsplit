@@ -1,7 +1,7 @@
 'use client';
 
 import { evaluateBasicCalculation, MAX_MONEY_AMOUNT } from '@fairsplit/shared';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Translation } from '../../lib/i18n';
 
@@ -17,6 +17,66 @@ const operatorClass =
   'bg-blue-50 font-semibold text-brand-700 hover:bg-blue-100 focus-visible:ring-brand-600';
 const numberClass =
   'bg-white font-medium text-slate-800 hover:bg-slate-50 focus-visible:ring-brand-600';
+
+export type CalculatorKeyboardAction =
+  | { type: 'append-number'; value: string }
+  | { type: 'append-operator'; value: string }
+  | { type: 'backspace' | 'calculate' | 'clear' };
+
+export function getCalculatorKeyboardAction(
+  key: string,
+  code: string,
+  hasShortcutModifier: boolean,
+): CalculatorKeyboardAction | null {
+  if (hasShortcutModifier) {
+    return null;
+  }
+
+  if (/^Numpad\d$/.test(code)) {
+    return { type: 'append-number', value: code.slice(-1) };
+  }
+
+  const numpadActions: Record<string, CalculatorKeyboardAction> = {
+    NumpadAdd: { type: 'append-operator', value: '+' },
+    NumpadComma: { type: 'append-number', value: '.' },
+    NumpadDecimal: { type: 'append-number', value: '.' },
+    NumpadDivide: { type: 'append-operator', value: '÷' },
+    NumpadEnter: { type: 'calculate' },
+    NumpadEqual: { type: 'calculate' },
+    NumpadMultiply: { type: 'append-operator', value: '×' },
+    NumpadSubtract: { type: 'append-operator', value: '-' },
+  };
+  if (numpadActions[code]) {
+    return numpadActions[code];
+  }
+
+  if (/^\d$/.test(key)) {
+    return { type: 'append-number', value: key };
+  }
+  if (key === '.' || key === ',') {
+    return { type: 'append-number', value: '.' };
+  }
+  if (key === '+' || key === '-') {
+    return { type: 'append-operator', value: key };
+  }
+  if (key === '*' || key.toLocaleLowerCase() === 'x') {
+    return { type: 'append-operator', value: '×' };
+  }
+  if (key === '/') {
+    return { type: 'append-operator', value: '÷' };
+  }
+  if (key === 'Enter' || key === '=') {
+    return { type: 'calculate' };
+  }
+  if (key === 'Backspace') {
+    return { type: 'backspace' };
+  }
+  if (key.toLocaleLowerCase() === 'c') {
+    return { type: 'clear' };
+  }
+
+  return null;
+}
 
 function CalculatorIcon() {
   return (
@@ -122,26 +182,29 @@ export function AmountCalculator({ copy, onApply, value }: AmountCalculatorProps
     setIsOpen(true);
   };
 
-  const appendNumber = (next: string) => {
-    setExpression((current) => {
-      const base = result !== null ? '' : current;
-      if (next === '.') {
-        const currentNumber = base.split(/[+\-×÷]/).at(-1) ?? '';
-        if (currentNumber.includes('.')) {
-          return current;
+  const appendNumber = useCallback(
+    (next: string) => {
+      setExpression((current) => {
+        const base = result !== null ? '' : current;
+        if (next === '.') {
+          const currentNumber = base.split(/[+\-×÷]/).at(-1) ?? '';
+          if (currentNumber.includes('.')) {
+            return current;
+          }
+          return base === '' || /[+\-×÷]$/.test(base) ? `${base}0.` : `${base}.`;
         }
-        return base === '' || /[+\-×÷]$/.test(base) ? `${base}0.` : `${base}.`;
-      }
-      if (base === '0') {
-        return next;
-      }
-      return `${base}${next}`;
-    });
-    setResult(null);
-    setError(null);
-  };
+        if (base === '0') {
+          return next;
+        }
+        return `${base}${next}`;
+      });
+      setResult(null);
+      setError(null);
+    },
+    [result],
+  );
 
-  const appendOperator = (operator: string) => {
+  const appendOperator = useCallback((operator: string) => {
     setExpression((current) => {
       if (/[+\-×÷]$/.test(current)) {
         return `${current.slice(0, -1)}${operator}`;
@@ -150,9 +213,21 @@ export function AmountCalculator({ copy, onApply, value }: AmountCalculatorProps
     });
     setResult(null);
     setError(null);
-  };
+  }, []);
 
-  const calculate = () => {
+  const clearCalculation = useCallback(() => {
+    setExpression('0');
+    setResult(null);
+    setError(null);
+  }, []);
+
+  const backspace = useCallback(() => {
+    setExpression((current) => (current.length <= 1 ? '0' : current.slice(0, -1)));
+    setResult(null);
+    setError(null);
+  }, []);
+
+  const calculate = useCallback(() => {
     const calculation = evaluateBasicCalculation(expression);
     if (!calculation.ok) {
       setResult(null);
@@ -173,7 +248,40 @@ export function AmountCalculator({ copy, onApply, value }: AmountCalculatorProps
     setResult(calculation.value);
     setError(null);
     return numericResult;
-  };
+  }, [copy.divisionByZero, copy.invalidExpression, copy.outOfRange, expression]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const handleCalculatorKeyDown = (event: KeyboardEvent) => {
+      const action = getCalculatorKeyboardAction(
+        event.key,
+        event.code,
+        event.altKey || event.ctrlKey || event.metaKey,
+      );
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+      if (action.type === 'append-number') {
+        appendNumber(action.value);
+      } else if (action.type === 'append-operator') {
+        appendOperator(action.value);
+      } else if (action.type === 'backspace') {
+        backspace();
+      } else if (action.type === 'clear') {
+        clearCalculation();
+      } else {
+        calculate();
+      }
+    };
+
+    document.addEventListener('keydown', handleCalculatorKeyDown);
+    return () => document.removeEventListener('keydown', handleCalculatorKeyDown);
+  }, [appendNumber, appendOperator, backspace, calculate, clearCalculation, isOpen]);
 
   const useResult = () => {
     const numericResult = result === null ? calculate() : Number(result);
@@ -196,7 +304,7 @@ export function AmountCalculator({ copy, onApply, value }: AmountCalculatorProps
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         aria-label={copy.open}
-        className="flex h-full min-h-11 w-11 items-center justify-center rounded-r-xl text-slate-500 transition-colors hover:bg-slate-50 hover:text-brand-700 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-inset"
+        className="flex h-full min-h-11 w-11 items-center justify-center rounded-r-xl border-y border-r border-transparent text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-brand-700 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-inset"
         onClick={() => (isOpen ? setIsOpen(false) : openCalculator())}
         type="button"
       >
@@ -226,11 +334,7 @@ export function AmountCalculator({ copy, onApply, value }: AmountCalculatorProps
                 <button
                   aria-label={copy.clear}
                   className={`${keyClass} ${operatorClass}`}
-                  onClick={() => {
-                    setExpression('0');
-                    setResult(null);
-                    setError(null);
-                  }}
+                  onClick={clearCalculation}
                   type="button"
                 >
                   C
@@ -238,11 +342,7 @@ export function AmountCalculator({ copy, onApply, value }: AmountCalculatorProps
                 <button
                   aria-label={copy.backspace}
                   className={`${keyClass} ${operatorClass}`}
-                  onClick={() => {
-                    setExpression((current) => (current.length <= 1 ? '0' : current.slice(0, -1)));
-                    setResult(null);
-                    setError(null);
-                  }}
+                  onClick={backspace}
                   type="button"
                 >
                   <BackspaceIcon />

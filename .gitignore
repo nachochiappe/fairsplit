@@ -26,3 +26,4 @@ docs/
 # System and local tooling
 .DS_Store
 .agents
+.impeccable/
