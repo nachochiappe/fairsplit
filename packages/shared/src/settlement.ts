@@ -3,12 +3,15 @@ import Decimal from 'decimal.js';
 export interface SettlementInput {
   incomesByUser: Record<string, Decimal.Value>;
   paidByUser: Record<string, Decimal.Value>;
+  customPercentagesByUser?: Record<string, Decimal.Value>;
 }
 
 export interface SettlementOutput {
+  splitMethod: 'income' | 'custom';
   totalIncome: string;
   totalExpenses: string;
   expenseRatio: string;
+  splitPercentageByUser: Record<string, string>;
   fairShareByUser: Record<string, string>;
   paidByUser: Record<string, string>;
   differenceByUser: Record<string, string>;
@@ -22,7 +25,9 @@ export interface SettlementOutput {
 const toRoundedMoneyString = (value: Decimal): string => value.toDecimalPlaces(2).toFixed(2);
 
 export function calculateSettlement(input: SettlementInput): SettlementOutput {
-  const userIds = Array.from(new Set([...Object.keys(input.incomesByUser), ...Object.keys(input.paidByUser)]));
+  const userIds = Array.from(
+    new Set([...Object.keys(input.incomesByUser), ...Object.keys(input.paidByUser)]),
+  );
 
   const incomes: Record<string, Decimal> = {};
   const paid: Record<string, Decimal> = {};
@@ -32,20 +37,34 @@ export function calculateSettlement(input: SettlementInput): SettlementOutput {
     paid[userId] = new Decimal(input.paidByUser[userId] ?? 0);
   }
 
-  const totalIncome = Object.values(incomes).reduce((acc, value) => acc.plus(value), new Decimal(0));
+  const totalIncome = Object.values(incomes).reduce(
+    (acc, value) => acc.plus(value),
+    new Decimal(0),
+  );
   const totalExpenses = Object.values(paid).reduce((acc, value) => acc.plus(value), new Decimal(0));
+  const splitMethod = input.customPercentagesByUser ? 'custom' : 'income';
 
-  if (totalIncome.lte(0) && totalExpenses.gt(0)) {
-    throw new Error('Cannot calculate settlement when total income is non-positive and expenses are non-zero.');
+  if (splitMethod === 'income' && totalIncome.lte(0) && totalExpenses.gt(0)) {
+    throw new Error(
+      'Cannot calculate settlement when total income is non-positive and expenses are non-zero.',
+    );
   }
 
   const expenseRatio = totalIncome.eq(0) ? new Decimal(0) : totalExpenses.div(totalIncome);
 
+  const splitPercentageByUser: Record<string, Decimal> = {};
   const fairShareByUser: Record<string, Decimal> = {};
   const differenceByUser: Record<string, Decimal> = {};
 
   for (const userId of userIds) {
-    fairShareByUser[userId] = incomes[userId].mul(expenseRatio);
+    splitPercentageByUser[userId] = input.customPercentagesByUser
+      ? new Decimal(input.customPercentagesByUser[userId] ?? 0)
+      : totalIncome.eq(0)
+        ? new Decimal(0)
+        : incomes[userId].div(totalIncome).mul(100);
+    fairShareByUser[userId] = input.customPercentagesByUser
+      ? totalExpenses.mul(splitPercentageByUser[userId]).div(100)
+      : incomes[userId].mul(expenseRatio);
     differenceByUser[userId] = paid[userId].minus(fairShareByUser[userId]);
   }
 
@@ -80,9 +99,13 @@ export function calculateSettlement(input: SettlementInput): SettlementOutput {
   }
 
   return {
+    splitMethod,
     totalIncome: toRoundedMoneyString(totalIncome),
     totalExpenses: toRoundedMoneyString(totalExpenses),
     expenseRatio: expenseRatio.toDecimalPlaces(6).toString(),
+    splitPercentageByUser: Object.fromEntries(
+      userIds.map((id) => [id, splitPercentageByUser[id].toDecimalPlaces(2).toFixed(2)]),
+    ),
     fairShareByUser: Object.fromEntries(
       userIds.map((id) => [id, toRoundedMoneyString(fairShareByUser[id])]),
     ),

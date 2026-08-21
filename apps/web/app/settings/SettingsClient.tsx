@@ -20,6 +20,7 @@ import {
   getSuperCategories,
   updateCategory,
   type Passkey,
+  type HouseholdSplitPolicy,
   SuperCategory,
   unarchiveCategory,
   updateUser,
@@ -29,6 +30,7 @@ import {
 import { formatCountLabel, localeLabels, localeTags, resolveLocale, t } from '../../lib/i18n';
 import { useRouter } from 'next/navigation';
 import { PasskeysCard } from './PasskeysCard';
+import { SplitPolicyCard } from './SplitPolicyCard';
 
 interface SettingsClientProps {
   month: string;
@@ -39,6 +41,7 @@ interface SettingsClientProps {
   currentUserEmail: string | null;
   currentUserLocale: AppLocale;
   initialPasskeys: Passkey[];
+  initialSplitPolicy: HouseholdSplitPolicy;
   passkeysConfigured: boolean;
   /** Joining another household is only offered while nobody else is here. */
   isOnlyHouseholdMember: boolean;
@@ -122,6 +125,7 @@ export function SettingsClient({
   currentUserEmail,
   currentUserLocale,
   initialPasskeys,
+  initialSplitPolicy,
   passkeysConfigured,
   isOnlyHouseholdMember,
 }: SettingsClientProps) {
@@ -1094,6 +1098,8 @@ export function SettingsClient({
           </div>
         ) : null}
       </section>
+
+      <SplitPolicyCard initialPolicy={initialSplitPolicy} locale={resolvedLocale} />
 
       <section
         aria-label={`${copy.superCategories} — ${copy.detailedCategories}`}

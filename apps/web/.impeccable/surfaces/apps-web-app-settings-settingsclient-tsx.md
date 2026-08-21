@@ -36,3 +36,14 @@ Implementation inventory:
 | Decorative chevrons and example Travel row | Accepted omission | They imply unsupported navigation/data and must not be literalized. |
 
 Constraints: preserve localization, archived-category restoration, custom-group rename/archive controls, 44px touch targets, keyboard focus, and existing API contracts. No new filters, drag-and-drop, sorting, or category-selection state.
+
+## Household split policy extension
+
+Scope: the expense-split portion of Settings and its read-only summary on the dashboard. Visitor mode: Operate.
+
+- THESIS: Make the household's active fairness rule explicit and editable without implying that underlying expense or income records change.
+- OWN-WORLD: Preserve the restrained light-ledger surfaces, cobalt selection and actions, amber consequence notice, tabular numbers, and existing radius/elevation language.
+- STORY: Choose income-based or custom splitting, understand the all-month consequence, set exact percentages when needed, then save; the dashboard names the active method and links back to Settings.
+- FIRST VIEWPORT: Keep the method choices and consequence notice visible before percentage controls; stack into one ordered column on narrow screens with full-width controls.
+- FORM: Use an explicit radio choice rather than a toggle because the two modes are named alternatives. For two-person households, pair one linked slider with exact numeric inputs. Require exactly 100% and connect validation messaging to every percentage control.
+- CONSTRAINTS: One policy applies to past, current, and future settlement calculations; records remain unchanged. Preserve localization, keyboard focus, 44px touch targets, and the existing Settings visual system.

@@ -17,6 +17,7 @@ const ALLOWED_READ_PATH_PREFIXES = [
   '/exchange-rates',
   '/settlement',
   '/household/setup-status',
+  '/household/split-policy',
   '/auth/passkeys',
 ] as const;
 
