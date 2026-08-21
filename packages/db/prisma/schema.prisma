@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SplitMethod {
+  income
+  custom
+}
+
 model User {
   id                            String            @id @default(cuid())
   name                          String
@@ -25,6 +30,7 @@ model User {
   consumedInvites               HouseholdInvite[] @relation("InviteConsumedBy")
   passkeys                      UserPasskey[]
   revokedSessions               RevokedSession[]
+  customSplitShares             HouseholdSplitShare[]
 
   @@unique([authUserId])
   @@index([householdId])
@@ -247,6 +253,7 @@ model MonthlyExchangeRate {
 model Household {
   id               String                @id @default(cuid())
   name             String
+  splitMethod      SplitMethod           @default(income)
   createdAt        DateTime              @default(now())
   users            User[]
   incomes          MonthlyIncome[]
@@ -256,6 +263,18 @@ model Household {
   superCategories  SuperCategory[]
   exchangeRates    MonthlyExchangeRate[]
   invites          HouseholdInvite[]
+  splitShares      HouseholdSplitShare[]
+}
+
+model HouseholdSplitShare {
+  householdId String
+  household   Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  percentage  Decimal   @db.Decimal(5, 2)
+
+  @@id([householdId, userId])
+  @@index([userId])
 }
 
 model HouseholdInvite {

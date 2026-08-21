@@ -36,6 +36,19 @@ describe('calculateSettlement', () => {
     expect(result.transfer).toBeNull();
   });
 
+  it('uses custom percentages without requiring income', () => {
+    const result = calculateSettlement({
+      incomesByUser: { a: '0', b: '0' },
+      paidByUser: { a: '1000', b: '0' },
+      customPercentagesByUser: { a: '70', b: '30' },
+    });
+
+    expect(result.splitMethod).toBe('custom');
+    expect(result.splitPercentageByUser).toEqual({ a: '70.00', b: '30.00' });
+    expect(result.fairShareByUser).toEqual({ a: '700.00', b: '300.00' });
+    expect(result.transfer).toEqual({ fromUserId: 'b', toUserId: 'a', amount: '300.00' });
+  });
+
   it('throws when total income is non-positive and expenses are present', () => {
     expect(() =>
       calculateSettlement({

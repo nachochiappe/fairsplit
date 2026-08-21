@@ -1,7 +1,14 @@
 import { cookies } from 'next/headers';
 import { cacheLife } from 'next/cache';
 import { Suspense } from 'react';
-import { getCategories, getPasskeys, getSuperCategories, getUser, getUsers } from '../../lib/api';
+import {
+  getCategories,
+  getHouseholdSplitPolicy,
+  getPasskeys,
+  getSuperCategories,
+  getUser,
+  getUsers,
+} from '../../lib/api';
 import { getCurrentMonth } from '../../lib/month';
 import {
   buildServerApiInit,
@@ -28,7 +35,7 @@ export default function SettingsPage() {
 }
 
 async function SettingsPageContent() {
-  const { categories, currentUser, householdUsers, month, passkeys, superCategories } =
+  const { categories, currentUser, householdUsers, month, passkeys, splitPolicy, superCategories } =
     await getSettingsPageData();
 
   return (
@@ -39,6 +46,7 @@ async function SettingsPageContent() {
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}
       initialPasskeys={passkeys.passkeys}
+      initialSplitPolicy={splitPolicy}
       initialSuperCategories={superCategories}
       isOnlyHouseholdMember={householdUsers.length <= 1}
       month={month}
@@ -63,7 +71,7 @@ async function getSettingsPageData() {
 
   const sessionUserId = session?.userId ?? null;
 
-  const [categories, superCategories, currentUser, passkeys, householdUsers] =
+  const [categories, superCategories, currentUser, passkeys, householdUsers, splitPolicy] =
     await withSessionRecovery(() =>
       withServerApiLogging(requestId, { month, route: '/settings' }, async () =>
         Promise.all([
@@ -72,6 +80,7 @@ async function getSettingsPageData() {
           sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
           getPasskeys(serverReadInit),
           getUsers(serverReadInit),
+          getHouseholdSplitPolicy(serverReadInit),
         ]),
       ),
     );
@@ -82,6 +91,7 @@ async function getSettingsPageData() {
     householdUsers,
     month,
     passkeys,
+    splitPolicy,
     superCategories,
   };
 }

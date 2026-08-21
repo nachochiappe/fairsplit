@@ -48,6 +48,58 @@ export const userSchema = z.object({
   createdAt: z.string(),
 });
 
+export const splitMethodSchema = z.enum(['income', 'custom']);
+export type SplitMethod = z.infer<typeof splitMethodSchema>;
+
+export const updateHouseholdSplitPolicySchema = z
+  .object({
+    method: splitMethodSchema,
+    shares: z
+      .array(
+        z.object({
+          userId: z.string().min(1).max(MAX_ENTITY_ID_LENGTH),
+          percentage: z.coerce.number().finite().min(0).max(100).multipleOf(0.01),
+        }),
+      )
+      .default([]),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.method !== 'custom') {
+      return;
+    }
+
+    if (value.shares.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'shares are required for a custom split',
+        path: ['shares'],
+      });
+      return;
+    }
+
+    const uniqueUserIds = new Set(value.shares.map((share) => share.userId));
+    if (uniqueUserIds.size !== value.shares.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'shares must contain each user at most once',
+        path: ['shares'],
+      });
+    }
+
+    const totalHundredths = value.shares.reduce(
+      (total, share) => total + Math.round(share.percentage * 100),
+      0,
+    );
+    if (totalHundredths !== 10_000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'custom split percentages must total 100',
+        path: ['shares'],
+      });
+    }
+  });
+
 export const replaceIncomeEntriesSchema = z.object({
   month: monthSchema,
   userId: z.string().min(1).max(MAX_ENTITY_ID_LENGTH),

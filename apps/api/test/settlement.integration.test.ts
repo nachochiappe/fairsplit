@@ -47,7 +47,9 @@ describe('GET /api/settlement', () => {
       },
     });
     userBId = userB.id;
-    const housing = await prisma.category.create({ data: { name: `Housing ${suffix}`, householdId } });
+    const housing = await prisma.category.create({
+      data: { name: `Housing ${suffix}`, householdId },
+    });
     const food = await prisma.category.create({ data: { name: `Food ${suffix}`, householdId } });
     categoryHousingId = housing.id;
     categoryFoodId = food.id;
@@ -126,10 +128,16 @@ describe('GET /api/settlement', () => {
   });
 
   it('returns settlement breakdown and transfer', async () => {
-    const response = await request(app).get('/api/settlement').set('x-fairsplit-session', sessionToken).query({ month });
+    const response = await request(app)
+      .get('/api/settlement')
+      .set('x-fairsplit-session', sessionToken)
+      .query({ month });
 
     expect(response.status).toBe(200);
     expect(response.body.month).toBe(month);
+    expect(response.body.splitMethod).toBe('income');
+    expect(response.body.splitPercentageByUser[userAId]).toBe('66.67');
+    expect(response.body.splitPercentageByUser[userBId]).toBe('33.33');
     expect(response.body.totalIncome).toBe('9000.00');
     expect(response.body.totalExpenses).toBe('3300.00');
     expect(response.body.fairShareByUser[userAId]).toBe('2200.00');
@@ -140,6 +148,53 @@ describe('GET /api/settlement', () => {
       fromUserId: userBId,
       toUserId: userAId,
       amount: '200.00',
+    });
+  });
+
+  it('applies a household-wide custom split to settlement', async () => {
+    const updateResponse = await request(app)
+      .put('/api/household/split-policy')
+      .set('x-fairsplit-session', sessionToken)
+      .send({
+        method: 'custom',
+        shares: [
+          { userId: userAId, percentage: 70 },
+          { userId: userBId, percentage: 30 },
+        ],
+      });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body).toMatchObject({
+      method: 'custom',
+      shares: [
+        { userId: userAId, percentage: '70.00' },
+        { userId: userBId, percentage: '30.00' },
+      ],
+    });
+
+    const policyResponse = await request(app)
+      .get('/api/household/split-policy')
+      .set('x-fairsplit-session', sessionToken);
+    expect(policyResponse.status).toBe(200);
+    expect(policyResponse.body).toEqual(updateResponse.body);
+
+    const settlementResponse = await request(app)
+      .get('/api/settlement')
+      .set('x-fairsplit-session', sessionToken)
+      .query({ month });
+
+    expect(settlementResponse.status).toBe(200);
+    expect(settlementResponse.body.splitMethod).toBe('custom');
+    expect(settlementResponse.body.splitPercentageByUser).toEqual({
+      [userAId]: '70.00',
+      [userBId]: '30.00',
+    });
+    expect(settlementResponse.body.fairShareByUser[userAId]).toBe('2310.00');
+    expect(settlementResponse.body.fairShareByUser[userBId]).toBe('990.00');
+    expect(settlementResponse.body.transfer).toEqual({
+      fromUserId: userBId,
+      toUserId: userAId,
+      amount: '90.00',
     });
   });
 });

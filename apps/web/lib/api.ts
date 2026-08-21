@@ -125,9 +125,11 @@ export interface ExchangeRate {
 
 export interface SettlementResponse {
   month: string;
+  splitMethod: 'income' | 'custom';
   totalIncome: string;
   totalExpenses: string;
   expenseRatio: string;
+  splitPercentageByUser: Record<string, string>;
   fairShareByUser: Record<string, string>;
   paidByUser: Record<string, string>;
   differenceByUser: Record<string, string>;
@@ -176,6 +178,15 @@ export interface AuthLinkResponse {
 export interface HouseholdInvite {
   code: string;
   expiresAt: string;
+}
+
+export interface HouseholdSplitPolicy {
+  method: 'income' | 'custom';
+  shares: Array<{
+    userId: string;
+    userName: string;
+    percentage: string;
+  }>;
 }
 
 export interface Passkey {
@@ -688,6 +699,32 @@ export async function getExpenseTotals(
 export async function getHouseholdSetupStatus(init?: NextRequestInit): Promise<HouseholdSetupStatus> {
   const response = await fetchFromApi(`${API_BASE_URL}/household/setup-status`, init ?? { cache: 'no-store' });
   return parseResponse<HouseholdSetupStatus>(response);
+}
+
+export async function getHouseholdSplitPolicy(
+  init?: NextRequestInit,
+): Promise<HouseholdSplitPolicy> {
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/household/split-policy`,
+    init ?? { cache: 'no-store' },
+  );
+  return parseResponse<HouseholdSplitPolicy>(response);
+}
+
+export async function updateHouseholdSplitPolicy(payload: {
+  method: HouseholdSplitPolicy['method'];
+  shares: Array<{ userId: string; percentage: number }>;
+}): Promise<HouseholdSplitPolicy> {
+  const endpoint =
+    typeof window === 'undefined'
+      ? `${API_BASE_URL}/household/split-policy`
+      : '/api/household/split-policy';
+  const response = await fetchFromApi(endpoint, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseResponse<HouseholdSplitPolicy>(response);
 }
 
 export async function createHouseholdInvite(init?: NextRequestInit): Promise<HouseholdInvite> {

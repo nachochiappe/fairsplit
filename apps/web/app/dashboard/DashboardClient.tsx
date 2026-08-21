@@ -210,7 +210,25 @@ function DashboardClientContent({
         </section>
 
         <section className="rounded-2xl border border-stroke/80 bg-surface shadow-sm">
-          <div className="divide-y divide-stroke/60 md:hidden">
+          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between md:px-8">
+            <div>
+              <h2 className="text-lg font-semibold text-ink-strong">
+                {copy.contributionBreakdown}
+              </h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                {settlement.splitMethod === 'custom'
+                  ? copy.customSplitActive
+                  : copy.incomeSplitActive}
+              </p>
+            </div>
+            <Link
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-stroke bg-white px-4 py-2 text-sm font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+              href="/settings"
+            >
+              {copy.changeSplit}
+            </Link>
+          </div>
+          <div className="divide-y divide-stroke/60 border-t border-stroke/60 md:hidden">
             {users.map((user) => {
               const difference = Number(settlement.differenceByUser[user.id] ?? 0);
               const isPositiveDifference = difference >= 0;
@@ -267,7 +285,7 @@ function DashboardClientContent({
               );
             })}
           </div>
-          <div className="hidden overflow-x-auto md:block">
+          <div className="hidden overflow-x-auto border-t border-stroke/60 md:block">
             <table className="w-full min-w-[760px] text-left text-sm">
               <caption className="sr-only">{copy.caption}</caption>
               <thead className="bg-surface-muted/85 text-ink-soft">

@@ -172,9 +172,18 @@ function buildNoIncomeSettlement(
 
   return {
     month,
+    splitMethod: 'income',
     totalIncome: toMoney(totalIncome),
     totalExpenses: toMoney(totalExpenses),
     expenseRatio: totalIncome === 0 ? '0' : (totalExpenses / totalIncome).toFixed(6),
+    splitPercentageByUser: Object.fromEntries(
+      users.map((user) => [
+        user.id,
+        totalIncome === 0
+          ? '0.00'
+          : (((incomeByUser[user.id] ?? 0) / totalIncome) * 100).toFixed(2),
+      ]),
+    ),
     fairShareByUser: Object.fromEntries(users.map((user) => [user.id, '0.00'])),
     paidByUser: Object.fromEntries(
       users.map((user) => [user.id, toMoney(paidByUser[user.id] ?? 0)]),

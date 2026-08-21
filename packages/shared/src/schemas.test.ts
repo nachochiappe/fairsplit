@@ -9,6 +9,7 @@ import {
   fxRateInputSchema,
   incomeAmountInputSchema,
   replaceIncomeEntriesSchema,
+  updateHouseholdSplitPolicySchema,
 } from './schemas.ts';
 
 const validIncomeEntry = {
@@ -27,6 +28,30 @@ const validExpense = {
 };
 
 describe('public input bounds', () => {
+  it('accepts a custom household split totaling 100 percent', () => {
+    const result = updateHouseholdSplitPolicySchema.safeParse({
+      method: 'custom',
+      shares: [
+        { userId: 'a', percentage: 70 },
+        { userId: 'b', percentage: 30 },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects incomplete or duplicate custom household splits', () => {
+    expect(
+      updateHouseholdSplitPolicySchema.safeParse({
+        method: 'custom',
+        shares: [
+          { userId: 'a', percentage: 60 },
+          { userId: 'a', percentage: 30 },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('allows the maximum number of income entries', () => {
     const parsed = replaceIncomeEntriesSchema.safeParse({
       month: '2026-02',

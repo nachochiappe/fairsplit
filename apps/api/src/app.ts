@@ -18,6 +18,7 @@ import {
   monthSchema,
   replaceIncomeEntriesSchema,
   resolveCategoryIcon,
+  updateHouseholdSplitPolicySchema,
   updateExpenseSchema,
 } from '@fairsplit/shared';
 import { z } from 'zod';
@@ -1156,6 +1157,109 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.json({
       needsHouseholdSetup,
       decisionLocked: auth.onboardingHouseholdDecisionAt !== null,
+    });
+  });
+
+  app.get('/api/household/split-policy', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const household = await prisma.household.findUniqueOrThrow({
+      where: { id: auth.householdId },
+      select: {
+        splitMethod: true,
+        users: {
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, name: true },
+        },
+        splitShares: {
+          select: { userId: true, percentage: true },
+        },
+      },
+    });
+    const savedPercentages = new Map(
+      household.splitShares.map((share) => [share.userId, share.percentage.toFixed(2)]),
+    );
+    const defaultHundredths = Math.floor(10_000 / Math.max(household.users.length, 1));
+    const defaultRemainder = 10_000 - defaultHundredths * household.users.length;
+    const hasSavedShares = household.splitShares.length > 0;
+
+    return res.json({
+      method: household.splitMethod,
+      shares: household.users.map((user, index) => ({
+        userId: user.id,
+        userName: user.name,
+        percentage: hasSavedShares
+          ? (savedPercentages.get(user.id) ?? '0.00')
+          : ((defaultHundredths + (index < defaultRemainder ? 1 : 0)) / 100).toFixed(2),
+      })),
+    });
+  });
+
+  app.put('/api/household/split-policy', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = updateHouseholdSplitPolicySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const householdUsers = await prisma.user.findMany({
+      where: { householdId: auth.householdId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true },
+    });
+
+    if (parsed.data.method === 'custom') {
+      const currentUserIds = new Set(householdUsers.map((user) => user.id));
+      const submittedUserIds = new Set(parsed.data.shares.map((share) => share.userId));
+      const coversHousehold =
+        currentUserIds.size === submittedUserIds.size &&
+        [...currentUserIds].every((userId) => submittedUserIds.has(userId));
+      if (!coversHousehold) {
+        return res.status(400).json({
+          error: 'Custom split percentages must include every current household member.',
+        });
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (parsed.data.method === 'custom') {
+        await tx.householdSplitShare.deleteMany({ where: { householdId: auth.householdId } });
+        await tx.householdSplitShare.createMany({
+          data: parsed.data.shares.map((share) => ({
+            householdId: auth.householdId,
+            userId: share.userId,
+            percentage: new Decimal(share.percentage).toFixed(2),
+          })),
+        });
+      }
+
+      await tx.household.update({
+        where: { id: auth.householdId },
+        data: { splitMethod: parsed.data.method },
+      });
+    });
+
+    const storedShares = await prisma.householdSplitShare.findMany({
+      where: { householdId: auth.householdId },
+      select: { userId: true, percentage: true },
+    });
+    const percentagesByUser = new Map(
+      storedShares.map((share) => [share.userId, share.percentage.toFixed(2)]),
+    );
+    return res.json({
+      method: parsed.data.method,
+      shares: householdUsers.map((user) => ({
+        userId: user.id,
+        userName: user.name,
+        percentage: percentagesByUser.get(user.id) ?? '0.00',
+      })),
     });
   });
 
@@ -2790,10 +2894,17 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const month = parsed.data.month;
-    const [users, incomes, expenses] = await Promise.all([
+    const [users, incomes, expenses, household] = await Promise.all([
       prisma.user.findMany({ where: { householdId: auth.householdId }, orderBy: { createdAt: 'asc' } }),
       prisma.monthlyIncome.findMany({ where: { month, householdId: auth.householdId } }),
       prisma.expense.findMany({ where: { month, householdId: auth.householdId } }),
+      prisma.household.findUniqueOrThrow({
+        where: { id: auth.householdId },
+        select: {
+          splitMethod: true,
+          splitShares: { select: { userId: true, percentage: true } },
+        },
+      }),
     ]);
 
     const incomesByUser: Record<string, string> = {};
@@ -2815,13 +2926,25 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     try {
-      const settlement = calculateSettlement({ incomesByUser, paidByUser });
+      const customPercentagesByUser =
+        household.splitMethod === 'custom'
+          ? Object.fromEntries(
+              household.splitShares.map((share) => [share.userId, share.percentage.toString()]),
+            )
+          : undefined;
+      const settlement = calculateSettlement({
+        incomesByUser,
+        paidByUser,
+        customPercentagesByUser,
+      });
 
       return res.json({
         month,
+        splitMethod: settlement.splitMethod,
         totalIncome: settlement.totalIncome,
         totalExpenses: settlement.totalExpenses,
         expenseRatio: settlement.expenseRatio,
+        splitPercentageByUser: settlement.splitPercentageByUser,
         fairShareByUser: settlement.fairShareByUser,
         paidByUser: settlement.paidByUser,
         differenceByUser: settlement.differenceByUser,
