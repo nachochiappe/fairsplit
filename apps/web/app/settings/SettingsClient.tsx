@@ -254,9 +254,7 @@ export function SettingsClient({
       setProfileSuccess(t(updatedLocale).settings.profileUpdated);
     } catch (profileUpdateError) {
       setProfileError(
-        profileUpdateError instanceof Error
-          ? profileUpdateError.message
-          : copy.profileUpdateFailed,
+        profileUpdateError instanceof Error ? profileUpdateError.message : copy.profileUpdateFailed,
       );
     } finally {
       setProfileSaving(false);
@@ -298,9 +296,7 @@ export function SettingsClient({
       setInviteSuccess(copy.inviteGenerated);
     } catch (inviteCreateError) {
       setInviteError(
-        inviteCreateError instanceof Error
-          ? inviteCreateError.message
-          : copy.inviteCreateFailed,
+        inviteCreateError instanceof Error ? inviteCreateError.message : copy.inviteCreateFailed,
       );
     } finally {
       setInviteLoading(false);
@@ -347,10 +343,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.categoryCreated,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.categoryCreated, refreshError),
       );
     } finally {
       setSaving(false);
@@ -398,10 +391,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.categoryRenamed,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.categoryRenamed, refreshError),
       );
     } finally {
       setSaving(false);
@@ -426,10 +416,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.categoryUpdated,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.categoryUpdated, refreshError),
       );
     } finally {
       setSaving(false);
@@ -464,10 +451,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.categoryArchived,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.categoryArchived, refreshError),
       );
     } finally {
       setSaving(false);
@@ -494,10 +478,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.categoryRestored,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.categoryRestored, refreshError),
       );
     } finally {
       setSaving(false);
@@ -526,9 +507,7 @@ export function SettingsClient({
       setShowSuperCategoryIcons(false);
     } catch (superCategoryError) {
       setSuperCategoryError(
-        superCategoryError instanceof Error
-          ? superCategoryError.message
-          : copy.errors.createGroup,
+        superCategoryError instanceof Error ? superCategoryError.message : copy.errors.createGroup,
       );
       return;
     }
@@ -537,10 +516,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setSuperCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.groupCreated,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.groupCreated, refreshError),
       );
     } finally {
       setSaving(false);
@@ -592,10 +568,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setSuperCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.groupRenamed,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.groupRenamed, refreshError),
       );
     } finally {
       setSaving(false);
@@ -638,10 +611,7 @@ export function SettingsClient({
       await loadSettings();
     } catch (refreshError) {
       setSuperCategoryError(
-        formatPostMutationRefreshError(
-          copy.refreshErrors.groupArchived,
-          refreshError,
-        ),
+        formatPostMutationRefreshError(copy.refreshErrors.groupArchived, refreshError),
       );
     } finally {
       setSaving(false);
@@ -915,16 +885,14 @@ export function SettingsClient({
       ) : null}
 
       <section className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-ink-strong">{copy.personalInfo}</h2>
-        <p className="mt-2 text-base text-ink-soft00">
-          {copy.personalInfoDescription}
-        </p>
+        <h2 className="text-xl font-semibold tracking-tight text-ink-strong">
+          {copy.personalInfo}
+        </h2>
+        <p className="mt-2 text-base text-ink-soft00">{copy.personalInfoDescription}</p>
 
         <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
           <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
-          <p className="mt-1 text-xs text-ink-muted">
-            {copy.inviteDescription}
-          </p>
+          <p className="mt-1 text-xs text-ink-muted">{copy.inviteDescription}</p>
           <button
             className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={inviteLoading}
@@ -935,7 +903,7 @@ export function SettingsClient({
           </button>
           {inviteCode ? (
             <div className="mt-3 rounded-lg border border-slate-300 bg-white/90 px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-soft00">
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft00">
                 {copy.inviteCode}
               </p>
               <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -950,7 +918,8 @@ export function SettingsClient({
               </div>
               {inviteExpiresAt ? (
                 <p className="mt-1 text-xs text-ink-soft00">
-                  {copy.expires}: {new Date(inviteExpiresAt).toLocaleString(localeTags[resolvedLocale])}
+                  {copy.expires}:{' '}
+                  {new Date(inviteExpiresAt).toLocaleString(localeTags[resolvedLocale])}
                 </p>
               ) : null}
             </div>
@@ -961,7 +930,10 @@ export function SettingsClient({
           <div className="mt-4 rounded-xl border border-stroke/80 bg-surface-soft p-4">
             <h3 className="text-base font-semibold text-ink-strong">{copy.joinHousehold}</h3>
             <p className="mt-1 text-xs text-ink-muted">{copy.joinDescription}</p>
-            <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => void onJoinHousehold(event)}>
+            <form
+              className="mt-3 flex flex-col gap-2 sm:flex-row"
+              onSubmit={(event) => void onJoinHousehold(event)}
+            >
               <label className="sr-only" htmlFor="join-household-code">
                 {copy.inviteCode}
               </label>
@@ -1012,24 +984,24 @@ export function SettingsClient({
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
-              <p className="text-xl font-semibold text-ink-base">{copy.displayName}</p>
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label className="block text-sm font-medium text-ink-base" htmlFor="display-name">
+                {copy.displayName}
+              </label>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
-                  aria-label={copy.displayName}
                   className="min-w-0 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base font-medium text-ink-strong00 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                  id="display-name"
                   onChange={(event) => setDisplayNameDraft(event.target.value)}
                   placeholder={copy.yourName}
                   value={displayNameDraft}
                 />
               </div>
-              <p className="mt-3 text-sm text-ink-soft00">
-                {copy.displayNameHelp}
-              </p>
+              <p className="mt-3 text-sm text-ink-soft00">{copy.displayNameHelp}</p>
             </div>
 
             <div className="min-w-0">
-              <p className="text-xl font-semibold text-ink-base">{shared.email}</p>
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-stroke bg-surface-muted px-4 py-3">
+              <p className="text-sm font-medium text-ink-base">{shared.email}</p>
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-stroke bg-surface-muted px-4 py-3">
                 <span className="min-w-0 truncate text-base font-medium text-ink-soft00">
                   {currentUserEmail ?? copy.emailUnavailable}
                 </span>
@@ -1071,15 +1043,17 @@ export function SettingsClient({
           </div>
         </div>
 
-        <PasskeysCard configured={passkeysConfigured} initialPasskeys={initialPasskeys} locale={resolvedLocale} />
+        <PasskeysCard
+          configured={passkeysConfigured}
+          initialPasskeys={initialPasskeys}
+          locale={resolvedLocale}
+        />
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-ink-strong">{copy.session}</h3>
-              <p className="mt-1 text-sm text-ink-soft00">
-                {copy.sessionHelp}
-              </p>
+              <p className="mt-1 text-sm text-ink-soft00">{copy.sessionHelp}</p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <form action="/logout" className="w-full sm:w-auto" method="post">

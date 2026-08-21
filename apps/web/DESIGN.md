@@ -41,10 +41,10 @@ typography:
     letterSpacing: '-0.025em'
   title:
     fontFamily: 'ui-sans-serif, system-ui, sans-serif'
-    fontSize: '1.5rem'
+    fontSize: '1.25rem'
     fontWeight: 600
-    lineHeight: 1.333
-    letterSpacing: 'normal'
+    lineHeight: 1.4
+    letterSpacing: '-0.025em'
   body:
     fontFamily: 'ui-sans-serif, system-ui, sans-serif'
     fontSize: '1rem'
@@ -208,7 +208,7 @@ The palette uses cool ledger neutrals for structure, one dependable blue for act
 
 - **Display** (700, `clamp(1.875rem, 4vw, 3rem)`, `1`): App-shell titles and the most important screen identity; track tightly and keep the line count short.
 - **Headline** (700, `2.25rem`, `1.111`): Major financial totals and dense metric values.
-- **Title** (600, `1.5rem`, `1.333`): Section headings and the main statement inside a prominent panel.
+- **Title** (600, `1.25rem`, `1.4`, `-0.025em`): Primary section headings and modal titles. Nested card headings step down to `1.125rem`; field labels use the established `0.875rem` form treatment rather than title styling.
 - **Body** (400, `1rem`, `1.5`): Instructions, descriptions, form values, and default reading text; use medium or semibold weight for actionable content.
 - **Label** (700, `0.75rem`, `0.16em`, uppercase): Brand eyebrow, metric labels, compact table headers, and month context. Use sparingly so letterspaced uppercase text stays scannable.
 
@@ -216,7 +216,7 @@ The palette uses cool ledger neutrals for structure, one dependable blue for act
 
 **The Fairness Is Numeric Rule.** Monetary values, percentages, rates, and date-like controls use tabular numerals and strong alignment so partners can compare amounts without visual jitter.
 
-**The Quiet Type Rule.** Hierarchy comes from weight and size within one platform sans family; do not add a second typeface, decorative italics, or oversized editorial display treatments.
+**The Quiet Type Rule.** Hierarchy comes from weight and size within one platform sans family; repeated roles keep identical treatment, and semantic nesting—not component ownership—determines the step. Do not add a second typeface, decorative italics, or oversized editorial display treatments.
 
 ## Layout
 
