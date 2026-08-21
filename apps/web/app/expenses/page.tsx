@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { cacheLife } from 'next/cache';
 import { Suspense } from 'react';
 import { ExpensesClient } from './ExpensesClient';
-import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
+import { AppRouteLoading } from '../../components/AppRouteLoading';
 import {
   Expense,
   getCategories,
@@ -42,7 +42,7 @@ function mergeUniqueExpenses(expenses: Expense[]): Expense[] {
 
 export default function ExpensesPage(props: ExpensesPageProps) {
   return (
-    <Suspense fallback={<AppRouteSkeleton variant="expenses" />}>
+    <Suspense fallback={<AppRouteLoading label="Loading expenses..." />}>
       <ExpensesPageContent {...props} />
     </Suspense>
   );

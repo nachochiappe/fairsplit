@@ -734,6 +734,13 @@ export function MobileExpenseComposerFields({
     projectedArsAmount,
     installmentPreview,
   } = useComposerState(form, exchangeRates);
+  const amountFieldName =
+    installmentEnabled && installmentEntryMode === 'total' ? 'totalAmount' : 'amount';
+  const amountFieldLabel = installmentEnabled
+    ? installmentEntryMode === 'total'
+      ? copy.form.totalAmount
+      : copy.form.perInstallmentAmount
+    : copy.form.amount;
 
   return (
     <>
@@ -783,9 +790,9 @@ export function MobileExpenseComposerFields({
             copy={copy}
             form={form}
             inputClassName={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-            label={copy.form.amount}
+            label={amountFieldLabel}
             labelClassName={mobileFieldLabelClass}
-            name="amount"
+            name={amountFieldName}
           />
         </div>
 
@@ -926,16 +933,6 @@ export function MobileExpenseComposerFields({
               <option value="total">{copy.form.totalAmountOption}</option>
             </select>
           </label>
-          {installmentEntryMode === 'total' ? (
-            <ControlledAmountField
-              copy={copy}
-              form={form}
-              inputClassName={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-              label={copy.form.totalAmount}
-              labelClassName={mobileFieldLabelClass}
-              name="totalAmount"
-            />
-          ) : null}
           {installmentPreview ? (
             <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
               {copy.form.installmentPreview(

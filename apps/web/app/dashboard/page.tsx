@@ -4,7 +4,7 @@ import type { CategoryIconKey } from '@fairsplit/shared';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { DashboardClient } from './DashboardClient';
-import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
+import { AppRouteLoading } from '../../components/AppRouteLoading';
 import { buildServerApiInit, getServerRequestId, withServerApiLogging } from '../../lib/server-api';
 import { SESSION_COOKIE, SESSION_EXPIRED_PATH } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -40,7 +40,7 @@ export const instant = true;
 
 export default function DashboardPage(props: DashboardPageProps) {
   return (
-    <Suspense fallback={<AppRouteSkeleton variant="dashboard" />}>
+    <Suspense fallback={<AppRouteLoading label="Loading dashboard..." />}>
       <DashboardPageContent {...props} />
     </Suspense>
   );

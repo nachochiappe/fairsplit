@@ -9,7 +9,7 @@ import {
   withServerApiLogging,
   withSessionRecovery,
 } from '../../lib/server-api';
-import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
+import { AppRouteLoading } from '../../components/AppRouteLoading';
 import { SettingsClient } from './SettingsClient';
 import { SESSION_COOKIE } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
@@ -21,7 +21,7 @@ export const instant = true;
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<AppRouteSkeleton variant="settings" />}>
+    <Suspense fallback={<AppRouteLoading label="Loading settings..." />}>
       <SettingsPageContent />
     </Suspense>
   );
