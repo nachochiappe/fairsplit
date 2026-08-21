@@ -1,8 +1,8 @@
 ---
 version: 1
 slug: "apps-web-app-settings-settingsclient-tsx"
-primary_target: "apps/web/app/settings/SettingsClient.tsx"
-related_targets: ["apps/web/lib/i18n.ts"]
+primary_target: "app/settings/SettingsClient.tsx"
+related_targets: ["lib/i18n.ts"]
 ---
 
 # Category mapping workspace

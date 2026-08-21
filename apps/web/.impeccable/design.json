@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-31T13:10:31Z",
+  "generatedAt": "2026-08-21T12:50:09Z",
   "title": "Design System: Fairsplit",
   "extensions": {
     "colorMeta": {
@@ -376,7 +376,7 @@
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Section headings and prominent panel statements."
+        "purpose": "Primary section headings and modal titles; nested card headings step down to 18px."
       },
       "body": {
         "displayName": "Body",
@@ -546,7 +546,7 @@
       },
       {
         "name": "The Quiet Type Rule",
-        "body": "Hierarchy comes from weight and size within one platform sans family; do not add a second typeface, decorative italics, or oversized editorial display treatments.",
+        "body": "Hierarchy comes from weight and size within one platform sans family; repeated roles keep identical treatment, and semantic nesting—not component ownership—determines the step. Do not add a second typeface, decorative italics, or oversized editorial display treatments.",
         "section": "typography"
       },
       {
