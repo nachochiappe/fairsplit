@@ -117,43 +117,48 @@ export function SplitPolicyCard({ initialPolicy, locale }: SplitPolicyCardProps)
       </div>
 
       <div className="grid border-t border-stroke lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.35fr)]">
-        <fieldset className="bg-surface-muted/60 p-5 sm:p-6 lg:border-r lg:border-stroke">
-          <legend className="text-sm font-semibold text-ink-strong">{copy.methodLegend}</legend>
-          <div className="mt-3 space-y-3">
-            {(['income', 'custom'] as const).map((option) => {
-              const selected = method === option;
-              return (
-                <label
-                  className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
-                    selected
-                      ? 'border-brand-300 bg-brand-50'
-                      : 'border-stroke bg-white hover:border-slate-300 hover:bg-surface-muted'
-                  }`}
-                  key={option}
-                >
-                  <input
-                    checked={selected}
-                    className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                    name="split-method"
-                    onChange={() => {
-                      setMethod(option);
-                      setError(null);
-                      setSuccess(null);
-                    }}
-                    type="radio"
-                    value={option}
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-ink-strong">
-                      {option === 'income' ? copy.incomeMethod : copy.customMethod}
+        <fieldset className="min-w-0 bg-surface-muted/60 lg:border-r lg:border-stroke">
+          <legend className="sr-only">{copy.methodLegend}</legend>
+          <div className="p-5 sm:p-6">
+            <p aria-hidden="true" className="text-sm font-semibold text-ink-strong">
+              {copy.methodLegend}
+            </p>
+            <div className="mt-3 space-y-3">
+              {(['income', 'custom'] as const).map((option) => {
+                const selected = method === option;
+                return (
+                  <label
+                    className={`flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                      selected
+                        ? 'border-brand-300 bg-brand-50'
+                        : 'border-stroke bg-white hover:border-slate-300 hover:bg-surface-muted'
+                    }`}
+                    key={option}
+                  >
+                    <input
+                      checked={selected}
+                      className="mt-0.5 h-5 w-5 shrink-0 accent-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                      name="split-method"
+                      onChange={() => {
+                        setMethod(option);
+                        setError(null);
+                        setSuccess(null);
+                      }}
+                      type="radio"
+                      value={option}
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-ink-strong">
+                        {option === 'income' ? copy.incomeMethod : copy.customMethod}
+                      </span>
+                      <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
+                        {option === 'income' ? copy.incomeDescription : copy.customDescription}
+                      </span>
                     </span>
-                    <span className="mt-1 block text-sm leading-relaxed text-ink-muted">
-                      {option === 'income' ? copy.incomeDescription : copy.customDescription}
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
+                  </label>
+                );
+              })}
+            </div>
           </div>
         </fieldset>
 
