@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { cacheLife } from 'next/cache';
 import { Suspense } from 'react';
 import { IncomesClient } from './IncomesClient';
-import { AppRouteSkeleton } from '../../components/AppRouteSkeleton';
+import { AppRouteLoading } from '../../components/AppRouteLoading';
 import { getExchangeRates, getIncomes, getUsers } from '../../lib/api';
 import {
   buildServerApiInit,
@@ -24,7 +24,7 @@ export const instant = true;
 
 export default function IncomesPage(props: IncomesPageProps) {
   return (
-    <Suspense fallback={<AppRouteSkeleton variant="incomes" />}>
+    <Suspense fallback={<AppRouteLoading label="Loading incomes..." />}>
       <IncomesPageContent {...props} />
     </Suspense>
   );
