@@ -19,6 +19,7 @@ import {
   type IncomeCurrencyCode,
   type IncomeDraft,
 } from './IncomeEntryForm';
+import { IncomeActionMenu } from './IncomeActionMenu';
 
 interface IncomesClientProps {
   month: string;
@@ -246,16 +247,42 @@ export function IncomesClient({
   const [copyingPrevious, setCopyingPrevious] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openIncomeActionKey, setOpenIncomeActionKey] = useState<string | null>(null);
 
   useEffect(() => {
     setUsers(initialUsers);
     setIncomeDraftsByUser(buildIncomeDrafts(initialUsers, initialIncomes));
     setExchangeRates(initialExchangeRates);
     setEditor(null);
+    setOpenIncomeActionKey(null);
     setPendingIncomeRemoval(null);
     setMessage(null);
     setError(null);
   }, [initialExchangeRates, initialIncomes, initialUsers]);
+
+  useEffect(() => {
+    if (!openIncomeActionKey) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof HTMLElement && !event.target.closest('[data-income-actions]')) {
+        setOpenIncomeActionKey(null);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenIncomeActionKey(null);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openIncomeActionKey]);
 
   const previousMonth = useMemo(() => getPreviousMonth(month), [month]);
   const monthRateByCurrency = useMemo(
@@ -317,6 +344,7 @@ export function IncomesClient({
   const isBusy = savingUserId !== null || copyingPrevious;
 
   const openAddIncome = (userId: string) => {
+    setOpenIncomeActionKey(null);
     setError(null);
     setMessage(null);
     setEditor({
@@ -331,6 +359,7 @@ export function IncomesClient({
     if (!draft) {
       return;
     }
+    setOpenIncomeActionKey(null);
     setError(null);
     setMessage(null);
     setEditor({ draft: { ...draft }, index, userId });
@@ -649,6 +678,8 @@ export function IncomesClient({
                 <div>
                   {rows.map((row, index) => {
                     const amountArs = parseIncomeAmountToArs(row);
+                    const actionKey = `${user.id}-${row.id ?? index}`;
+                    const isActionOpen = openIncomeActionKey === actionKey;
                     const isNegative = Number(row.amount) < 0;
                     return (
                       <div
@@ -677,32 +708,32 @@ export function IncomesClient({
                           </p>
                         </div>
                         <p
-                          className={`text-right text-sm font-bold tabular-nums ${isNegative ? 'text-rose-700' : 'text-ink-strong'}`}
+                          aria-hidden={isActionOpen}
+                          className={`text-right text-sm font-bold tabular-nums transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] ${
+                            isActionOpen ? '-translate-x-4 opacity-0' : 'translate-x-0 opacity-100'
+                          } ${isNegative ? 'text-rose-700' : 'text-ink-strong'}`}
                         >
                           <span className="mr-1 text-xs tracking-[0.06em] text-ink-soft">ARS</span>
                           {formatArs(amountArs, locale)}
                         </p>
-                        <button
-                          aria-label={copy.editIncome(row.description)}
-                          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-ink-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:opacity-50"
+                        <IncomeActionMenu
+                          description={row.description}
                           disabled={isBusy}
-                          onClick={() => openEditIncome(user.id, index)}
-                          type="button"
-                        >
-                          <svg
-                            aria-hidden="true"
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
-                          </svg>
-                        </button>
+                          isOpen={isActionOpen}
+                          locale={locale}
+                          menuKey={actionKey}
+                          onDelete={() =>
+                            setPendingIncomeRemoval({
+                              description: row.description || copy.rowFallbackLabel(index + 1),
+                              index,
+                              userId: user.id,
+                            })
+                          }
+                          onEdit={() => openEditIncome(user.id, index)}
+                          onOpenChange={(nextOpen) =>
+                            setOpenIncomeActionKey(nextOpen ? actionKey : null)
+                          }
+                        />
                       </div>
                     );
                   })}
