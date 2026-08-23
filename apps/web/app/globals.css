@@ -61,7 +61,9 @@ button {
 }
 
 .expense-action-trigger,
-.expense-action-button {
+.expense-action-button,
+.income-action-trigger,
+.income-action-button {
   transition:
     transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
     opacity 200ms cubic-bezier(0.25, 1, 0.5, 1),
@@ -72,7 +74,8 @@ button {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .expense-action-button::after {
+  .expense-action-button::after,
+  .income-action-button::after {
     position: absolute;
     bottom: calc(100% + 0.375rem);
     left: 50%;
@@ -95,7 +98,9 @@ button {
   }
 
   .expense-action-button:hover::after,
-  .expense-action-button:focus-visible::after {
+  .expense-action-button:focus-visible::after,
+  .income-action-button:hover::after,
+  .income-action-button:focus-visible::after {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
   }
