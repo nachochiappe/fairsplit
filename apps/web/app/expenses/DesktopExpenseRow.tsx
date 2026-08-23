@@ -53,16 +53,22 @@ function DesktopExpenseRowComponent({
       <td className="px-4 py-3">{expense.categoryName}</td>
       <td className="whitespace-nowrap px-4 py-3">{expense.paidByUserName}</td>
       <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink-strong">
-        <div>ARS {formatMoney(expense.amountArs, locale)}</div>
-        {expense.currencyCode !== 'ARS' ? (
-          <div className="font-normal text-xs text-slate-500">
-            {copy.originalAmount(
-              expense.currencyCode,
-              formatMoney(expense.amountOriginal, locale),
-              formatFxRate(expense.fxRateUsed),
-            )}
-          </div>
-        ) : null}
+        <div
+          className={`transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            isOpen ? '-translate-x-14' : 'translate-x-0'
+          }`}
+        >
+          <div>ARS {formatMoney(expense.amountArs, locale)}</div>
+          {expense.currencyCode !== 'ARS' ? (
+            <div className="font-normal text-xs text-slate-500">
+              {copy.originalAmount(
+                expense.currencyCode,
+                formatMoney(expense.amountOriginal, locale),
+                formatFxRate(expense.fxRateUsed),
+              )}
+            </div>
+          ) : null}
+        </div>
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-right">
         <ExpenseActionMenu
