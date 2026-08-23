@@ -1670,8 +1670,8 @@ export function ExpensesClient({
     setOpenExpenseActionMenuId(nextOpen ? expense.id : null);
   }, []);
 
-  // The desktop menu closes itself before invoking these; the mobile swipe rail
-  // does not, so its variants dismiss the open row first.
+  // Mobile handlers dismiss the open row before starting actions that change
+  // the card layout. Desktop actions are dismissed by the action rail itself.
   const handleRowEdit = startEdit;
   const handleRowClone = cloneExpense;
   const handleRowDelete = removeExpense;

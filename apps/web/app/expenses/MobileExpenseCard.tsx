@@ -85,7 +85,12 @@ function MobileExpenseCardComponent({
         </div>
 
         <div className="flex shrink-0 items-start gap-2">
-          <p className="pt-2 text-lg font-bold leading-none tabular-nums text-ink-strong">
+          <p
+            aria-hidden={isOpen}
+            className={`pt-2 text-lg font-bold leading-none tabular-nums text-ink-strong transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] ${
+              isOpen ? '-translate-x-4 opacity-0' : 'translate-x-0 opacity-100'
+            }`}
+          >
             ${formatMobileExpenseAmount(expense.amountArs, locale)}
           </p>
           <ExpenseActionMenu
