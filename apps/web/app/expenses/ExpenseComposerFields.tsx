@@ -333,7 +333,10 @@ interface ComposerFieldsProps {
   editingExpenseId: string | null;
   onCancel: () => void;
   showCancel?: boolean;
+  submitState: ExpenseComposerSubmitState;
 }
+
+export type ExpenseComposerSubmitState = 'idle' | 'saving' | 'success';
 
 interface ControlledAmountFieldProps {
   copy: ExpensesCopy;
@@ -414,6 +417,7 @@ export function ExpenseComposerFields({
   editingExpenseId,
   onCancel,
   showCancel = true,
+  submitState,
 }: ComposerFieldsProps) {
   const {
     installmentEnabled,
@@ -433,8 +437,18 @@ export function ExpenseComposerFields({
     }
   }, [editingExpenseId]);
 
+  const submitLabel = editingExpenseId ? copy.form.update : copy.form.add;
+  const submitAriaLabel =
+    submitState === 'saving'
+      ? shared.saving
+      : submitState === 'success'
+        ? editingExpenseId
+          ? copy.toasts.expenseUpdated
+          : copy.toasts.expenseAdded
+        : submitLabel;
+
   return (
-    <>
+    <fieldset className="contents" disabled={submitState !== 'idle'}>
       {installmentEnabled && installmentEntryMode === 'total' ? (
         <ControlledAmountField
           copy={copy}
@@ -684,20 +698,70 @@ export function ExpenseComposerFields({
 
       <div className="flex gap-2">
         <button
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={submitAriaLabel}
+          className="expense-submit-button relative inline-grid min-h-11 w-full place-items-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          data-state={submitState}
+          disabled={submitState !== 'idle'}
           type="submit"
         >
-          <span aria-hidden="true" className="text-base leading-none">
-            +
+          <span aria-hidden="true" className="expense-submit-button__surface" />
+          <span aria-hidden="true" className="expense-submit-button__saving-surface" />
+          <span aria-hidden="true" className="expense-submit-button__success-surface" />
+          <span className="expense-submit-button__label">
+            <span aria-hidden="true" className="text-base leading-none">
+              +
+            </span>
+            {submitLabel}
           </span>
-          {editingExpenseId ? copy.form.update : copy.form.add}
+          <span aria-hidden="true" className="expense-submit-button__status">
+            <span className="t-icon-swap" data-state={submitState === 'success' ? 'b' : 'a'}>
+              <svg
+                className="t-icon h-5 w-5 animate-spin"
+                data-icon="a"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  opacity="0.35"
+                  r="8.5"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                />
+                <path
+                  d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="2.5"
+                />
+              </svg>
+              <svg
+                className="t-icon h-5 w-5"
+                data-icon="b"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2.8"
+                viewBox="0 0 24 24"
+              >
+                <path className="expense-submit-button__check-path" d="m5 12.5 4.5 4.5L19 7.5" />
+              </svg>
+            </span>
+          </span>
         </button>
         {editingExpenseId && showCancel ? (
-          <button className={secondaryButtonClass} type="button" onClick={onCancel}>
+          <button
+            className={secondaryButtonClass}
+            disabled={submitState !== 'idle'}
+            type="button"
+            onClick={onCancel}
+          >
             {shared.cancel}
           </button>
         ) : null}
       </div>
-    </>
+    </fieldset>
   );
 }

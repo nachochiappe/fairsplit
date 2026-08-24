@@ -53,7 +53,7 @@ import {
   tableControlLabelClass,
   tableControlSearchFieldClass,
 } from './expense-styles';
-import { ExpenseComposerFields } from './ExpenseComposerFields';
+import { ExpenseComposerFields, type ExpenseComposerSubmitState } from './ExpenseComposerFields';
 import {
   createExpenseFormDefaults,
   dateInputValueToMonth,
@@ -75,6 +75,7 @@ const DEFAULT_SORT_FIELD: ExpenseSortField = 'date';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 const SEARCH_DEBOUNCE_MS = 350;
 const MODAL_CLOSE_DURATION_MS = 150;
+const COMPOSER_SUCCESS_VISIBLE_MS = 700;
 
 type MobileComposerMotionState = 'closed' | 'opening' | 'open' | 'closing';
 
@@ -300,6 +301,8 @@ export function ExpensesClient({
     null,
   );
   const [saving, setSaving] = useState(false);
+  const [composerSubmitState, setComposerSubmitState] =
+    useState<ExpenseComposerSubmitState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [submissionToast, setSubmissionToast] = useState<SubmissionToastState | null>(null);
   const [maxRowsPerSection, setMaxRowsPerSection] = useState<10 | 25 | 50>(
@@ -336,6 +339,7 @@ export function ExpensesClient({
   );
   const expensesRef = useRef(expenses);
   const submissionToastTimeoutRef = useRef<number | null>(null);
+  const composerSubmitResetTimeoutRef = useRef<number | null>(null);
   const warningsRef = useRef(warnings);
   const sectionPaginationRef = useRef(sectionPagination);
   const exchangeRatesRef = useRef(exchangeRates);
@@ -988,6 +992,13 @@ export function ExpensesClient({
     }
   }, []);
 
+  const clearComposerSubmitReset = useCallback(() => {
+    if (composerSubmitResetTimeoutRef.current !== null) {
+      window.clearTimeout(composerSubmitResetTimeoutRef.current);
+      composerSubmitResetTimeoutRef.current = null;
+    }
+  }, []);
+
   const revealMobileComposer = useCallback(() => {
     cancelMobileComposerMotion();
     setMobileComposerMotionState('opening');
@@ -1000,10 +1011,12 @@ export function ExpensesClient({
   }, [cancelMobileComposerMotion]);
 
   const openMobileComposer = useCallback(() => {
+    clearComposerSubmitReset();
+    setComposerSubmitState('idle');
     setEditingExpenseId(null);
     resetForm(sortedActiveCategories[0]?.id ?? '');
     revealMobileComposer();
-  }, [resetForm, revealMobileComposer, sortedActiveCategories]);
+  }, [clearComposerSubmitReset, resetForm, revealMobileComposer, sortedActiveCategories]);
 
   const closeMobileComposer = useCallback(() => {
     cancelMobileComposerMotion();
@@ -1026,14 +1039,18 @@ export function ExpensesClient({
   }, [cancelMobileComposerMotion, resetForm, sortedActiveCategories]);
 
   const cancelEdit = useCallback(() => {
+    clearComposerSubmitReset();
+    setComposerSubmitState('idle');
     cancelMobileComposerMotion();
     setEditingExpenseId(null);
     resetForm(sortedActiveCategories[0]?.id ?? '');
     setMobileComposerMotionState('closed');
-  }, [cancelMobileComposerMotion, resetForm, sortedActiveCategories]);
+  }, [cancelMobileComposerMotion, clearComposerSubmitReset, resetForm, sortedActiveCategories]);
 
   const resetExpenseComposer = useCallback(
     (options?: { closeMobile?: boolean }) => {
+      clearComposerSubmitReset();
+      setComposerSubmitState('idle');
       setEditingExpenseId(null);
       resetForm(sortedActiveCategories[0]?.id ?? '');
       if (options?.closeMobile ?? true) {
@@ -1041,10 +1058,19 @@ export function ExpensesClient({
         setMobileComposerMotionState('closed');
       }
     },
-    [cancelMobileComposerMotion, resetForm, sortedActiveCategories],
+    [cancelMobileComposerMotion, clearComposerSubmitReset, resetForm, sortedActiveCategories],
   );
 
+  const showComposerSuccess = useCallback(() => {
+    clearComposerSubmitReset();
+    setComposerSubmitState('success');
+    composerSubmitResetTimeoutRef.current = window.setTimeout(() => {
+      resetExpenseComposer();
+    }, COMPOSER_SUCCESS_VISIBLE_MS);
+  }, [clearComposerSubmitReset, resetExpenseComposer]);
+
   useEffect(() => cancelMobileComposerMotion, [cancelMobileComposerMotion]);
+  useEffect(() => clearComposerSubmitReset, [clearComposerSubmitReset]);
 
   // Reconciliation keeps the current ledger interactive by default. Callers must
   // opt into a blocking state only when the currently rendered rows are unusable.
@@ -1553,7 +1579,7 @@ export function ExpensesClient({
       try {
         const result = await options.execute();
         if (mutationToken !== mutationTokenRef.current) {
-          return;
+          return false;
         }
 
         options.reconcile?.(result);
@@ -1565,9 +1591,10 @@ export function ExpensesClient({
           title: options.successTitle,
           message: options.successMessage,
         });
+        return true;
       } catch (mutationError) {
         if (mutationToken !== mutationTokenRef.current) {
-          return;
+          return false;
         }
 
         applyExpenseScreenSnapshot(snapshot);
@@ -1581,6 +1608,7 @@ export function ExpensesClient({
           title: options.errorTitle,
           message,
         });
+        return false;
       } finally {
         if (mutationToken === mutationTokenRef.current) {
           setSaving(false);
@@ -1591,14 +1619,14 @@ export function ExpensesClient({
   );
 
   const submit = form.handleSubmit(async (values) => {
-    const wasEditing = Boolean(editingExpenseId);
-
     if (editingExpenseId) {
       const current = expensesRef.current.find((expense) => expense.id === editingExpenseId);
       if (!current) {
         setError(copy.expenseNotFound);
         return;
       }
+
+      setComposerSubmitState('saving');
 
       const scope: ApplyScope = current.installment
         ? 'all'
@@ -1614,7 +1642,7 @@ export function ExpensesClient({
           ? (expense: Expense) => expense.fixed.templateId === current.fixed.templateId
           : (expense: Expense) => expense.id === current.id;
 
-      await runOptimisticMutation({
+      const succeeded = await runOptimisticMutation({
         successTitle: copy.toasts.expenseUpdated,
         successMessage: copy.toasts.changesSaved,
         successPresentation: 'check',
@@ -1631,7 +1659,6 @@ export function ExpensesClient({
                   buildOptimisticUpdatedExpense(expense, payload),
                 );
           applyExpenseMutationState(updateResult);
-          resetExpenseComposer();
         },
         execute: () => updateExpense(current.id, payload),
         reconcile: (updatedExpense) => {
@@ -1674,6 +1701,11 @@ export function ExpensesClient({
           }
         },
       });
+      if (succeeded) {
+        showComposerSuccess();
+      } else {
+        setComposerSubmitState('idle');
+      }
       return;
     }
 
@@ -1681,7 +1713,8 @@ export function ExpensesClient({
     const optimisticExpense = buildOptimisticCreateExpense(payload, 'create');
     const optimisticExpenseId = optimisticExpense?.id ?? null;
 
-    await runOptimisticMutation({
+    setComposerSubmitState('saving');
+    const succeeded = await runOptimisticMutation({
       successTitle: copy.toasts.expenseAdded,
       successMessage: copy.toasts.addedSuccessfully,
       successPresentation: 'check',
@@ -1689,12 +1722,10 @@ export function ExpensesClient({
       errorFallbackMessage: copy.toasts.saveFailed,
       applyOptimistic: () => {
         if (!optimisticExpense) {
-          resetExpenseComposer({ closeMobile: !wasEditing });
           return;
         }
         const insertion = insertExpense(expensesRef.current, optimisticExpense);
         applyExpenseMutationState(insertion);
-        resetExpenseComposer({ closeMobile: !wasEditing });
       },
       execute: () => createExpense(payload),
       reconcile: (createdExpense) => {
@@ -1717,6 +1748,11 @@ export function ExpensesClient({
         });
       },
     });
+    if (succeeded) {
+      showComposerSuccess();
+    } else {
+      setComposerSubmitState('idle');
+    }
   });
 
   const jumpToExpenseEditor = useCallback(() => {
@@ -1864,6 +1900,7 @@ export function ExpensesClient({
     await runOptimisticMutation({
       successTitle: copy.toasts.expenseDeleted,
       successMessage: copy.toasts.deletedSuccessfully,
+      successPresentation: 'check',
       errorTitle: copy.toasts.couldNotDelete,
       errorFallbackMessage: copy.toasts.deleteFailed,
       applyOptimistic: () => {
@@ -1910,6 +1947,7 @@ export function ExpensesClient({
     await runOptimisticMutation({
       successTitle: copy.toasts.expenseDeleted,
       successMessage: copy.toasts.deletedSuccessfully,
+      successPresentation: 'check',
       errorTitle: copy.toasts.couldNotDelete,
       errorFallbackMessage: copy.toasts.applyActionFailed,
       applyOptimistic: () => {
@@ -2168,7 +2206,10 @@ export function ExpensesClient({
         />
       ) : null}
       {isMobileAddExpenseOpen ? (
-        <ViewportModal onDismiss={closeMobileComposer} presentation="page">
+        <ViewportModal
+          onDismiss={composerSubmitState === 'idle' ? closeMobileComposer : undefined}
+          presentation="page"
+        >
           <div
             className={`t-modal flex h-full w-full max-w-none flex-col bg-white md:hidden ${
               mobileComposerMotionState === 'open'
@@ -2182,7 +2223,8 @@ export function ExpensesClient({
               <div className="mx-auto flex min-h-11 w-full max-w-[30rem] items-center gap-3">
                 <button
                   aria-label={shared.close}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-40"
+                  disabled={composerSubmitState !== 'idle'}
                   onClick={closeMobileComposer}
                   type="button"
                 >
@@ -2222,6 +2264,7 @@ export function ExpensesClient({
                     onCancel={closeMobileComposer}
                     shared={shared}
                     showCancel={false}
+                    submitState={composerSubmitState}
                     users={users}
                   />
                 </div>
@@ -2290,6 +2333,7 @@ export function ExpensesClient({
                     locale={locale}
                     onCancel={cancelEdit}
                     shared={shared}
+                    submitState={composerSubmitState}
                     users={users}
                   />
                 </div>
@@ -3005,9 +3049,7 @@ export function ExpensesClient({
                     <path d="M18 6 6 18M6 6l12 12" />
                   </svg>
                 )}
-                <span className="truncate">
-                  {submissionToast.message ?? submissionToast.title}
-                </span>
+                <span className="truncate">{submissionToast.message ?? submissionToast.title}</span>
                 <span className="absolute inset-x-0 bottom-0 h-1 bg-black/5">
                   <span
                     className={`submission-toast-progress block h-full ${
