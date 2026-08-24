@@ -24,8 +24,6 @@ import {
 import {
   DEFAULT_CURRENCY_CODE,
   ExpenseForm,
-  getDayFromDateInput,
-  getTodayDateInputValue,
   resolveInstallmentTotalAmountOnEnable,
   supportedCurrencyCodes,
   type SupportedCurrencyCode,
@@ -220,7 +218,6 @@ function useComposerState(form: UseFormReturn<ExpenseForm>, exchangeRates: Excha
   const applyToFuture = useWatch({ control: form.control, name: 'applyToFuture' });
   const fixedEnabled = useWatch({ control: form.control, name: 'fixedEnabled' });
   const nextMonthExpense = useWatch({ control: form.control, name: 'nextMonthExpense' });
-  const date = useWatch({ control: form.control, name: 'date' });
 
   useEffect(() => {
     if (installmentEnabled) {
@@ -320,7 +317,6 @@ function useComposerState(form: UseFormReturn<ExpenseForm>, exchangeRates: Excha
     applyToFuture,
     fixedEnabled,
     nextMonthExpense,
-    date,
     projectedArsAmount,
     installmentPreview,
   };
@@ -336,6 +332,7 @@ interface ComposerFieldsProps {
   exchangeRates: ExchangeRate[];
   editingExpenseId: string | null;
   onCancel: () => void;
+  showCancel?: boolean;
 }
 
 interface ControlledAmountFieldProps {
@@ -416,6 +413,7 @@ export function ExpenseComposerFields({
   exchangeRates,
   editingExpenseId,
   onCancel,
+  showCancel = true,
 }: ComposerFieldsProps) {
   const {
     installmentEnabled,
@@ -694,298 +692,11 @@ export function ExpenseComposerFields({
           </span>
           {editingExpenseId ? copy.form.update : copy.form.add}
         </button>
-        {editingExpenseId ? (
+        {editingExpenseId && showCancel ? (
           <button className={secondaryButtonClass} type="button" onClick={onCancel}>
             {shared.cancel}
           </button>
         ) : null}
-      </div>
-    </>
-  );
-}
-
-const mobileSectionClass =
-  'space-y-3.5 rounded-[24px] border border-slate-300/20 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)]';
-const mobileFieldLabelClass =
-  'mb-1 block text-[12px] font-semibold uppercase tracking-[0.08em] text-slate-500';
-const mobileInputClass =
-  'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
-const mobileToggleRowClass =
-  'flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3 text-sm text-slate-800';
-
-export function MobileExpenseComposerFields({
-  form,
-  copy,
-  shared,
-  locale,
-  categories,
-  users,
-  exchangeRates,
-  editingExpenseId,
-  onCancel,
-}: ComposerFieldsProps) {
-  const {
-    installmentEnabled,
-    installmentEntryMode,
-    currencyCode,
-    fixedEnabled,
-    nextMonthExpense,
-    date,
-    projectedArsAmount,
-    installmentPreview,
-  } = useComposerState(form, exchangeRates);
-  const amountFieldName =
-    installmentEnabled && installmentEntryMode === 'total' ? 'totalAmount' : 'amount';
-  const amountFieldLabel = installmentEnabled
-    ? installmentEntryMode === 'total'
-      ? copy.form.totalAmount
-      : copy.form.perInstallmentAmount
-    : copy.form.amount;
-
-  return (
-    <>
-      <section className={mobileSectionClass}>
-        <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.expenseDetails}</h3>
-
-        <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>{copy.form.date}</span>
-          <input
-            className={`${mobileInputClass} appearance-none [color-scheme:light] [&::-webkit-date-and-time-value]:text-left`}
-            lang="en"
-            type="date"
-            {...form.register('date')}
-          />
-        </label>
-
-        <ExpenseDescriptionField
-          form={form}
-          inputClassName={mobileInputClass}
-          label={copy.form.description}
-          labelClassName={mobileFieldLabelClass}
-        />
-
-        <label className="block text-sm">
-          <span className={mobileFieldLabelClass}>{copy.form.category}</span>
-          <select className={mobileInputClass} {...form.register('categoryId')}>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="grid grid-cols-[8.75rem_minmax(0,1fr)] gap-3">
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.currency}</span>
-            <select className={mobileInputClass} {...form.register('currencyCode')}>
-              {supportedCurrencyCodes.map((code) => (
-                <option key={code} value={code}>
-                  {code}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ControlledAmountField
-            copy={copy}
-            form={form}
-            inputClassName={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-            label={amountFieldLabel}
-            labelClassName={mobileFieldLabelClass}
-            name={amountFieldName}
-          />
-        </div>
-
-        {currencyCode !== 'ARS' ? (
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.fxToArs}</span>
-            <div className="relative">
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-4 inline-flex items-center text-slate-500"
-              >
-                $
-              </span>
-              <input
-                className={`${mobileInputClass} pl-9 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
-                min="0"
-                step="0.000001"
-                type="number"
-                {...form.register('fxRate')}
-              />
-            </div>
-          </label>
-        ) : null}
-
-        {currencyCode !== 'ARS' && projectedArsAmount !== null ? (
-          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-            {copy.form.estimatedArs(formatMoney(projectedArsAmount.toFixed(2), locale))}
-          </div>
-        ) : null}
-
-        <label className="block text-sm">
-          <div className="flex min-h-[50px] items-center justify-between gap-3 rounded-2xl border border-slate-300/20 bg-slate-50/70 px-4 py-3">
-            <div className="min-w-0">
-              <span className="block font-semibold text-slate-900">{copy.form.paidBy}</span>
-              <span className="block text-[13px] leading-4 text-slate-500">
-                {copy.form.whoCovered}
-              </span>
-            </div>
-            <div className="relative shrink-0">
-              <select
-                className="rounded-full border border-slate-300/50 bg-white px-4 py-2 text-[13px] font-bold text-slate-800 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                {...form.register('paidByUserId')}
-              >
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </label>
-      </section>
-
-      <section className={mobileSectionClass}>
-        <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.behavior}</h3>
-        <div className="space-y-2.5">
-          <label className={mobileToggleRowClass}>
-            <span className="font-medium">{copy.form.recurringExpense}</span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={fixedEnabled}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('fixedEnabled', event.target.checked, {
-                    shouldDirty: true,
-                    shouldTouch: true,
-                  });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-
-          <label className={mobileToggleRowClass}>
-            <span className="font-medium">{copy.form.nextMonthExpense}</span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={nextMonthExpense}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('nextMonthExpense', event.target.checked, {
-                    shouldDirty: true,
-                    shouldTouch: true,
-                  });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-
-          <label className={mobileToggleRowClass}>
-            <span className="min-w-0">
-              <span className="block font-medium">{copy.form.installments}</span>
-              <span className="block text-[13px] leading-4 text-slate-500">
-                {copy.form.installmentsHelp}
-              </span>
-            </span>
-            <span className="relative inline-flex items-center">
-              <input
-                checked={installmentEnabled}
-                className="peer sr-only"
-                onChange={(event) => {
-                  form.setValue('installmentEnabled', event.target.checked, {
-                    shouldDirty: true,
-                    shouldTouch: true,
-                  });
-                }}
-                type="checkbox"
-              />
-              <span aria-hidden="true" className={pillToggleTrackClass} />
-              <span aria-hidden="true" className={pillToggleThumbClass} />
-            </span>
-          </label>
-        </div>
-      </section>
-
-      {installmentEnabled ? (
-        <section className={mobileSectionClass}>
-          <h3 className="text-[18px] font-semibold text-slate-900">{copy.form.installmentSetup}</h3>
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.installmentCount}</span>
-            <input
-              className={mobileInputClass}
-              min="2"
-              type="number"
-              {...form.register('installmentCount')}
-            />
-          </label>
-          <label className="block text-sm">
-            <span className={mobileFieldLabelClass}>{copy.form.entryMode}</span>
-            <select className={mobileInputClass} {...form.register('installmentEntryMode')}>
-              <option value="perInstallment">{copy.form.perInstallmentOption}</option>
-              <option value="total">{copy.form.totalAmountOption}</option>
-            </select>
-          </label>
-          {installmentPreview ? (
-            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              {copy.form.installmentPreview(
-                installmentPreview.count,
-                formatMoney(installmentPreview.first, locale),
-                formatMoney(installmentPreview.last, locale),
-                formatMoney(installmentPreview.total, locale),
-              )}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {fixedEnabled ? (
-        <section className="space-y-3 rounded-[24px] border border-indigo-200/30 bg-gradient-to-br from-slate-50 to-indigo-50/50 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-[18px] font-semibold text-slate-900">
-                {copy.form.recurringSchedule}
-              </h3>
-              <p className="text-[14px] leading-5 text-slate-600">
-                {copy.form.repeatsOnDay(getDayFromDateInput(date ?? getTodayDateInputValue()))}
-              </p>
-            </div>
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm">
-              ↺
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">
-              {copy.form.startsThisMonth}
-            </span>
-            <span className="rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-700 shadow-sm">
-              {copy.form.editableLater}
-            </span>
-          </div>
-        </section>
-      ) : null}
-
-      <div className="space-y-2.5">
-        <button
-          className="inline-flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[18px] bg-gradient-to-r from-brand-600 to-violet-500 px-4 py-3 text-base font-extrabold text-white shadow-[0_14px_28px_rgba(99,102,241,0.25)] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-          type="submit"
-        >
-          {editingExpenseId ? copy.form.saveChanges : copy.form.saveExpense}
-        </button>
-        <button
-          className="inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-slate-300/40 bg-white px-4 py-3 text-sm font-bold text-slate-700"
-          onClick={onCancel}
-          type="button"
-        >
-          {shared.cancel}
-        </button>
       </div>
     </>
   );

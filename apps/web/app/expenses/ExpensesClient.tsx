@@ -53,7 +53,7 @@ import {
   tableControlLabelClass,
   tableControlSearchFieldClass,
 } from './expense-styles';
-import { ExpenseComposerFields, MobileExpenseComposerFields } from './ExpenseComposerFields';
+import { ExpenseComposerFields } from './ExpenseComposerFields';
 import {
   createExpenseFormDefaults,
   dateInputValueToMonth,
@@ -74,6 +74,9 @@ type ExpenseTypeFilter = 'all' | ExpenseSectionKey;
 const DEFAULT_SORT_FIELD: ExpenseSortField = 'date';
 const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 const SEARCH_DEBOUNCE_MS = 350;
+const MODAL_CLOSE_DURATION_MS = 150;
+
+type MobileComposerMotionState = 'closed' | 'opening' | 'open' | 'closing';
 
 type ExpensesCopy = Translation['expenses'];
 
@@ -116,11 +119,13 @@ interface ConfirmationDialogState {
 interface SubmissionToastState {
   id: number;
   kind: 'success' | 'error';
+  presentation: 'check' | 'toast';
   title: string;
   message?: string;
 }
 
 const SUBMISSION_TOAST_VISIBLE_MS = 6000;
+const SUCCESS_CHECK_VISIBLE_MS = 2200;
 
 interface ExpensesClientProps {
   currentUserId: string | null;
@@ -134,6 +139,46 @@ interface ExpensesClientProps {
   initialTotalExpensesArs: string;
   initialTotals: ExpenseListResponse['totals'];
   locale: AppLocale;
+}
+
+function AnimatedSuccessCheck({ replayKey }: { replayKey: number }) {
+  const wrapperRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const path = wrapper?.querySelector<SVGPathElement>('svg path');
+    if (!wrapper || !path) {
+      return;
+    }
+
+    const pathLength = Math.ceil(path.getTotalLength());
+    path.style.strokeDasharray = String(pathLength);
+    path.style.strokeDashoffset = String(pathLength);
+    wrapper.dataset.state = 'out';
+    void wrapper.offsetWidth;
+    wrapper.dataset.state = 'in';
+  }, [replayKey]);
+
+  return (
+    <span
+      aria-hidden="true"
+      className="t-success-check shrink-0 rounded-full bg-emerald-50 p-1.5 text-emerald-600"
+      data-state="out"
+      ref={wrapperRef}
+    >
+      <svg
+        className="h-8 w-8"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="3.5"
+        viewBox="0 0 48 48"
+      >
+        <path d="m13 25 8 8 15-18" />
+      </svg>
+    </span>
+  );
 }
 
 const sectionTypeMap: Record<ExpenseSectionKey, 'fixed' | 'oneTime' | 'installment'> = {
@@ -279,7 +324,9 @@ export function ExpensesClient({
   const [selectedExpenseType, setSelectedExpenseType] = useState<ExpenseTypeFilter>('all');
   const [isMoreFiltersOpen, setIsMoreFiltersOpen] = useState(false);
   const hasSearchQuery = searchQuery.trim().length > 0;
-  const [isMobileAddExpenseOpen, setIsMobileAddExpenseOpen] = useState(false);
+  const [mobileComposerMotionState, setMobileComposerMotionState] =
+    useState<MobileComposerMotionState>('closed');
+  const isMobileAddExpenseOpen = mobileComposerMotionState !== 'closed';
   const [openExpenseActionMenuId, setOpenExpenseActionMenuId] = useState<string | null>(null);
   const [sectionOpen, setSectionOpen] = useState<Record<ExpenseSectionKey, boolean>>(
     makeSectionOpenMap(true),
@@ -309,6 +356,8 @@ export function ExpensesClient({
   });
   const fetchBatchSizeRef = useRef(fetchBatchSize);
   const expenseFormRef = useRef<HTMLFormElement | null>(null);
+  const mobileComposerAnimationFrameRef = useRef<number | null>(null);
+  const mobileComposerCloseTimeoutRef = useRef<number | null>(null);
   const moreFiltersRef = useRef<HTMLDivElement | null>(null);
   const mutationTokenRef = useRef(0);
   const materializedMonthRef = useRef<string | null>(null);
@@ -395,10 +444,15 @@ export function ExpensesClient({
       window.clearTimeout(submissionToastTimeoutRef.current);
     }
 
+    const visibleDuration =
+      submissionToast.presentation === 'check'
+        ? SUCCESS_CHECK_VISIBLE_MS
+        : SUBMISSION_TOAST_VISIBLE_MS;
+
     submissionToastTimeoutRef.current = window.setTimeout(() => {
       setSubmissionToast(null);
       submissionToastTimeoutRef.current = null;
-    }, SUBMISSION_TOAST_VISIBLE_MS);
+    }, visibleDuration);
 
     return () => {
       if (submissionToastTimeoutRef.current) {
@@ -923,34 +977,74 @@ export function ExpensesClient({
     [buildInstallmentValues, getCategoryDetails, getUserName, month, toAmountArsString],
   );
 
+  const cancelMobileComposerMotion = useCallback(() => {
+    if (mobileComposerAnimationFrameRef.current !== null) {
+      window.cancelAnimationFrame(mobileComposerAnimationFrameRef.current);
+      mobileComposerAnimationFrameRef.current = null;
+    }
+    if (mobileComposerCloseTimeoutRef.current !== null) {
+      window.clearTimeout(mobileComposerCloseTimeoutRef.current);
+      mobileComposerCloseTimeoutRef.current = null;
+    }
+  }, []);
+
+  const revealMobileComposer = useCallback(() => {
+    cancelMobileComposerMotion();
+    setMobileComposerMotionState('opening');
+    mobileComposerAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      mobileComposerAnimationFrameRef.current = window.requestAnimationFrame(() => {
+        setMobileComposerMotionState('open');
+        mobileComposerAnimationFrameRef.current = null;
+      });
+    });
+  }, [cancelMobileComposerMotion]);
+
   const openMobileComposer = useCallback(() => {
     setEditingExpenseId(null);
     resetForm(sortedActiveCategories[0]?.id ?? '');
-    setIsMobileAddExpenseOpen(true);
-  }, [resetForm, sortedActiveCategories]);
+    revealMobileComposer();
+  }, [resetForm, revealMobileComposer, sortedActiveCategories]);
 
   const closeMobileComposer = useCallback(() => {
-    setEditingExpenseId(null);
-    setIsMobileAddExpenseOpen(false);
-    resetForm(sortedActiveCategories[0]?.id ?? '');
-  }, [resetForm, sortedActiveCategories]);
+    cancelMobileComposerMotion();
+    setMobileComposerMotionState('closing');
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const configuredCloseDuration = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--modal-close-dur'),
+    );
+    const closeDuration = prefersReducedMotion
+      ? 0
+      : configuredCloseDuration || MODAL_CLOSE_DURATION_MS;
+
+    mobileComposerCloseTimeoutRef.current = window.setTimeout(() => {
+      setEditingExpenseId(null);
+      resetForm(sortedActiveCategories[0]?.id ?? '');
+      setMobileComposerMotionState('closed');
+      mobileComposerCloseTimeoutRef.current = null;
+    }, closeDuration);
+  }, [cancelMobileComposerMotion, resetForm, sortedActiveCategories]);
 
   const cancelEdit = useCallback(() => {
+    cancelMobileComposerMotion();
     setEditingExpenseId(null);
     resetForm(sortedActiveCategories[0]?.id ?? '');
-    setIsMobileAddExpenseOpen(false);
-  }, [resetForm, sortedActiveCategories]);
+    setMobileComposerMotionState('closed');
+  }, [cancelMobileComposerMotion, resetForm, sortedActiveCategories]);
 
   const resetExpenseComposer = useCallback(
     (options?: { closeMobile?: boolean }) => {
       setEditingExpenseId(null);
       resetForm(sortedActiveCategories[0]?.id ?? '');
       if (options?.closeMobile ?? true) {
-        setIsMobileAddExpenseOpen(false);
+        cancelMobileComposerMotion();
+        setMobileComposerMotionState('closed');
       }
     },
-    [resetForm, sortedActiveCategories],
+    [cancelMobileComposerMotion, resetForm, sortedActiveCategories],
   );
+
+  useEffect(() => cancelMobileComposerMotion, [cancelMobileComposerMotion]);
 
   // Reconciliation keeps the current ledger interactive by default. Callers must
   // opt into a blocking state only when the currently rendered rows are unusable.
@@ -1440,6 +1534,7 @@ export function ExpensesClient({
     async <T,>(options: {
       successTitle: string;
       successMessage: string;
+      successPresentation?: SubmissionToastState['presentation'];
       errorTitle: string;
       errorFallbackMessage: string;
       applyOptimistic?: () => void;
@@ -1466,6 +1561,7 @@ export function ExpensesClient({
         setSubmissionToast({
           id: Date.now(),
           kind: 'success',
+          presentation: options.successPresentation ?? 'toast',
           title: options.successTitle,
           message: options.successMessage,
         });
@@ -1481,6 +1577,7 @@ export function ExpensesClient({
         setSubmissionToast({
           id: Date.now(),
           kind: 'error',
+          presentation: 'toast',
           title: options.errorTitle,
           message,
         });
@@ -1520,6 +1617,7 @@ export function ExpensesClient({
       await runOptimisticMutation({
         successTitle: copy.toasts.expenseUpdated,
         successMessage: copy.toasts.changesSaved,
+        successPresentation: 'check',
         errorTitle: copy.toasts.couldNotUpdate,
         errorFallbackMessage: copy.toasts.saveFailed,
         applyOptimistic: () => {
@@ -1586,6 +1684,7 @@ export function ExpensesClient({
     await runOptimisticMutation({
       successTitle: copy.toasts.expenseAdded,
       successMessage: copy.toasts.addedSuccessfully,
+      successPresentation: 'check',
       errorTitle: copy.toasts.couldNotAdd,
       errorFallbackMessage: copy.toasts.saveFailed,
       applyOptimistic: () => {
@@ -1632,7 +1731,7 @@ export function ExpensesClient({
   const startEdit = useCallback(
     (expense: Expense) => {
       if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
-        setIsMobileAddExpenseOpen(true);
+        revealMobileComposer();
       }
       setEditingExpenseId(expense.id);
       form.reset({
@@ -1653,7 +1752,7 @@ export function ExpensesClient({
       });
       jumpToExpenseEditor();
     },
-    [form, jumpToExpenseEditor],
+    [form, jumpToExpenseEditor, revealMobileComposer],
   );
 
   const removeExpense = useCallback((expense: Expense) => {
@@ -2070,11 +2169,20 @@ export function ExpensesClient({
       ) : null}
       {isMobileAddExpenseOpen ? (
         <ViewportModal onDismiss={closeMobileComposer} presentation="page">
-          <div className="flex h-full w-full max-w-none flex-col bg-slate-100 md:hidden">
-            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 shadow-[0_1px_0_rgba(226,232,240,0.9)] backdrop-blur">
-              <div className="mx-auto flex w-full max-w-[30rem] items-center justify-between gap-3">
+          <div
+            className={`t-modal flex h-full w-full max-w-none flex-col bg-white md:hidden ${
+              mobileComposerMotionState === 'open'
+                ? 'is-open'
+                : mobileComposerMotionState === 'closing'
+                  ? 'is-closing'
+                  : ''
+            }`}
+          >
+            <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur">
+              <div className="mx-auto flex min-h-11 w-full max-w-[30rem] items-center gap-3">
                 <button
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600"
+                  aria-label={shared.close}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
                   onClick={closeMobileComposer}
                   type="button"
                 >
@@ -2092,17 +2200,19 @@ export function ExpensesClient({
                   </svg>
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="text-lg font-semibold text-slate-900">
+                  <p className="text-base font-semibold leading-5 text-slate-900">
                     {editingExpenseId ? copy.form.editExpense : copy.form.addExpense}
                   </p>
-                  <p className="text-sm text-slate-500">{formatMonthHeading(month, locale)}</p>
+                  <p className="text-xs leading-4 text-slate-500">
+                    {formatMonthHeading(month, locale)}
+                  </p>
                 </div>
               </div>
             </div>
             <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} ref={expenseFormRef}>
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-                <div className="mx-auto flex w-full max-w-[30rem] flex-col gap-4">
-                  <MobileExpenseComposerFields
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div className="mx-auto w-full max-w-[30rem] space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+                  <ExpenseComposerFields
                     categories={sortedActiveCategories}
                     copy={copy}
                     editingExpenseId={editingExpenseId}
@@ -2111,6 +2221,7 @@ export function ExpensesClient({
                     locale={locale}
                     onCancel={closeMobileComposer}
                     shared={shared}
+                    showCancel={false}
                     users={users}
                   />
                 </div>
@@ -2845,55 +2956,73 @@ export function ExpensesClient({
       {submissionToast ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
           <div
+            aria-atomic="true"
             aria-live={submissionToast.kind === 'error' ? 'assertive' : 'polite'}
-            className={`pointer-events-auto relative flex w-full max-w-md items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl ${
-              submissionToast.kind === 'success'
-                ? 'border-emerald-200 bg-white text-emerald-800'
-                : 'border-rose-200 bg-white text-rose-800'
+            className={`pointer-events-auto relative flex items-center gap-3 overflow-hidden rounded-2xl border bg-white shadow-xl ${
+              submissionToast.kind === 'success' && submissionToast.presentation === 'check'
+                ? 'border-emerald-200 px-3 py-2.5 pr-5 text-slate-900'
+                : `w-full max-w-md px-4 py-3 text-sm font-semibold ${
+                    submissionToast.kind === 'success'
+                      ? 'border-emerald-200 text-emerald-800'
+                      : 'border-rose-200 text-rose-800'
+                  }`
             }`}
             role={submissionToast.kind === 'error' ? 'alert' : 'status'}
           >
-            {submissionToast.kind === 'success' ? (
-              <svg
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2.6"
-                viewBox="0 0 24 24"
-              >
-                <path d="m5 13 4 4L19 7" />
-              </svg>
+            {submissionToast.kind === 'success' && submissionToast.presentation === 'check' ? (
+              <>
+                <AnimatedSuccessCheck replayKey={submissionToast.id} />
+                <span className="text-sm font-semibold text-slate-900">
+                  {submissionToast.title}
+                </span>
+              </>
             ) : (
-              <svg
-                aria-hidden="true"
-                className="h-4 w-4 shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2.6"
-                viewBox="0 0 24 24"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            )}
-            <span className="truncate">{submissionToast.message ?? submissionToast.title}</span>
-            <span className="absolute inset-x-0 bottom-0 h-1 bg-black/5">
-              <span
-                className={`submission-toast-progress block h-full ${
-                  submissionToast.kind === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
-                }`}
-                style={
-                  { '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<
-                    string,
-                    string
+              <>
+                {submissionToast.kind === 'success' ? (
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.6"
+                    viewBox="0 0 24 24"
                   >
-                }
-              />
-            </span>
+                    <path d="m5 13 4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg
+                    aria-hidden="true"
+                    className="h-4 w-4 shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2.6"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                )}
+                <span className="truncate">
+                  {submissionToast.message ?? submissionToast.title}
+                </span>
+                <span className="absolute inset-x-0 bottom-0 h-1 bg-black/5">
+                  <span
+                    className={`submission-toast-progress block h-full ${
+                      submissionToast.kind === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+                    }`}
+                    style={
+                      { '--toast-duration': `${SUBMISSION_TOAST_VISIBLE_MS}ms` } as Record<
+                        string,
+                        string
+                      >
+                    }
+                  />
+                </span>
+              </>
+            )}
           </div>
         </div>
       ) : null}
