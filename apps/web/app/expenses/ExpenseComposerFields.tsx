@@ -448,7 +448,7 @@ export function ExpenseComposerFields({
         : submitLabel;
 
   return (
-    <fieldset className="contents" disabled={submitState !== 'idle'}>
+    <fieldset className="min-w-0 space-y-4" disabled={submitState !== 'idle'}>
       {installmentEnabled && installmentEntryMode === 'total' ? (
         <ControlledAmountField
           copy={copy}
