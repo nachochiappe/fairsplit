@@ -670,6 +670,7 @@ export function SettingsClient({
   return (
     <AppShell
       compact
+      mobileTitle={t(resolvedLocale).nav.settings}
       month={month}
       title={copy.shellTitle}
       subtitle={copy.shellSubtitle}

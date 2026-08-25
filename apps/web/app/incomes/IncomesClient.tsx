@@ -532,8 +532,9 @@ export function IncomesClient({
     <AppShell
       compact
       locale={locale}
+      mobileTitle={t(locale).nav.incomes}
       month={month}
-      rightSlot={<MonthSelector locale={locale} month={month} />}
+      rightSlot={<MonthSelector locale={locale} month={month} mobileCompact />}
       subtitle={copy.subtitle}
       title={copy.title}
       unframed

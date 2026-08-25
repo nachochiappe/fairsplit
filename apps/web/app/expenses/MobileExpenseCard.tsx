@@ -70,24 +70,49 @@ function MobileExpenseCardComponent({
   const showKindChip = Boolean(expense.installment);
 
   return (
-    <article className="relative rounded-[1.25rem] border border-slate-200 bg-white p-4 shadow-[0_2px_6px_rgba(15,23,42,0.04)]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+    <article className="relative bg-white px-3 py-3.5">
+      <div className="flex min-h-11 items-center justify-between gap-2">
+        <span
+          aria-hidden="true"
+          className="h-8 w-1 shrink-0 rounded-full"
+          style={{ backgroundColor: expense.superCategoryColor ?? '#64748b' }}
+        />
+        <div className="min-w-0 flex-1 pl-1">
           <p
             className="truncate text-sm font-semibold leading-tight text-ink-strong"
             title={expense.description}
           >
             {expense.description}
           </p>
-          <p className="mt-1 text-xs font-medium uppercase tracking-[0.08em] text-ink-soft">
-            {formatMobileExpenseDate(expense.date, locale)}
-          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-ink-soft">
+            <span className="shrink-0 font-medium uppercase tracking-[0.06em]">
+              {formatMobileExpenseDate(expense.date, locale)}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span className="truncate">{expense.categoryName}</span>
+            <span aria-hidden="true">·</span>
+            <span className="truncate">{expense.paidByUserName}</span>
+          </div>
+          {showKindChip ? (
+            <span className="mt-1.5 inline-flex items-center whitespace-nowrap rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700">
+              {getExpenseKindLabel(copy.expenses, expense)}
+            </span>
+          ) : null}
+          {expense.currencyCode !== 'ARS' ? (
+            <p className="mt-1 text-xs text-slate-600">
+              {copy.expenses.originalAmount(
+                expense.currencyCode,
+                formatMoney(expense.amountOriginal, locale),
+                formatFxRate(expense.fxRateUsed),
+              )}
+            </p>
+          ) : null}
         </div>
 
-        <div className="flex shrink-0 items-start gap-2">
+        <div className="flex shrink-0 items-center gap-1">
           <p
             aria-hidden={isOpen}
-            className={`pt-2 text-lg font-bold leading-none tabular-nums text-ink-strong transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] ${
+            className={`text-sm font-bold leading-none tabular-nums text-ink-strong transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.25,1,0.5,1)] ${
               isOpen ? '-translate-x-4 opacity-0' : 'translate-x-0 opacity-100'
             }`}
           >
@@ -104,30 +129,6 @@ function MobileExpenseCardComponent({
           />
         </div>
       </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {showKindChip ? (
-          <span className="inline-flex items-center whitespace-nowrap rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
-            {getExpenseKindLabel(copy.expenses, expense)}
-          </span>
-        ) : null}
-        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-          {expense.categoryName}
-        </span>
-        <span className="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-          {expense.paidByUserName}
-        </span>
-      </div>
-
-      {expense.currencyCode !== 'ARS' ? (
-        <p className="mt-3 text-xs text-slate-600">
-          {copy.expenses.originalAmount(
-            expense.currencyCode,
-            formatMoney(expense.amountOriginal, locale),
-            formatFxRate(expense.fxRateUsed),
-          )}
-        </p>
-      ) : null}
     </article>
   );
 }

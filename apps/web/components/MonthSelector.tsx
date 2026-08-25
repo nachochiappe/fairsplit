@@ -10,9 +10,10 @@ import { t } from '../lib/i18n';
 interface MonthSelectorProps {
   month: string;
   locale: AppLocale;
+  mobileCompact?: boolean;
 }
 
-export function MonthSelector({ month, locale }: MonthSelectorProps) {
+export function MonthSelector({ month, locale, mobileCompact = false }: MonthSelectorProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -41,25 +42,38 @@ export function MonthSelector({ month, locale }: MonthSelectorProps) {
   return (
     <label
       aria-busy={isPending}
-      className="flex w-full flex-col items-start gap-1.5 text-sm font-medium text-ink-base sm:w-auto sm:flex-row sm:items-center sm:gap-3"
+      className={`flex w-full flex-col text-sm font-medium text-ink-base sm:w-auto sm:flex-row sm:items-center sm:gap-3 ${mobileCompact ? 'gap-0' : 'items-start gap-1.5'}`}
     >
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft">{copy.month.label}</span>
-      <div className="flex w-full items-center gap-2 sm:w-auto">
+      <span
+        className={`text-xs font-semibold uppercase tracking-[0.16em] text-ink-soft ${mobileCompact ? 'hidden md:inline' : ''}`}
+      >
+        {copy.month.label}
+      </span>
+      <div
+        className={`flex w-full items-center gap-2 sm:w-auto ${mobileCompact ? 'justify-between' : ''}`}
+      >
         <button
           aria-label={copy.month.previous}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stroke bg-surface text-ink-base shadow-sm transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-ink-base transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${mobileCompact ? 'md:border md:border-stroke md:bg-surface md:shadow-sm' : 'border border-stroke bg-surface shadow-sm'}`}
           disabled={isPending}
           type="button"
           onClick={() => onMonthChange(addMonths(month, -1))}
         >
-          <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <svg
+            aria-hidden="true"
+            className="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
             <path d="M12.5 4.5L7 10l5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         <input
           aria-label={copy.month.select}
           autoComplete="off"
-          className="min-h-11 w-full rounded-xl border border-stroke bg-surface px-4 py-2.5 text-base font-medium leading-tight text-ink-base shadow-sm [color-scheme:light] [&::-webkit-date-and-time-value]:text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+          className={`min-h-11 w-full rounded-xl px-3 py-2.5 text-center text-base font-semibold leading-tight text-ink-strong [color-scheme:light] [&::-webkit-date-and-time-value]:text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto ${mobileCompact ? 'max-w-[12rem] border-0 bg-transparent shadow-none md:border md:border-stroke md:bg-surface md:px-4 md:text-left md:font-medium md:text-ink-base md:shadow-sm md:[&::-webkit-date-and-time-value]:text-left' : 'border border-stroke bg-surface px-4 font-medium text-ink-base shadow-sm [&::-webkit-date-and-time-value]:text-left'}`}
           disabled={isPending}
           lang="en"
           name="month"
@@ -69,18 +83,28 @@ export function MonthSelector({ month, locale }: MonthSelectorProps) {
         />
         <button
           aria-label={copy.month.next}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-stroke bg-surface text-ink-base shadow-sm transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+          className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-ink-base transition hover:bg-surface-muted disabled:cursor-wait disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${mobileCompact ? 'md:border md:border-stroke md:bg-surface md:shadow-sm' : 'border border-stroke bg-surface shadow-sm'}`}
           disabled={isPending}
           type="button"
           onClick={() => onMonthChange(addMonths(month, 1))}
         >
-          <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <svg
+            aria-hidden="true"
+            className="h-5 w-5"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
             <path d="M7.5 4.5L13 10l-5.5 5.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
       </div>
       {isPending ? (
-        <span aria-live="polite" className="inline-flex items-center gap-2 text-xs font-medium text-ink-soft">
+        <span
+          aria-live="polite"
+          className="inline-flex items-center gap-2 text-xs font-medium text-ink-soft"
+        >
           <span
             aria-hidden="true"
             className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-stroke border-t-brand-700"
