@@ -19,6 +19,11 @@ export const metadata: Metadata = {
   },
   description: 'Fairsplit helps couples track monthly incomes, expenses, and settlement transfers.',
   applicationName: 'Fairsplit',
+  appleWebApp: {
+    capable: true,
+    title: 'Fairsplit',
+    statusBarStyle: 'default',
+  },
   icons: {
     icon: [
       { url: '/favicon.ico', type: 'image/x-icon' },
