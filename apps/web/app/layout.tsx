@@ -10,6 +10,14 @@ const geist = localFont({
 });
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+const siteDescription = 'Fairly split household expenses and understand where you stand.';
+const socialTitle = 'Fairsplit — Shared expenses, made fair.';
+const socialImage = {
+  url: '/branding/og-fairsplit.png',
+  width: 1200,
+  height: 630,
+  alt: socialTitle,
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
@@ -17,8 +25,22 @@ export const metadata: Metadata = {
     default: 'Fairsplit',
     template: '%s | Fairsplit',
   },
-  description: 'Fairsplit helps couples track monthly incomes, expenses, and settlement transfers.',
+  description: siteDescription,
   applicationName: 'Fairsplit',
+  openGraph: {
+    type: 'website',
+    url: '/',
+    siteName: 'Fairsplit',
+    title: socialTitle,
+    description: siteDescription,
+    images: [socialImage],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: socialTitle,
+    description: siteDescription,
+    images: [socialImage],
+  },
   appleWebApp: {
     capable: true,
     title: 'Fairsplit',
