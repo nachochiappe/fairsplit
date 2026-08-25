@@ -172,12 +172,12 @@ function DashboardClientContent({
         ) : null}
         <section className="grid gap-5 md:grid-cols-3">
           <MetricCard
-            label={copy.totalIncome}
-            value={formatMoney(settlement.totalIncome, locale)}
-          />
-          <MetricCard
             label={copy.totalExpenses}
             value={formatMoney(settlement.totalExpenses, locale)}
+          />
+          <MetricCard
+            label={copy.totalIncome}
+            value={formatMoney(settlement.totalIncome, locale)}
           />
           <MetricCard
             label={copy.expenseRatio}
@@ -185,31 +185,27 @@ function DashboardClientContent({
           />
         </section>
 
-        <section className="overflow-hidden rounded-2xl border border-stroke/80 bg-surface shadow-sm">
-          <div className="border-b border-stroke/60 p-6 md:p-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-ink-strong">{copy.expensesByCategory}</h2>
-                <p className="mt-1 text-sm text-ink-muted">{copy.categoryDistribution}</p>
-              </div>
-              <button
-                aria-controls="expense-category-chart-content"
-                aria-expanded={isCategoryChartExpanded}
-                className="min-h-11 rounded-lg border border-stroke px-3 py-2 text-sm font-medium text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                type="button"
-                onClick={() => setIsCategoryChartExpanded((current) => !current)}
-              >
-                <span className="truncate">
-                  {isCategoryChartExpanded ? copy.hideChart : copy.showChart}
-                </span>
-              </button>
+        <section className="rounded-3xl border border-brand-100 bg-surface-soft px-6 py-7 shadow-sm md:px-9">
+          <h2 className="text-sm font-semibold text-brand-700">{copy.settlement}</h2>
+          {settlement.transfer ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-2xl font-semibold leading-snug text-ink-strong md:text-3xl">
+                {copy.transferSentence(
+                  usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId,
+                  formatMoney(settlement.transfer.amount, locale),
+                  usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId,
+                )}
+              </p>
+              <p className="text-sm text-ink-muted">{copy.transferBalances}</p>
             </div>
-          </div>
-          {isCategoryChartExpanded ? (
-            <div className="p-6 md:p-8" id="expense-category-chart-content">
-              <CategoryPieChart locale={locale} slices={expenseCategorySlices} />
+          ) : (
+            <div className="mt-3 space-y-2">
+              <p className="text-2xl font-semibold text-ink-strong md:text-3xl">
+                {copy.noTransferNeeded}
+              </p>
+              <p className="text-sm text-ink-muted">{copy.alreadyBalanced}</p>
             </div>
-          ) : null}
+          )}
         </section>
 
         <section className="rounded-2xl border border-stroke/80 bg-surface shadow-sm">
@@ -359,29 +355,31 @@ function DashboardClientContent({
           </div>
         </section>
 
-        <section className="rounded-3xl border border-brand-200 bg-brand-50 px-6 py-7 shadow-sm md:px-9">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-700">
-            {copy.settlement}
-          </h2>
-          {settlement.transfer ? (
-            <div className="mt-3 space-y-2">
-              <p className="text-2xl font-semibold leading-snug text-ink-strong md:text-3xl">
-                {copy.transferSentence(
-                  usersById[settlement.transfer.fromUserId]?.name ?? settlement.transfer.fromUserId,
-                  formatMoney(settlement.transfer.amount, locale),
-                  usersById[settlement.transfer.toUserId]?.name ?? settlement.transfer.toUserId,
-                )}
-              </p>
-              <p className="text-sm text-ink-muted">{copy.transferBalances}</p>
+        <section className="overflow-hidden rounded-2xl border border-stroke/80 bg-surface shadow-sm">
+          <div className="border-b border-stroke/60 p-6 md:p-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-ink-strong">{copy.expensesByCategory}</h2>
+                <p className="mt-1 text-sm text-ink-muted">{copy.categoryDistribution}</p>
+              </div>
+              <button
+                aria-controls="expense-category-chart-content"
+                aria-expanded={isCategoryChartExpanded}
+                className="min-h-11 rounded-lg border border-stroke px-3 py-2 text-sm font-medium text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                type="button"
+                onClick={() => setIsCategoryChartExpanded((current) => !current)}
+              >
+                <span className="truncate">
+                  {isCategoryChartExpanded ? copy.hideChart : copy.showChart}
+                </span>
+              </button>
             </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              <p className="text-2xl font-semibold text-ink-strong md:text-3xl">
-                {copy.noTransferNeeded}
-              </p>
-              <p className="text-sm text-ink-muted">{copy.alreadyBalanced}</p>
+          </div>
+          {isCategoryChartExpanded ? (
+            <div className="p-6 md:p-8" id="expense-category-chart-content">
+              <CategoryPieChart locale={locale} slices={expenseCategorySlices} />
             </div>
-          )}
+          ) : null}
         </section>
       </div>
     </main>
@@ -466,43 +464,9 @@ function CategoryPieChart({
       percentage: total === 0 ? 0 : (slice.totalArs / total) * 100,
     };
   });
-  const topSegments = [...segments]
-    .sort((left, right) => right.totalArs - left.totalArs)
-    .slice(0, 3);
-  const leadSegment = topSegments[0];
-  const chartSummary = leadSegment
-    ? copy.chartSummary(leadSegment.categoryName, leadSegment.percentage.toFixed(1))
-    : copy.fallbackChartSummary;
-
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
-        <div className="rounded-xl border border-stroke/60 bg-surface-muted/60 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">
-            {copy.chartSummaryLabel}
-          </p>
-          <p className="mt-2 text-sm leading-6 text-ink-base">{chartSummary}</p>
-          <ol className="mt-3 space-y-2">
-            {topSegments.map((segment, index) => (
-              <li
-                key={segment.categoryName}
-                className="flex items-start justify-between gap-3 text-sm"
-              >
-                <div>
-                  <p className="font-semibold text-ink-strong">
-                    {index + 1}. {segment.categoryName}
-                  </p>
-                  <p className="text-ink-muted">
-                    {copy.amountSpent(formatMoney(segment.totalArs, locale))}
-                  </p>
-                </div>
-                <span className="shrink-0 font-semibold tabular-nums text-ink-strong">
-                  {segment.percentage.toFixed(1)}%
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
         <div className="relative mx-auto w-full max-w-[320px]">
           <svg
             aria-describedby="expense-category-chart-summary"
