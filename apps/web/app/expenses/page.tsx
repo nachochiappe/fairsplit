@@ -116,7 +116,7 @@ async function ExpensesPageContent({ searchParams }: ExpensesPageProps) {
 
 async function getExpensesPageData(month: string) {
   'use cache: private';
-  cacheLife({ stale: 30, revalidate: 30, expire: 60 });
+  cacheLife({ stale: 300, revalidate: 300, expire: 600 });
 
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = await verifySessionCookieToken(sessionToken);
