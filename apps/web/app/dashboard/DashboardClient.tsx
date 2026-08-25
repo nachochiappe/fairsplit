@@ -118,7 +118,7 @@ function DashboardClientContent({
   return (
     <main
       id="main-content"
-      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-3 md:px-6 md:pb-10 md:pt-7"
+      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-[var(--mobile-nav-clearance)] pt-3 md:px-6 md:pb-10 md:pt-7"
     >
       <header className="mb-3 md:mb-5 md:rounded-3xl md:border md:border-stroke/80 md:bg-surface md:px-6 md:py-4 md:shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">

@@ -67,7 +67,7 @@ function AppShellContent({
   return (
     <main
       id="main-content"
-      className={`mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 md:px-6 md:pb-10 ${compact ? 'pt-3 md:pt-7' : 'pt-8 md:pt-10'}`}
+      className={`mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-[var(--mobile-nav-clearance)] md:px-6 md:pb-10 ${compact ? 'pt-3 md:pt-7' : 'pt-8 md:pt-10'}`}
     >
       <header
         className={`${
