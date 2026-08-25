@@ -118,25 +118,28 @@ function DashboardClientContent({
   return (
     <main
       id="main-content"
-      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-5 md:px-6 md:pb-10 md:pt-7"
+      className="mx-auto min-h-screen w-full max-w-[1400px] px-4 pb-28 pt-3 md:px-6 md:pb-10 md:pt-7"
     >
-      <header className="mb-5 rounded-3xl border border-stroke/80 bg-surface px-4 py-4 shadow-sm md:px-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <TitleMark className="h-10 w-10 shrink-0 rounded-xl" />
+      <header className="mb-3 md:mb-5 md:rounded-3xl md:border md:border-stroke/80 md:bg-surface md:px-6 md:py-4 md:shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <TitleMark className="h-9 w-9 shrink-0 rounded-xl md:h-10 md:w-10" />
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-700">
                 Fairsplit
               </p>
-              <div className="mt-1 md:flex md:items-baseline md:gap-3">
-                <h1 className="text-2xl font-bold tracking-tight text-ink-strong md:text-3xl">
-                  {copy.title}
+              <div className="md:mt-1 md:flex md:items-baseline md:gap-3">
+                <h1 className="text-xl font-bold tracking-tight text-ink-strong md:text-3xl">
+                  <span className="md:hidden">{t(locale).nav.dashboard}</span>
+                  <span className="hidden md:inline">{copy.title}</span>
                 </h1>
-                <p className="mt-1 max-w-2xl text-sm text-ink-muted md:mt-0">{copy.subtitle}</p>
+                <p className="hidden max-w-2xl text-sm text-ink-muted md:mt-0 md:block">
+                  {copy.subtitle}
+                </p>
               </div>
             </div>
           </div>
-          <MonthSelector month={month} locale={locale} />
+          <MonthSelector month={month} locale={locale} mobileCompact />
         </div>
       </header>
 
