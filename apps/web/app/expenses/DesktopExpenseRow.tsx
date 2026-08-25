@@ -42,7 +42,7 @@ function DesktopExpenseRowComponent({
   onDelete,
 }: DesktopExpenseRowProps) {
   return (
-    <tr className="hover:bg-slate-50/80">
+    <tr className="group hover:bg-slate-50/80">
       <td className="whitespace-nowrap px-4 py-3">{expense.date}</td>
       <td className="px-4 py-3">
         <div className="truncate font-medium text-slate-900" title={expense.description}>
