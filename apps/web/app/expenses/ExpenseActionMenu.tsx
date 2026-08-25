@@ -145,10 +145,10 @@ function ExpenseActionMenuComponent({
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-label={copy.expenses.openActions}
-        className={`expense-action-trigger absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full border text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:h-9 md:w-9 ${
+        className={`expense-action-trigger absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full border text-slate-500 transition-opacity duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:h-9 md:w-9 ${
           isOpen
-            ? '-translate-x-[132px] border-transparent bg-transparent shadow-none md:-translate-x-[108px]'
-            : 'translate-x-0 border-transparent bg-transparent shadow-none hover:bg-slate-100 hover:text-slate-700 md:border-slate-200 md:bg-white md:shadow-sm md:hover:border-slate-300 md:hover:bg-slate-50'
+            ? '-translate-x-[132px] border-transparent bg-transparent opacity-100 shadow-none md:-translate-x-[108px]'
+            : 'translate-x-0 border-transparent bg-transparent opacity-100 shadow-none hover:bg-slate-100 hover:text-slate-700 md:border-slate-200 md:bg-white md:opacity-0 md:shadow-sm md:hover:border-slate-300 md:hover:bg-slate-50 md:group-hover:opacity-100 md:focus-visible:opacity-100'
         }`}
         onClick={() => onOpenChange(expense, !isOpen)}
         type="button"
