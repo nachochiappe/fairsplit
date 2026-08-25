@@ -15,7 +15,7 @@ export interface ExpenseActionMenuProps {
 }
 
 const actionButtonClass =
-  'expense-action-button absolute right-0 top-0 inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2';
+  'expense-action-button absolute right-0 top-0 inline-flex h-11 w-11 items-center justify-center rounded-full text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:h-9 md:w-9';
 
 function ExpenseActionMenuComponent({
   expense,
@@ -36,19 +36,19 @@ function ExpenseActionMenuComponent({
 
   return (
     <div
-      className={`relative inline-flex h-9 w-9 shrink-0 justify-end ${isOpen ? 'z-20' : 'z-0'}`}
+      className={`relative inline-flex h-11 w-11 shrink-0 justify-end md:h-9 md:w-9 ${isOpen ? 'z-20' : 'z-0'}`}
       data-expense-actions
     >
       <span
         aria-hidden="true"
-        className={`absolute right-0 top-0 h-9 w-36 origin-right rounded-full border border-slate-200 bg-slate-50/95 shadow-[0_8px_20px_rgba(15,23,42,0.08)] transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`absolute right-0 top-0 h-11 w-44 origin-right rounded-full border border-slate-200 bg-slate-50/95 shadow-[0_8px_20px_rgba(15,23,42,0.08)] transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] md:h-9 md:w-36 ${
           isOpen ? 'scale-x-100 opacity-100' : 'scale-x-25 opacity-0'
         }`}
       />
 
       <div
         aria-hidden={!isOpen}
-        className="absolute right-0 top-0 h-9 w-36"
+        className="absolute right-0 top-0 h-11 w-44 md:h-9 md:w-36"
         id={menuId}
         role="menu"
       >
@@ -56,7 +56,7 @@ function ExpenseActionMenuComponent({
           aria-label={copy.common.edit}
           className={`${actionButtonClass} hover:bg-white hover:text-brand-700 ${
             isOpen
-              ? '-translate-x-[72px] scale-100 opacity-100 delay-[35ms]'
+              ? '-translate-x-[88px] scale-100 opacity-100 delay-[35ms] md:-translate-x-[72px]'
               : 'translate-x-0 scale-75 opacity-0 delay-0'
           }`}
           data-label={copy.common.edit}
@@ -84,7 +84,7 @@ function ExpenseActionMenuComponent({
           aria-label={copy.common.clone}
           className={`${actionButtonClass} hover:bg-white hover:text-brand-700 ${
             isOpen
-              ? '-translate-x-9 scale-100 opacity-100 delay-[65ms]'
+              ? '-translate-x-11 scale-100 opacity-100 delay-[65ms] md:-translate-x-9'
               : 'translate-x-0 scale-75 opacity-0 delay-0'
           }`}
           data-label={copy.common.clone}
@@ -145,10 +145,10 @@ function ExpenseActionMenuComponent({
         aria-expanded={isOpen}
         aria-haspopup="menu"
         aria-label={copy.expenses.openActions}
-        className={`expense-action-trigger absolute right-0 top-0 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 ${
+        className={`expense-action-trigger absolute right-0 top-0 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full border text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:h-9 md:w-9 ${
           isOpen
-            ? '-translate-x-[108px] border-transparent bg-transparent shadow-none'
-            : 'translate-x-0 border-slate-200 bg-white shadow-sm hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700'
+            ? '-translate-x-[132px] border-transparent bg-transparent shadow-none md:-translate-x-[108px]'
+            : 'translate-x-0 border-transparent bg-transparent shadow-none hover:bg-slate-100 hover:text-slate-700 md:border-slate-200 md:bg-white md:shadow-sm md:hover:border-slate-300 md:hover:bg-slate-50'
         }`}
         onClick={() => onOpenChange(expense, !isOpen)}
         type="button"

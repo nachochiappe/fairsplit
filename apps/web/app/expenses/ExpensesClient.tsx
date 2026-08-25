@@ -2164,9 +2164,10 @@ export function ExpensesClient({
       compact
       month={month}
       title={copy.title}
+      mobileTitle={t(locale).nav.expenses}
       subtitle={copy.subtitle}
       locale={locale}
-      rightSlot={<MonthSelector month={month} locale={locale} />}
+      rightSlot={<MonthSelector month={month} locale={locale} mobileCompact />}
       unframed
     >
       {scopeDialog ? (
@@ -2273,7 +2274,7 @@ export function ExpensesClient({
           </div>
         </ViewportModal>
       ) : null}
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">{copy.warningsHeading}</p>
@@ -2294,15 +2295,14 @@ export function ExpensesClient({
           </div>
         ) : null}
 
-        <section className="rounded-[1.75rem] border border-brand-100 bg-white p-5 shadow-sm md:p-6 lg:hidden">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-700">
-            {copy.thisMonth}
-          </p>
-          <p className="mt-1 text-base font-semibold text-ink-muted">
+        <section className="rounded-2xl border border-brand-100 bg-white px-4 py-3.5 md:rounded-[1.75rem] md:p-6 lg:hidden">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-700">
             {copy.totalCombinedExpenses}
           </p>
-          <p className="mt-3 text-[clamp(2rem,10vw,3.25rem)] font-bold leading-none tracking-[-0.04em] text-ink-strong tabular-nums">
-            <span className="mr-2 text-sm font-bold tracking-normal text-ink-soft">ARS</span>
+          <p className="mt-1.5 text-[clamp(1.75rem,8vw,2.5rem)] font-bold leading-none tracking-[-0.03em] text-ink-strong tabular-nums md:mt-3 md:text-[clamp(2rem,7vw,3.25rem)]">
+            <span className="mr-1.5 text-xs font-bold tracking-normal text-ink-soft md:mr-2 md:text-sm">
+              ARS
+            </span>
             {formatMoney(totalCombinedExpensesArs, locale)}
           </p>
         </section>
@@ -2360,7 +2360,7 @@ export function ExpensesClient({
             </section>
             <section className="min-w-0 space-y-4">
               <div
-                className="relative rounded-[1.5rem] border border-stroke bg-white px-3 py-3 shadow-sm md:px-4 md:py-4"
+                className="relative md:rounded-[1.5rem] md:border md:border-stroke md:bg-white md:px-4 md:py-4 md:shadow-sm"
                 ref={moreFiltersRef}
               >
                 <div className="flex min-w-0 items-center gap-2 md:gap-3">
@@ -2382,7 +2382,7 @@ export function ExpensesClient({
                       aria-label={copy.searchExpenses}
                       className={`${tableControlSearchFieldClass} min-h-11 pl-10 placeholder:text-xs md:placeholder:text-sm ${hasSearchQuery ? '!bg-white' : '!border-slate-200 !bg-slate-50'}`}
                       onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder={copy.searchPlaceholderDesktop}
+                      placeholder={copy.searchPlaceholderMobile}
                       type="search"
                       value={searchQuery}
                     />
@@ -2619,19 +2619,21 @@ export function ExpensesClient({
                   </div>
                 ) : null}
               </div>
-              <div className="space-y-5 rounded-[1.75rem] border border-stroke bg-white p-4 shadow-sm md:p-5">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
+              <div className="space-y-3 md:space-y-5 md:rounded-[1.75rem] md:border md:border-stroke md:bg-white md:p-5 md:shadow-sm">
+                <div className="flex flex-wrap items-center justify-end gap-3 px-0.5 md:items-end md:justify-between md:px-0">
+                  <div className="hidden md:block">
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-brand-700">
                       {formatMonthHeading(month, locale)}
                     </p>
-                    <h2 className="mt-1 text-xl font-bold text-ink-strong">{copy.ledgerHeading}</h2>
+                    <h2 className="text-lg font-bold text-ink-strong md:mt-1 md:text-xl">
+                      {copy.ledgerHeading}
+                    </h2>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-ink-muted">
                       {copy.showingLoaded(visibleExpenseCount)}
                     </p>
-                    <p className="mt-0.5 text-xs text-ink-soft">
+                    <p className="mt-0.5 hidden text-xs text-ink-soft md:block">
                       {copy.filteredSubtotal(formatMoney(visibleFilteredSubtotalArs, locale))}
                     </p>
                   </div>
@@ -2640,13 +2642,13 @@ export function ExpensesClient({
                   <section
                     key={section.key}
                     aria-busy={sectionLoading[section.key]}
-                    className="rounded-[1.35rem] border border-slate-200/80"
+                    className={`${visibleExpenseCount > 0 && section.totalRows === 0 && selectedExpenseType === 'all' ? 'hidden md:block' : ''} overflow-hidden rounded-2xl border border-slate-200/80 md:rounded-[1.35rem]`}
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-t-[1.35rem] border-b border-slate-200 bg-surface-muted px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-surface-muted px-3 py-2.5 md:gap-3 md:rounded-t-[1.35rem] md:px-4 md:py-3">
                       <div className="flex items-center gap-3">
                         <span
                           aria-hidden="true"
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-xl ${
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg md:h-9 md:w-9 md:rounded-xl ${
                             section.key === 'fixed'
                               ? 'bg-blue-100 text-blue-700'
                               : section.key === 'oneTime'
@@ -2720,7 +2722,7 @@ export function ExpensesClient({
                               ? copy.collapseSection(section.title)
                               : copy.expandSection(section.title)
                           }
-                          className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-slate-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 md:min-h-10 md:min-w-0 md:border md:border-slate-200 md:bg-white md:px-3 md:py-2"
                           onClick={() =>
                             setSectionOpen((previous) => ({
                               ...previous,
@@ -2779,7 +2781,7 @@ export function ExpensesClient({
                           </div>
                         ) : null}
                         <div
-                          className={`space-y-3 p-3 md:hidden ${sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'}`}
+                          className={`divide-y divide-slate-100 md:hidden ${sectionLoading[section.key] ? 'opacity-60' : 'opacity-100'}`}
                         >
                           {section.rows.map((expense) => (
                             <MobileExpenseCard
@@ -2815,7 +2817,7 @@ export function ExpensesClient({
                               <col className="w-[20%]" />
                               <col className="w-[10%]" />
                             </colgroup>
-                            <thead className="bg-surface-muted text-left text-[11px] uppercase tracking-[0.12em] text-ink-soft">
+                            <thead className="bg-surface-muted text-left text-xs uppercase tracking-[0.12em] text-ink-soft">
                               <tr>
                                 {sortableColumns.map((column) => {
                                   const isActive = sortField === column.field;
@@ -2980,7 +2982,7 @@ export function ExpensesClient({
       {!isMobileAddExpenseOpen && !isMoreFiltersOpen ? (
         <button
           aria-label={copy.form.addExpense}
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+6.75rem)] right-5 z-30 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-[0_12px_28px_rgba(37,99,235,0.35)] transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 active:translate-y-0.5 md:hidden"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+4.25rem)] left-1/2 z-50 inline-flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full bg-brand-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.34)] transition hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 active:translate-y-0.5 md:hidden"
           onClick={openMobileComposer}
           type="button"
         >
