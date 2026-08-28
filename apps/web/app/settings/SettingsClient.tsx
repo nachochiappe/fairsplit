@@ -1,7 +1,17 @@
 'use client';
 
 import { inferCategoryIcon, type CategoryIconKey } from '@fairsplit/shared';
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
+import {
+  FormEvent,
+  KeyboardEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -67,6 +77,188 @@ type SuperCategoryArchiveDialogState = {
 type CategoryArchiveDialogState = {
   category: Category;
 };
+
+type SettingsTabId = 'profile' | 'household' | 'split-policy' | 'categories' | 'security';
+const SETTINGS_TAB_IDS: SettingsTabId[] = [
+  'profile',
+  'household',
+  'split-policy',
+  'categories',
+  'security',
+];
+
+interface SettingsTab {
+  id: SettingsTabId;
+  label: string;
+}
+
+function SettingsTabs({
+  activeTab,
+  label,
+  onChange,
+  tabs,
+}: {
+  activeTab: SettingsTabId;
+  label: string;
+  onChange: (tab: SettingsTabId) => void;
+  tabs: SettingsTab[];
+}) {
+  const pillRef = useRef<HTMLSpanElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef(new Map<SettingsTabId, HTMLButtonElement>());
+  const activeTabRef = useRef(activeTab);
+  const hasPositionedPill = useRef(false);
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
+
+  const positionPill = useCallback((tabId: SettingsTabId, animate: boolean) => {
+    const pill = pillRef.current;
+    const tab = tabRefs.current.get(tabId);
+    if (!pill || !tab) {
+      return;
+    }
+
+    if (!animate) {
+      pill.style.transition = 'none';
+    }
+    pill.style.width = `${tab.offsetWidth}px`;
+    pill.style.transform = `translateX(${tab.offsetLeft}px)`;
+
+    if (!animate) {
+      void pill.offsetWidth;
+      pill.style.removeProperty('transition');
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    activeTabRef.current = activeTab;
+    positionPill(activeTab, hasPositionedPill.current);
+    hasPositionedPill.current = true;
+  }, [activeTab, positionPill]);
+
+  useEffect(() => {
+    const scrollViewport = scrollViewportRef.current;
+    const tabList = tabListRef.current;
+    if (!scrollViewport || !tabList) {
+      return;
+    }
+
+    const updateScrollEdges = () => {
+      const maxScrollLeft = scrollViewport.scrollWidth - scrollViewport.clientWidth;
+      const nextEdges = {
+        left: scrollViewport.scrollLeft > 1,
+        right: scrollViewport.scrollLeft < maxScrollLeft - 1,
+      };
+      setScrollEdges((current) =>
+        current.left === nextEdges.left && current.right === nextEdges.right ? current : nextEdges,
+      );
+    };
+    const updateLayout = () => {
+      positionPill(activeTabRef.current, false);
+      updateScrollEdges();
+    };
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateLayout);
+    resizeObserver?.observe(tabList);
+    resizeObserver?.observe(scrollViewport);
+    scrollViewport.addEventListener('scroll', updateScrollEdges, { passive: true });
+    window.addEventListener('resize', updateLayout);
+    updateScrollEdges();
+
+    return () => {
+      resizeObserver?.disconnect();
+      scrollViewport.removeEventListener('scroll', updateScrollEdges);
+      window.removeEventListener('resize', updateLayout);
+    };
+  }, [positionPill]);
+
+  const selectTab = (tabId: SettingsTabId, focus = false) => {
+    onChange(tabId);
+    window.history.replaceState(null, '', `#settings-${tabId}`);
+    if (focus) {
+      tabRefs.current.get(tabId)?.focus();
+    }
+  };
+
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tabIndex: number) => {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') {
+      nextIndex = (tabIndex + 1) % tabs.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (tabIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = tabs.length - 1;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      selectTab(tabs[nextIndex].id, true);
+    }
+  };
+
+  const scrollMaskImage = scrollEdges.left
+    ? scrollEdges.right
+      ? 'linear-gradient(to right, transparent 0, black 2rem, black calc(100% - 2rem), transparent 100%)'
+      : 'linear-gradient(to right, transparent 0, black 2rem, black 100%)'
+    : scrollEdges.right
+      ? 'linear-gradient(to right, black 0, black calc(100% - 2rem), transparent 100%)'
+      : undefined;
+
+  return (
+    <div
+      className="mb-6 overflow-x-auto pb-1"
+      ref={scrollViewportRef}
+      style={
+        scrollMaskImage
+          ? { WebkitMaskImage: scrollMaskImage, maskImage: scrollMaskImage }
+          : undefined
+      }
+    >
+      <div
+        aria-label={label}
+        className="relative inline-flex min-w-full items-center gap-1 rounded-xl border border-stroke bg-surface-muted p-1"
+        ref={tabListRef}
+        role="tablist"
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-1 left-0 z-0 rounded-lg bg-brand-600 shadow-sm transition-[transform,width] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          ref={pillRef}
+        />
+        {tabs.map((tab, index) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              aria-controls={`settings-${tab.id}-panel`}
+              aria-selected={selected}
+              className={`relative z-10 min-h-11 flex-1 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-muted motion-reduce:transition-none ${
+                selected ? 'text-white' : 'text-ink-muted hover:text-ink-strong'
+              }`}
+              id={`settings-${tab.id}-tab`}
+              key={tab.id}
+              onClick={() => selectTab(tab.id)}
+              onKeyDown={(event) => onTabKeyDown(event, index)}
+              ref={(node) => {
+                if (node) {
+                  tabRefs.current.set(tab.id, node);
+                } else {
+                  tabRefs.current.delete(tab.id);
+                }
+              }}
+              role="tab"
+              tabIndex={selected ? 0 : -1}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function DialogFrame({ children, title }: { children: ReactNode; title: string }) {
   return (
@@ -157,6 +349,7 @@ export function SettingsClient({
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinLoading, setJoinLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
   const router = useRouter();
   const [categoryRenameDialog, setCategoryRenameDialog] =
     useState<CategoryRenameDialogState | null>(null);
@@ -168,10 +361,30 @@ export function SettingsClient({
     useState<CategoryArchiveDialogState | null>(null);
   const copy = t(resolvedLocale).settings;
   const shared = t(resolvedLocale).common;
+  const settingsTabs: SettingsTab[] = [
+    { id: 'profile', label: copy.profile },
+    { id: 'household', label: copy.household },
+    { id: 'split-policy', label: copy.splitPolicy.title },
+    { id: 'categories', label: copy.categories },
+    { id: 'security', label: copy.security },
+  ];
   const suggestedCategoryIcon = inferCategoryIcon(categoryName);
   const selectedCategoryIcon = categoryIconOverride ?? suggestedCategoryIcon;
   const suggestedSuperCategoryIcon = inferCategoryIcon(superCategoryName);
   const selectedSuperCategoryIcon = superCategoryIconOverride ?? suggestedSuperCategoryIcon;
+
+  useEffect(() => {
+    const syncTabFromHash = () => {
+      const hashTab = window.location.hash.replace('#settings-', '') as SettingsTabId;
+      if (SETTINGS_TAB_IDS.includes(hashTab)) {
+        setActiveTab(hashTab);
+      }
+    };
+
+    syncTabFromHash();
+    window.addEventListener('hashchange', syncTabFromHash);
+    return () => window.removeEventListener('hashchange', syncTabFromHash);
+  }, []);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -889,14 +1102,22 @@ export function SettingsClient({
         </ViewportModal>
       ) : null}
 
-      <section className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
-        <h2 className="text-xl font-semibold tracking-tight text-ink-strong">
-          {copy.personalInfo}
-        </h2>
-        <p className="mt-2 text-base text-ink-soft00">{copy.personalInfoDescription}</p>
+      <SettingsTabs
+        activeTab={activeTab}
+        label={copy.settingsSectionsLabel}
+        onChange={setActiveTab}
+        tabs={settingsTabs}
+      />
 
-        <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
+      <section
+        aria-labelledby="settings-household-tab"
+        className="mb-6"
+        hidden={activeTab !== 'household'}
+        id="settings-household-panel"
+        role="tabpanel"
+      >
+        <div className="rounded-2xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] sm:p-6">
+          <h2 className="text-lg font-semibold text-ink-strong">{copy.inviteSomeone}</h2>
           <p className="mt-1 text-xs text-ink-muted">{copy.inviteDescription}</p>
           <button
             className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
@@ -932,8 +1153,8 @@ export function SettingsClient({
         </div>
 
         {isOnlyHouseholdMember ? (
-          <div className="mt-4 rounded-xl border border-stroke/80 bg-surface-soft p-4">
-            <h3 className="text-base font-semibold text-ink-strong">{copy.joinHousehold}</h3>
+          <div className="mt-4 rounded-2xl border border-stroke/80 bg-surface-soft p-5 sm:p-6">
+            <h2 className="text-lg font-semibold text-ink-strong">{copy.joinHousehold}</h2>
             <p className="mt-1 text-xs text-ink-muted">{copy.joinDescription}</p>
             <form
               className="mt-3 flex flex-col gap-2 sm:flex-row"
@@ -985,8 +1206,16 @@ export function SettingsClient({
             {inviteSuccess}
           </div>
         ) : null}
+      </section>
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+      <section
+        aria-labelledby="settings-profile-tab"
+        className="mb-6"
+        hidden={activeTab !== 'profile'}
+        id="settings-profile-panel"
+        role="tabpanel"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
               <label className="block text-sm font-medium text-ink-base" htmlFor="display-name">
@@ -1048,16 +1277,41 @@ export function SettingsClient({
           </div>
         </div>
 
+        {profileError ? (
+          <div
+            aria-live="assertive"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
+            {profileError}
+          </div>
+        ) : null}
+        {profileSuccess ? (
+          <div
+            aria-live="polite"
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          >
+            {profileSuccess}
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        aria-labelledby="settings-security-tab"
+        className="mb-6"
+        hidden={activeTab !== 'security'}
+        id="settings-security-panel"
+        role="tabpanel"
+      >
         <PasskeysCard
           configured={passkeysConfigured}
           initialPasskeys={initialPasskeys}
           locale={resolvedLocale}
         />
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-ink-strong">{copy.session}</h3>
+              <h2 className="text-lg font-semibold text-ink-strong">{copy.session}</h2>
               <p className="mt-1 text-sm text-ink-soft00">{copy.sessionHelp}</p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -1081,30 +1335,27 @@ export function SettingsClient({
             </div>
           </div>
         </div>
-
-        {profileError ? (
-          <div
-            aria-live="assertive"
-            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          >
-            {profileError}
-          </div>
-        ) : null}
-        {profileSuccess ? (
-          <div
-            aria-live="polite"
-            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
-          >
-            {profileSuccess}
-          </div>
-        ) : null}
       </section>
 
-      <SplitPolicyCard initialPolicy={initialSplitPolicy} locale={resolvedLocale} />
+      <div
+        aria-labelledby="settings-split-policy-tab"
+        hidden={activeTab !== 'split-policy'}
+        id="settings-split-policy-panel"
+        role="tabpanel"
+      >
+        <SplitPolicyCard initialPolicy={initialSplitPolicy} locale={resolvedLocale} />
+      </div>
 
       <section
         aria-label={`${copy.superCategories} — ${copy.detailedCategories}`}
-        className="overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]"
+        className={
+          activeTab === 'categories'
+            ? 'mb-6 overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]'
+            : 'hidden'
+        }
+        hidden={activeTab !== 'categories'}
+        id="settings-categories-panel"
+        role="tabpanel"
       >
         <div className="border-b border-stroke bg-brand-50 p-4 sm:p-5 xl:border-b-0 xl:border-r">
           <div>

@@ -68,8 +68,8 @@ export function PasskeysCard({ configured, initialPasskeys, locale }: PasskeysCa
   const canAdd = configured && supported === true;
 
   return (
-    <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-      <h3 className="text-lg font-semibold text-ink-strong">{copy.title}</h3>
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+      <h2 className="text-lg font-semibold text-ink-strong">{copy.title}</h2>
       <p className="mt-1 text-sm text-ink-soft00">{copy.description}</p>
 
       {!configured ? (
