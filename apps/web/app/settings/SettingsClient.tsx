@@ -1074,24 +1074,14 @@ export function SettingsClient({
       />
 
       <section
-        aria-labelledby="settings-household-heading"
+        aria-labelledby="settings-household-tab"
         className="mb-6"
         hidden={activeTab !== 'household'}
         id="settings-household-panel"
         role="tabpanel"
       >
-        <div className="px-1">
-          <h2
-            className="text-xl font-semibold tracking-tight text-ink-strong"
-            id="settings-household-heading"
-          >
-            {copy.household}
-          </h2>
-          <p className="mt-2 text-base text-ink-soft00">{copy.householdDescription}</p>
-        </div>
-
-        <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
+        <div className="rounded-2xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] sm:p-6">
+          <h2 className="text-lg font-semibold text-ink-strong">{copy.inviteSomeone}</h2>
           <p className="mt-1 text-xs text-ink-muted">{copy.inviteDescription}</p>
           <button
             className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-md bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
@@ -1127,8 +1117,8 @@ export function SettingsClient({
         </div>
 
         {isOnlyHouseholdMember ? (
-          <div className="mt-4 rounded-xl border border-stroke/80 bg-surface-soft p-4">
-            <h3 className="text-base font-semibold text-ink-strong">{copy.joinHousehold}</h3>
+          <div className="mt-4 rounded-2xl border border-stroke/80 bg-surface-soft p-5 sm:p-6">
+            <h2 className="text-lg font-semibold text-ink-strong">{copy.joinHousehold}</h2>
             <p className="mt-1 text-xs text-ink-muted">{copy.joinDescription}</p>
             <form
               className="mt-3 flex flex-col gap-2 sm:flex-row"
@@ -1183,23 +1173,13 @@ export function SettingsClient({
       </section>
 
       <section
-        aria-labelledby="settings-profile-heading"
+        aria-labelledby="settings-profile-tab"
         className="mb-6"
         hidden={activeTab !== 'profile'}
         id="settings-profile-panel"
         role="tabpanel"
       >
-        <div className="px-1">
-          <h2
-            className="text-xl font-semibold tracking-tight text-ink-strong"
-            id="settings-profile-heading"
-          >
-            {copy.profile}
-          </h2>
-          <p className="mt-2 text-base text-ink-soft00">{copy.profileDescription}</p>
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
               <label className="block text-sm font-medium text-ink-base" htmlFor="display-name">
@@ -1280,22 +1260,12 @@ export function SettingsClient({
       </section>
 
       <section
-        aria-labelledby="settings-security-heading"
+        aria-labelledby="settings-security-tab"
         className="mb-6"
         hidden={activeTab !== 'security'}
         id="settings-security-panel"
         role="tabpanel"
       >
-        <div className="px-1">
-          <h2
-            className="text-xl font-semibold tracking-tight text-ink-strong"
-            id="settings-security-heading"
-          >
-            {copy.security}
-          </h2>
-          <p className="mt-2 text-base text-ink-soft00">{copy.securityDescription}</p>
-        </div>
-
         <PasskeysCard
           configured={passkeysConfigured}
           initialPasskeys={initialPasskeys}
@@ -1305,7 +1275,7 @@ export function SettingsClient({
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-ink-strong">{copy.session}</h3>
+              <h2 className="text-lg font-semibold text-ink-strong">{copy.session}</h2>
               <p className="mt-1 text-sm text-ink-soft00">{copy.sessionHelp}</p>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
@@ -1344,7 +1314,7 @@ export function SettingsClient({
         aria-label={`${copy.superCategories} — ${copy.detailedCategories}`}
         className={
           activeTab === 'categories'
-            ? 'overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]'
+            ? 'mb-6 overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]'
             : 'hidden'
         }
         hidden={activeTab !== 'categories'}

@@ -377,11 +377,8 @@ const en = {
     inviteCopied: 'Invite code copied to clipboard.',
     inviteCopyFailed: 'Unable to copy invite code. Please copy it manually.',
     household: 'Household',
-    householdDescription: 'Manage who shares this household with you.',
     profile: 'Profile',
-    profileDescription: 'Your identity and preferences across Fairsplit.',
     security: 'Security',
-    securityDescription: 'Manage how you sign in and where you are signed in.',
     categories: 'Categories',
     settingsSectionsLabel: 'Settings sections',
     personalInfo: 'Personal information',
@@ -439,7 +436,6 @@ const en = {
     },
     splitPolicy: {
       title: 'Expense split',
-      description: 'Choose how your household divides shared expenses.',
       methodLegend: 'Split method',
       incomeMethod: 'Based on income',
       incomeDescription:
@@ -905,11 +901,8 @@ const es: Translation = {
     inviteCopied: 'Código copiado al portapapeles.',
     inviteCopyFailed: 'No se pudo copiar el código. Copialo manualmente.',
     household: 'Hogar',
-    householdDescription: 'Administrá quién comparte este hogar con vos.',
     profile: 'Perfil',
-    profileDescription: 'Tu identidad y preferencias en Fairsplit.',
     security: 'Seguridad',
-    securityDescription: 'Administrá cómo iniciás sesión y dónde tenés sesiones activas.',
     categories: 'Categorías',
     settingsSectionsLabel: 'Secciones de ajustes',
     personalInfo: 'Información personal',
@@ -967,7 +960,6 @@ const es: Translation = {
     },
     splitPolicy: {
       title: 'Reparto de gastos',
-      description: 'Elegí cómo se dividen los gastos compartidos en tu hogar.',
       methodLegend: 'Método de reparto',
       incomeMethod: 'Según los ingresos',
       incomeDescription:

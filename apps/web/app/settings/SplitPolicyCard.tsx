@@ -109,14 +109,7 @@ export function SplitPolicyCard({ initialPolicy, locale }: SplitPolicyCardProps)
 
   return (
     <section className="mb-6 overflow-hidden rounded-2xl border border-stroke/80 bg-surface shadow-sm">
-      <div className="p-5 sm:p-6">
-        <h2 className="text-xl font-semibold tracking-tight text-ink-strong">{copy.title}</h2>
-        <p className="mt-2 max-w-3xl text-base leading-relaxed text-ink-muted">
-          {copy.description}
-        </p>
-      </div>
-
-      <div className="grid border-t border-stroke lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.35fr)]">
+      <div className="grid lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.35fr)]">
         <fieldset className="min-w-0 bg-surface-muted/60 lg:border-r lg:border-stroke">
           <legend className="sr-only">{copy.methodLegend}</legend>
           <div className="p-5 sm:p-6">
