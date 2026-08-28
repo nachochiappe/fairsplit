@@ -1,7 +1,17 @@
 'use client';
 
 import { inferCategoryIcon, type CategoryIconKey } from '@fairsplit/shared';
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
+import {
+  FormEvent,
+  KeyboardEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { ActionButton } from '../../components/ActionButton';
 import { AppShell } from '../../components/AppShell';
 import { CategoryIcon } from '../../components/CategoryIcon';
@@ -67,6 +77,152 @@ type SuperCategoryArchiveDialogState = {
 type CategoryArchiveDialogState = {
   category: Category;
 };
+
+type SettingsTabId = 'profile' | 'household' | 'split-policy' | 'categories' | 'security';
+const SETTINGS_TAB_IDS: SettingsTabId[] = [
+  'profile',
+  'household',
+  'split-policy',
+  'categories',
+  'security',
+];
+
+interface SettingsTab {
+  id: SettingsTabId;
+  label: string;
+}
+
+function SettingsTabs({
+  activeTab,
+  label,
+  onChange,
+  tabs,
+}: {
+  activeTab: SettingsTabId;
+  label: string;
+  onChange: (tab: SettingsTabId) => void;
+  tabs: SettingsTab[];
+}) {
+  const pillRef = useRef<HTMLSpanElement>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef(new Map<SettingsTabId, HTMLButtonElement>());
+  const activeTabRef = useRef(activeTab);
+  const hasPositionedPill = useRef(false);
+
+  const positionPill = useCallback((tabId: SettingsTabId, animate: boolean) => {
+    const pill = pillRef.current;
+    const tab = tabRefs.current.get(tabId);
+    if (!pill || !tab) {
+      return;
+    }
+
+    if (!animate) {
+      pill.style.transition = 'none';
+    }
+    pill.style.width = `${tab.offsetWidth}px`;
+    pill.style.transform = `translateX(${tab.offsetLeft}px)`;
+
+    if (!animate) {
+      void pill.offsetWidth;
+      pill.style.removeProperty('transition');
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    activeTabRef.current = activeTab;
+    positionPill(activeTab, hasPositionedPill.current);
+    hasPositionedPill.current = true;
+  }, [activeTab, positionPill]);
+
+  useEffect(() => {
+    const tabList = tabListRef.current;
+    if (!tabList) {
+      return;
+    }
+
+    const repositionWithoutMotion = () => positionPill(activeTabRef.current, false);
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(repositionWithoutMotion);
+    resizeObserver?.observe(tabList);
+    window.addEventListener('resize', repositionWithoutMotion);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', repositionWithoutMotion);
+    };
+  }, [positionPill]);
+
+  const selectTab = (tabId: SettingsTabId, focus = false) => {
+    onChange(tabId);
+    window.history.replaceState(null, '', `#settings-${tabId}`);
+    if (focus) {
+      tabRefs.current.get(tabId)?.focus();
+    }
+  };
+
+  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tabIndex: number) => {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') {
+      nextIndex = (tabIndex + 1) % tabs.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (tabIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = tabs.length - 1;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      selectTab(tabs[nextIndex].id, true);
+    }
+  };
+
+  return (
+    <div className="mb-6 overflow-x-auto pb-1">
+      <div
+        aria-label={label}
+        className="relative inline-flex min-w-full items-center gap-1 rounded-xl border border-stroke bg-surface-muted p-1"
+        ref={tabListRef}
+        role="tablist"
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-1 left-0 z-0 rounded-lg bg-brand-600 shadow-sm transition-[transform,width] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          ref={pillRef}
+        />
+        {tabs.map((tab, index) => {
+          const selected = activeTab === tab.id;
+          return (
+            <button
+              aria-controls={`settings-${tab.id}-panel`}
+              aria-selected={selected}
+              className={`relative z-10 min-h-11 flex-1 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-muted motion-reduce:transition-none ${
+                selected ? 'text-white' : 'text-ink-muted hover:text-ink-strong'
+              }`}
+              id={`settings-${tab.id}-tab`}
+              key={tab.id}
+              onClick={() => selectTab(tab.id)}
+              onKeyDown={(event) => onTabKeyDown(event, index)}
+              ref={(node) => {
+                if (node) {
+                  tabRefs.current.set(tab.id, node);
+                } else {
+                  tabRefs.current.delete(tab.id);
+                }
+              }}
+              role="tab"
+              tabIndex={selected ? 0 : -1}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function DialogFrame({ children, title }: { children: ReactNode; title: string }) {
   return (
@@ -157,6 +313,7 @@ export function SettingsClient({
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinLoading, setJoinLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('profile');
   const router = useRouter();
   const [categoryRenameDialog, setCategoryRenameDialog] =
     useState<CategoryRenameDialogState | null>(null);
@@ -168,10 +325,30 @@ export function SettingsClient({
     useState<CategoryArchiveDialogState | null>(null);
   const copy = t(resolvedLocale).settings;
   const shared = t(resolvedLocale).common;
+  const settingsTabs: SettingsTab[] = [
+    { id: 'profile', label: copy.profile },
+    { id: 'household', label: copy.household },
+    { id: 'split-policy', label: copy.splitPolicy.title },
+    { id: 'categories', label: copy.categories },
+    { id: 'security', label: copy.security },
+  ];
   const suggestedCategoryIcon = inferCategoryIcon(categoryName);
   const selectedCategoryIcon = categoryIconOverride ?? suggestedCategoryIcon;
   const suggestedSuperCategoryIcon = inferCategoryIcon(superCategoryName);
   const selectedSuperCategoryIcon = superCategoryIconOverride ?? suggestedSuperCategoryIcon;
+
+  useEffect(() => {
+    const syncTabFromHash = () => {
+      const hashTab = window.location.hash.replace('#settings-', '') as SettingsTabId;
+      if (SETTINGS_TAB_IDS.includes(hashTab)) {
+        setActiveTab(hashTab);
+      }
+    };
+
+    syncTabFromHash();
+    window.addEventListener('hashchange', syncTabFromHash);
+    return () => window.removeEventListener('hashchange', syncTabFromHash);
+  }, []);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.archivedAt === null),
@@ -889,38 +1066,27 @@ export function SettingsClient({
         </ViewportModal>
       ) : null}
 
-      <nav
-        aria-label={copy.settingsSectionsLabel}
-        className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-stroke/80 bg-surface p-3 shadow-sm"
-      >
-        {[
-          ['household', copy.household],
-          ['profile', copy.profile],
-          ['security', copy.security],
-          ['split-policy', copy.splitPolicy.title],
-          ['categories', copy.categories],
-        ].map(([id, label]) => (
-          <a
-            className="rounded-lg border border-stroke bg-surface-muted px-3 py-2 text-sm font-semibold text-ink-base transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-            href={`#${id}`}
-            key={id}
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
+      <SettingsTabs
+        activeTab={activeTab}
+        label={copy.settingsSectionsLabel}
+        onChange={setActiveTab}
+        tabs={settingsTabs}
+      />
 
       <section
+        aria-labelledby="settings-household-heading"
         className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm"
-        id="profile"
+        hidden={activeTab !== 'household'}
+        id="settings-household-panel"
+        role="tabpanel"
       >
-        <h2 className="text-xl font-semibold tracking-tight text-ink-strong">{copy.profile}</h2>
-        <p className="mt-2 text-base text-ink-soft00">{copy.profileDescription}</p>
-
-        <div className="mt-8 border-t border-stroke pt-6" id="household">
-          <h3 className="text-lg font-semibold text-ink-strong">{copy.household}</h3>
-          <p className="mt-1 text-sm text-ink-muted">{copy.householdDescription}</p>
-        </div>
+        <h2
+          className="text-xl font-semibold tracking-tight text-ink-strong"
+          id="settings-household-heading"
+        >
+          {copy.household}
+        </h2>
+        <p className="mt-2 text-base text-ink-soft00">{copy.householdDescription}</p>
 
         <div className="mt-4 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
           <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
@@ -1012,13 +1178,24 @@ export function SettingsClient({
             {inviteSuccess}
           </div>
         ) : null}
+      </section>
 
-        <div className="mt-8 border-t border-stroke pt-6" id="profile-details">
-          <h3 className="text-lg font-semibold text-ink-strong">{copy.profile}</h3>
-          <p className="mt-1 text-sm text-ink-muted">{copy.profileDescription}</p>
-        </div>
+      <section
+        aria-labelledby="settings-profile-heading"
+        className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm"
+        hidden={activeTab !== 'profile'}
+        id="settings-profile-panel"
+        role="tabpanel"
+      >
+        <h2
+          className="text-xl font-semibold tracking-tight text-ink-strong"
+          id="settings-profile-heading"
+        >
+          {copy.profile}
+        </h2>
+        <p className="mt-2 text-base text-ink-soft00">{copy.profileDescription}</p>
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+        <div className="mt-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
               <label className="block text-sm font-medium text-ink-base" htmlFor="display-name">
@@ -1080,28 +1257,46 @@ export function SettingsClient({
           </div>
         </div>
 
-        <div className="mt-8 border-t border-stroke pt-6" id="security">
-          <h3 className="text-lg font-semibold text-ink-strong">{copy.security}</h3>
-          <p className="mt-1 text-sm text-ink-muted">{copy.securityDescription}</p>
+        {profileError ? (
+          <div
+            aria-live="assertive"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+          >
+            {profileError}
+          </div>
+        ) : null}
+        {profileSuccess ? (
+          <div
+            aria-live="polite"
+            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
+          >
+            {profileSuccess}
+          </div>
+        ) : null}
+      </section>
+
+      <section
+        aria-labelledby="settings-security-heading"
+        className="mb-6"
+        hidden={activeTab !== 'security'}
+        id="settings-security-panel"
+        role="tabpanel"
+      >
+        <div className="px-1">
+          <h2
+            className="text-xl font-semibold tracking-tight text-ink-strong"
+            id="settings-security-heading"
+          >
+            {copy.security}
+          </h2>
+          <p className="mt-2 text-base text-ink-soft00">{copy.securityDescription}</p>
         </div>
 
-        <details className="group mt-4">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between rounded-xl border border-stroke bg-surface-muted px-4 py-3 text-base font-semibold text-ink-strong transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
-            {copy.passkeys.title}
-            <span
-              aria-hidden="true"
-              className="text-xl font-normal text-ink-soft transition-transform group-open:rotate-45"
-            >
-              +
-            </span>
-          </summary>
-          <PasskeysCard
-            configured={passkeysConfigured}
-            embedded
-            initialPasskeys={initialPasskeys}
-            locale={resolvedLocale}
-          />
-        </details>
+        <PasskeysCard
+          configured={passkeysConfigured}
+          initialPasskeys={initialPasskeys}
+          locale={resolvedLocale}
+        />
 
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1130,32 +1325,22 @@ export function SettingsClient({
             </div>
           </div>
         </div>
-
-        {profileError ? (
-          <div
-            aria-live="assertive"
-            className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-          >
-            {profileError}
-          </div>
-        ) : null}
-        {profileSuccess ? (
-          <div
-            aria-live="polite"
-            className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700"
-          >
-            {profileSuccess}
-          </div>
-        ) : null}
       </section>
 
-      <div id="split-policy">
+      <div
+        aria-labelledby="settings-split-policy-tab"
+        hidden={activeTab !== 'split-policy'}
+        id="settings-split-policy-panel"
+        role="tabpanel"
+      >
         <SplitPolicyCard initialPolicy={initialSplitPolicy} locale={resolvedLocale} />
       </div>
 
       <section
-        id="categories"
         aria-label={`${copy.superCategories} — ${copy.detailedCategories}`}
+        hidden={activeTab !== 'categories'}
+        id="settings-categories-panel"
+        role="tabpanel"
         className="overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]"
       >
         <div className="border-b border-stroke bg-brand-50 p-4 sm:p-5 xl:border-b-0 xl:border-r">

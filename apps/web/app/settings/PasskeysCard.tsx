@@ -9,15 +9,9 @@ interface PasskeysCardProps {
   locale: AppLocale;
   configured: boolean;
   initialPasskeys: Passkey[];
-  embedded?: boolean;
 }
 
-export function PasskeysCard({
-  configured,
-  embedded = false,
-  initialPasskeys,
-  locale,
-}: PasskeysCardProps) {
+export function PasskeysCard({ configured, initialPasskeys, locale }: PasskeysCardProps) {
   const copy = t(locale).settings.passkeys;
   const [passkeys, setPasskeys] = useState<Passkey[]>(initialPasskeys);
   const [label, setLabel] = useState('');
@@ -53,11 +47,7 @@ export function PasskeysCard({
   };
 
   const onRemove = async (passkey: Passkey) => {
-    if (
-      !window.confirm(
-        `${copy.removeTitle}: ${copy.removeBefore}${passkey.label}${copy.removeAfter}`,
-      )
-    ) {
+    if (!window.confirm(`${copy.removeTitle}: ${copy.removeBefore}${passkey.label}${copy.removeAfter}`)) {
       return;
     }
     setRemovingId(passkey.id);
@@ -78,14 +68,8 @@ export function PasskeysCard({
   const canAdd = configured && supported === true;
 
   return (
-    <div
-      className={
-        embedded
-          ? 'mt-3 rounded-xl border border-stroke bg-white p-4 sm:p-5'
-          : 'mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6'
-      }
-    >
-      {!embedded ? <h3 className="text-lg font-semibold text-ink-strong">{copy.title}</h3> : null}
+    <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+      <h3 className="text-lg font-semibold text-ink-strong">{copy.title}</h3>
       <p className="mt-1 text-sm text-ink-soft00">{copy.description}</p>
 
       {!configured ? (
@@ -101,18 +85,12 @@ export function PasskeysCard({
       {passkeys.length > 0 ? (
         <ul className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200">
           {passkeys.map((passkey) => (
-            <li
-              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
-              key={passkey.id}
-            >
+            <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between" key={passkey.id}>
               <div className="min-w-0">
                 <p className="truncate text-base font-semibold text-ink-strong">{passkey.label}</p>
                 <p className="mt-1 text-xs text-ink-muted">
-                  {passkey.backedUp ? copy.synced : copy.deviceOnly} ·{' '}
-                  {copy.addedOn(formatDate(passkey.createdAt))} ·{' '}
-                  {passkey.lastUsedAt
-                    ? copy.lastUsed(formatDate(passkey.lastUsedAt))
-                    : copy.neverUsed}
+                  {passkey.backedUp ? copy.synced : copy.deviceOnly} · {copy.addedOn(formatDate(passkey.createdAt))} ·{' '}
+                  {passkey.lastUsedAt ? copy.lastUsed(formatDate(passkey.lastUsedAt)) : copy.neverUsed}
                 </p>
               </div>
               <button
@@ -155,10 +133,7 @@ export function PasskeysCard({
       ) : null}
 
       {error ? (
-        <div
-          aria-live="assertive"
-          className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-        >
+        <div aria-live="assertive" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {error}
         </div>
       ) : null}
