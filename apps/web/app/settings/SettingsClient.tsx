@@ -1338,10 +1338,14 @@ export function SettingsClient({
 
       <section
         aria-label={`${copy.superCategories} — ${copy.detailedCategories}`}
+        className={
+          activeTab === 'categories'
+            ? 'overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]'
+            : 'hidden'
+        }
         hidden={activeTab !== 'categories'}
         id="settings-categories-panel"
         role="tabpanel"
-        className="overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]"
       >
         <div className="border-b border-stroke bg-brand-50 p-4 sm:p-5 xl:border-b-0 xl:border-r">
           <div>
