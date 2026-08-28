@@ -1075,20 +1075,22 @@ export function SettingsClient({
 
       <section
         aria-labelledby="settings-household-heading"
-        className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm"
+        className="mb-6"
         hidden={activeTab !== 'household'}
         id="settings-household-panel"
         role="tabpanel"
       >
-        <h2
-          className="text-xl font-semibold tracking-tight text-ink-strong"
-          id="settings-household-heading"
-        >
-          {copy.household}
-        </h2>
-        <p className="mt-2 text-base text-ink-soft00">{copy.householdDescription}</p>
+        <div className="px-1">
+          <h2
+            className="text-xl font-semibold tracking-tight text-ink-strong"
+            id="settings-household-heading"
+          >
+            {copy.household}
+          </h2>
+          <p className="mt-2 text-base text-ink-soft00">{copy.householdDescription}</p>
+        </div>
 
-        <div className="mt-4 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
           <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
           <p className="mt-1 text-xs text-ink-muted">{copy.inviteDescription}</p>
           <button
@@ -1182,20 +1184,22 @@ export function SettingsClient({
 
       <section
         aria-labelledby="settings-profile-heading"
-        className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm"
+        className="mb-6"
         hidden={activeTab !== 'profile'}
         id="settings-profile-panel"
         role="tabpanel"
       >
-        <h2
-          className="text-xl font-semibold tracking-tight text-ink-strong"
-          id="settings-profile-heading"
-        >
-          {copy.profile}
-        </h2>
-        <p className="mt-2 text-base text-ink-soft00">{copy.profileDescription}</p>
+        <div className="px-1">
+          <h2
+            className="text-xl font-semibold tracking-tight text-ink-strong"
+            id="settings-profile-heading"
+          >
+            {copy.profile}
+          </h2>
+          <p className="mt-2 text-base text-ink-soft00">{copy.profileDescription}</p>
+        </div>
 
-        <div className="mt-6">
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
               <label className="block text-sm font-medium text-ink-base" htmlFor="display-name">
