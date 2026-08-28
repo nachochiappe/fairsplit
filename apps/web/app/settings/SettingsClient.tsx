@@ -104,10 +104,12 @@ function SettingsTabs({
   tabs: SettingsTab[];
 }) {
   const pillRef = useRef<HTMLSpanElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
   const tabListRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef(new Map<SettingsTabId, HTMLButtonElement>());
   const activeTabRef = useRef(activeTab);
   const hasPositionedPill = useRef(false);
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
 
   const positionPill = useCallback((tabId: SettingsTabId, animate: boolean) => {
     const pill = pillRef.current;
@@ -135,20 +137,38 @@ function SettingsTabs({
   }, [activeTab, positionPill]);
 
   useEffect(() => {
+    const scrollViewport = scrollViewportRef.current;
     const tabList = tabListRef.current;
-    if (!tabList) {
+    if (!scrollViewport || !tabList) {
       return;
     }
 
-    const repositionWithoutMotion = () => positionPill(activeTabRef.current, false);
+    const updateScrollEdges = () => {
+      const maxScrollLeft = scrollViewport.scrollWidth - scrollViewport.clientWidth;
+      const nextEdges = {
+        left: scrollViewport.scrollLeft > 1,
+        right: scrollViewport.scrollLeft < maxScrollLeft - 1,
+      };
+      setScrollEdges((current) =>
+        current.left === nextEdges.left && current.right === nextEdges.right ? current : nextEdges,
+      );
+    };
+    const updateLayout = () => {
+      positionPill(activeTabRef.current, false);
+      updateScrollEdges();
+    };
     const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(repositionWithoutMotion);
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateLayout);
     resizeObserver?.observe(tabList);
-    window.addEventListener('resize', repositionWithoutMotion);
+    resizeObserver?.observe(scrollViewport);
+    scrollViewport.addEventListener('scroll', updateScrollEdges, { passive: true });
+    window.addEventListener('resize', updateLayout);
+    updateScrollEdges();
 
     return () => {
       resizeObserver?.disconnect();
-      window.removeEventListener('resize', repositionWithoutMotion);
+      scrollViewport.removeEventListener('scroll', updateScrollEdges);
+      window.removeEventListener('resize', updateLayout);
     };
   }, [positionPill]);
 
@@ -178,8 +198,24 @@ function SettingsTabs({
     }
   };
 
+  const scrollMaskImage = scrollEdges.left
+    ? scrollEdges.right
+      ? 'linear-gradient(to right, transparent 0, black 2rem, black calc(100% - 2rem), transparent 100%)'
+      : 'linear-gradient(to right, transparent 0, black 2rem, black 100%)'
+    : scrollEdges.right
+      ? 'linear-gradient(to right, black 0, black calc(100% - 2rem), transparent 100%)'
+      : undefined;
+
   return (
-    <div className="mb-6 overflow-x-auto pb-1">
+    <div
+      className="mb-6 overflow-x-auto pb-1"
+      ref={scrollViewportRef}
+      style={
+        scrollMaskImage
+          ? { WebkitMaskImage: scrollMaskImage, maskImage: scrollMaskImage }
+          : undefined
+      }
+    >
       <div
         aria-label={label}
         className="relative inline-flex min-w-full items-center gap-1 rounded-xl border border-stroke bg-surface-muted p-1"
