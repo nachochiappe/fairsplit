@@ -889,13 +889,40 @@ export function SettingsClient({
         </ViewportModal>
       ) : null}
 
-      <section className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm">
-        <h2 className="text-xl font-semibold tracking-tight text-ink-strong">
-          {copy.personalInfo}
-        </h2>
-        <p className="mt-2 text-base text-ink-soft00">{copy.personalInfoDescription}</p>
+      <nav
+        aria-label={copy.settingsSectionsLabel}
+        className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-stroke/80 bg-surface p-3 shadow-sm"
+      >
+        {[
+          ['household', copy.household],
+          ['profile', copy.profile],
+          ['security', copy.security],
+          ['split-policy', copy.splitPolicy.title],
+          ['categories', copy.categories],
+        ].map(([id, label]) => (
+          <a
+            className="rounded-lg border border-stroke bg-surface-muted px-3 py-2 text-sm font-semibold text-ink-base transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
+            href={`#${id}`}
+            key={id}
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
 
-        <div className="mt-6 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+      <section
+        className="mb-6 rounded-2xl border border-stroke/80 bg-surface p-6 shadow-sm"
+        id="profile"
+      >
+        <h2 className="text-xl font-semibold tracking-tight text-ink-strong">{copy.profile}</h2>
+        <p className="mt-2 text-base text-ink-soft00">{copy.profileDescription}</p>
+
+        <div className="mt-8 border-t border-stroke pt-6" id="household">
+          <h3 className="text-lg font-semibold text-ink-strong">{copy.household}</h3>
+          <p className="mt-1 text-sm text-ink-muted">{copy.householdDescription}</p>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-sky-300 bg-gradient-to-b from-sky-100 to-blue-100 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
           <h3 className="text-base font-semibold text-ink-strong">{copy.inviteSomeone}</h3>
           <p className="mt-1 text-xs text-ink-muted">{copy.inviteDescription}</p>
           <button
@@ -986,7 +1013,12 @@ export function SettingsClient({
           </div>
         ) : null}
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+        <div className="mt-8 border-t border-stroke pt-6" id="profile-details">
+          <h3 className="text-lg font-semibold text-ink-strong">{copy.profile}</h3>
+          <p className="mt-1 text-sm text-ink-muted">{copy.profileDescription}</p>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0">
               <label className="block text-sm font-medium text-ink-base" htmlFor="display-name">
@@ -1048,13 +1080,30 @@ export function SettingsClient({
           </div>
         </div>
 
-        <PasskeysCard
-          configured={passkeysConfigured}
-          initialPasskeys={initialPasskeys}
-          locale={resolvedLocale}
-        />
+        <div className="mt-8 border-t border-stroke pt-6" id="security">
+          <h3 className="text-lg font-semibold text-ink-strong">{copy.security}</h3>
+          <p className="mt-1 text-sm text-ink-muted">{copy.securityDescription}</p>
+        </div>
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+        <details className="group mt-4">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between rounded-xl border border-stroke bg-surface-muted px-4 py-3 text-base font-semibold text-ink-strong transition-colors hover:bg-surface-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 [&::-webkit-details-marker]:hidden">
+            {copy.passkeys.title}
+            <span
+              aria-hidden="true"
+              className="text-xl font-normal text-ink-soft transition-transform group-open:rotate-45"
+            >
+              +
+            </span>
+          </summary>
+          <PasskeysCard
+            configured={passkeysConfigured}
+            embedded
+            initialPasskeys={initialPasskeys}
+            locale={resolvedLocale}
+          />
+        </details>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-ink-strong">{copy.session}</h3>
@@ -1100,9 +1149,12 @@ export function SettingsClient({
         ) : null}
       </section>
 
-      <SplitPolicyCard initialPolicy={initialSplitPolicy} locale={resolvedLocale} />
+      <div id="split-policy">
+        <SplitPolicyCard initialPolicy={initialSplitPolicy} locale={resolvedLocale} />
+      </div>
 
       <section
+        id="categories"
         aria-label={`${copy.superCategories} — ${copy.detailedCategories}`}
         className="overflow-hidden rounded-2xl border border-stroke bg-surface shadow-sm xl:grid xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,2.18fr)]"
       >
