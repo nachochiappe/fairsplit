@@ -101,7 +101,7 @@ describe('PUT /api/incomes', () => {
     expect(secondUserEntries).toEqual(['Sueldo:500.00']);
   });
 
-  it('uses existing month-start FX for incomes when available', async () => {
+  it('uses an explicit income FX rate without changing the month default', async () => {
     await prisma.monthlyExchangeRate.upsert({
       where: {
         householdId_month_currencyCode: {
@@ -123,9 +123,9 @@ describe('PUT /api/incomes', () => {
     expect(response.status).toBe(200);
     expect(response.body[0]).toMatchObject({
       amountOriginal: '10.00',
-      amountArs: '10000.00',
+      amountArs: '20000.00',
       currencyCode: 'USD',
-      fxRateUsed: '1000.000000',
+      fxRateUsed: '2000.000000',
     });
 
     const persistedRate = await prisma.monthlyExchangeRate.findUniqueOrThrow({

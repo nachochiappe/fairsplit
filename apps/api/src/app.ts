@@ -2313,24 +2313,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
           let fxRateUsed = '1.000000';
           if (currencyCode !== 'ARS') {
             const monthRate = monthRateByCurrency.get(currencyCode);
-            if (monthRate) {
-              fxRateUsed = monthRate;
-            } else if (entry.fxRate !== undefined) {
+            if (entry.fxRate !== undefined) {
               const normalizedFxRate = new Decimal(entry.fxRate).toFixed(6);
-              const existingRate = await tx.monthlyExchangeRate.findFirst({
-                where: {
-                  householdId: auth.householdId,
-                  month: parsed.data.month,
-                  currencyCode,
-                },
-                select: { id: true },
-              });
-              const upsertedRate = existingRate
-                ? await tx.monthlyExchangeRate.update({
-                    where: { id: existingRate.id },
-                    data: { rateToArs: normalizedFxRate },
-                  })
-                : await tx.monthlyExchangeRate.create({
+              fxRateUsed = normalizedFxRate;
+
+              if (!monthRate) {
+                const createdRate = await tx.monthlyExchangeRate.create({
                     data: {
                       month: parsed.data.month,
                       currencyCode,
@@ -2338,8 +2326,10 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
                       householdId: auth.householdId,
                     },
                   });
-              fxRateUsed = upsertedRate.rateToArs.toFixed(6);
-              monthRateByCurrency.set(currencyCode, fxRateUsed);
+                monthRateByCurrency.set(currencyCode, createdRate.rateToArs.toFixed(6));
+              }
+            } else if (monthRate) {
+              fxRateUsed = monthRate;
             } else {
               throw new Error(
                 `Missing exchange rate for ${currencyCode} in ${parsed.data.month}. Configure a monthly exchange rate or provide an override.`,
