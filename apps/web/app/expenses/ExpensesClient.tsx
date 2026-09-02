@@ -9,7 +9,6 @@ import { MonthSelector } from '../../components/MonthSelector';
 import { ViewportModal } from '../../components/ViewportModal';
 import { formatMoney } from '../../lib/currency';
 import { localeTags, t, type Translation } from '../../lib/i18n';
-import { addMonths } from '../../lib/month';
 import {
   DEFAULT_MAX_ROWS_PER_SECTION,
   getSectionFetchBatchSize,
@@ -60,6 +59,7 @@ import {
   expenseSchema,
   ExpenseForm,
   getTodayDateInputValue,
+  resolveExpenseMonth,
   toSupportedCurrencyCode,
 } from './expense-form';
 import { ConfirmationDialog } from './ConfirmationDialog';
@@ -1499,7 +1499,11 @@ export function ExpensesClient({
       const applyToFuture =
         values.fixedEnabled && !values.installmentEnabled ? values.applyToFuture : false;
       const payload: Parameters<typeof updateExpense>[1] = {
-        month: values.nextMonthExpense ? addMonths(month, 1) : month,
+        month: resolveExpenseMonth({
+          selectedMonth: month,
+          date: values.date,
+          nextMonthExpense: values.nextMonthExpense,
+        }),
         date: values.date,
         description: values.description,
         categoryId: values.categoryId,
@@ -1530,7 +1534,11 @@ export function ExpensesClient({
 
   const buildCreatePayload = useCallback(
     (values: ExpenseForm) => {
-      const issuedMonth = values.nextMonthExpense ? addMonths(month, 1) : month;
+      const issuedMonth = resolveExpenseMonth({
+        selectedMonth: month,
+        date: values.date,
+        nextMonthExpense: values.nextMonthExpense,
+      });
       return {
         month: issuedMonth,
         date: values.date,

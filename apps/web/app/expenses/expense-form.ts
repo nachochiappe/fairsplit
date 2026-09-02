@@ -5,6 +5,7 @@ import {
   MAX_INSTALLMENT_COUNT,
   MAX_MONEY_AMOUNT,
 } from '@fairsplit/shared';
+import { addMonths } from '../../lib/month';
 
 export const supportedCurrencyCodes = ['ARS', 'USD', 'EUR'] as const;
 export type SupportedCurrencyCode = (typeof supportedCurrencyCodes)[number];
@@ -19,6 +20,20 @@ export function getTodayDateInputValue() {
 
 export function dateInputValueToMonth(value: string) {
   return value.slice(0, 7);
+}
+
+interface ResolveExpenseMonthOptions {
+  selectedMonth: string;
+  date: string;
+  nextMonthExpense: boolean;
+}
+
+export function resolveExpenseMonth({
+  selectedMonth,
+  date,
+  nextMonthExpense,
+}: ResolveExpenseMonthOptions) {
+  return nextMonthExpense ? addMonths(selectedMonth, 1) : dateInputValueToMonth(date);
 }
 
 export function toSupportedCurrencyCode(value: string): SupportedCurrencyCode {
