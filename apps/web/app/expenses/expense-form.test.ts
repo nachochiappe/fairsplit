@@ -3,6 +3,7 @@ import { MAX_INSTALLMENT_COUNT } from '@fairsplit/shared';
 import {
   createExpenseFormDefaults,
   expenseSchema,
+  resolveExpenseMonth,
   resolveInstallmentTotalAmountOnEnable,
 } from './expense-form';
 
@@ -48,6 +49,28 @@ describe('expense form defaults', () => {
         installmentEntryMode: 'perInstallment',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('resolveExpenseMonth', () => {
+  it('uses the entered date month by default', () => {
+    expect(
+      resolveExpenseMonth({
+        selectedMonth: '2026-08',
+        date: '2026-09-12',
+        nextMonthExpense: false,
+      }),
+    ).toBe('2026-09');
+  });
+
+  it('uses the month after the selected month when explicitly toggled', () => {
+    expect(
+      resolveExpenseMonth({
+        selectedMonth: '2026-08',
+        date: '2026-10-12',
+        nextMonthExpense: true,
+      }),
+    ).toBe('2026-09');
   });
 });
 
