@@ -31,8 +31,10 @@ import {
   updateCategory,
   type Passkey,
   type HouseholdSplitPolicy,
+  type PersonalBudgetForecastResponse,
   SuperCategory,
   unarchiveCategory,
+  updatePersonalBudgetPlan,
   updateUser,
   updateSuperCategory,
   type AppLocale,
@@ -51,6 +53,7 @@ interface SettingsClientProps {
   currentUserEmail: string | null;
   currentUserLocale: AppLocale;
   initialPasskeys: Passkey[];
+  initialPersonalBudget: PersonalBudgetForecastResponse;
   initialSplitPolicy: HouseholdSplitPolicy;
   passkeysConfigured: boolean;
   /** Joining another household is only offered while nobody else is here. */
@@ -317,6 +320,7 @@ export function SettingsClient({
   currentUserEmail,
   currentUserLocale,
   initialPasskeys,
+  initialPersonalBudget,
   initialSplitPolicy,
   passkeysConfigured,
   isOnlyHouseholdMember,
@@ -338,6 +342,12 @@ export function SettingsClient({
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+  const [monthlyFlexibilityEnabled, setMonthlyFlexibilityEnabled] = useState(
+    initialPersonalBudget.settings.enabled,
+  );
+  const [monthlyFlexibilitySaving, setMonthlyFlexibilitySaving] = useState(false);
+  const [monthlyFlexibilityError, setMonthlyFlexibilityError] = useState<string | null>(null);
+  const [monthlyFlexibilitySuccess, setMonthlyFlexibilitySuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [superCategoryError, setSuperCategoryError] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
@@ -475,6 +485,33 @@ export function SettingsClient({
       );
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const onToggleMonthlyFlexibility = async () => {
+    const nextEnabled = !monthlyFlexibilityEnabled;
+    setMonthlyFlexibilitySaving(true);
+    setMonthlyFlexibilityError(null);
+    setMonthlyFlexibilitySuccess(null);
+
+    try {
+      await updatePersonalBudgetPlan({
+        enabled: nextEnabled,
+        fixedCommitments: Number(initialPersonalBudget.settings.fixedCommitments),
+        savingsTarget: Number(initialPersonalBudget.settings.savingsTarget),
+        safetyBuffer: Number(initialPersonalBudget.settings.safetyBuffer),
+        averagingMonths: initialPersonalBudget.settings.averagingMonths,
+      });
+      setMonthlyFlexibilityEnabled(nextEnabled);
+      setMonthlyFlexibilitySuccess(
+        nextEnabled ? copy.monthlyFlexibilityEnabled : copy.monthlyFlexibilityDisabled,
+      );
+    } catch (toggleError) {
+      setMonthlyFlexibilityError(
+        toggleError instanceof Error ? toggleError.message : copy.monthlyFlexibilityUpdateFailed,
+      );
+    } finally {
+      setMonthlyFlexibilitySaving(false);
     }
   };
 
@@ -1275,6 +1312,45 @@ export function SettingsClient({
               <span className="truncate">{profileSaving ? copy.updating : copy.saveProfile}</span>
             </button>
           </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-5">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-ink-strong">{copy.monthlyFlexibilityTitle}</h2>
+              <p className="mt-1 max-w-[68ch] text-sm leading-6 text-ink-muted">
+                {copy.monthlyFlexibilityHelp}
+              </p>
+            </div>
+            <button
+              aria-checked={monthlyFlexibilityEnabled}
+              aria-label={copy.monthlyFlexibilityTitle}
+              className={`relative inline-flex h-7 w-12 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${
+                monthlyFlexibilityEnabled ? 'bg-brand-600' : 'bg-slate-300'
+              }`}
+              disabled={monthlyFlexibilitySaving}
+              role="switch"
+              type="button"
+              onClick={() => void onToggleMonthlyFlexibility()}
+            >
+              <span
+                aria-hidden="true"
+                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                  monthlyFlexibilityEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          {monthlyFlexibilityError ? (
+            <p className="mt-3 text-sm text-red-700" role="alert">
+              {monthlyFlexibilityError}
+            </p>
+          ) : null}
+          {monthlyFlexibilitySuccess ? (
+            <p className="mt-3 text-sm text-emerald-700" role="status">
+              {monthlyFlexibilitySuccess}
+            </p>
+          ) : null}
         </div>
 
         {profileError ? (

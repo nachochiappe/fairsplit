@@ -191,7 +191,7 @@ function DashboardClientContent({
           />
         </section>
 
-        {personalBudget ? (
+        {personalBudget?.settings.enabled ? (
           <PersonalAllowanceCard forecast={personalBudget} locale={locale} month={month} />
         ) : null}
 

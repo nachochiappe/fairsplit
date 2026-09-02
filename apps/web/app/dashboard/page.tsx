@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { cacheLife } from 'next/cache';
 import type { CategoryIconKey } from '@fairsplit/shared';
 import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { DashboardClient } from './DashboardClient';
 import { AppRouteLoading } from '../../components/AppRouteLoading';
@@ -10,6 +11,7 @@ import { SESSION_COOKIE, SESSION_EXPIRED_PATH } from '../../lib/session';
 import { verifySessionCookieToken } from '../../lib/session-server';
 import { resolveLocaleForUser, t } from '../../lib/i18n';
 import { LOCALE_COOKIE, parseLocaleCookie } from '../../lib/locale-cookie';
+import { getCurrentMonth } from '../../lib/month';
 import {
   getExpenseTotals,
   getIncomes,
@@ -48,12 +50,14 @@ export default function DashboardPage(props: DashboardPageProps) {
 }
 
 async function DashboardPageContent({ searchParams }: DashboardPageProps) {
+  await connection();
   const resolvedSearchParams = await searchParams;
-  const month = resolvedSearchParams?.month ?? new Date().toISOString().slice(0, 7);
+  const currentMonth = getCurrentMonth();
+  const month = resolvedSearchParams?.month ?? currentMonth;
   let pageData: Awaited<ReturnType<typeof getDashboardPageData>>;
 
   try {
-    pageData = await getDashboardPageData(month);
+    pageData = await getDashboardPageData(month, month === currentMonth);
   } catch (error) {
     // A revoked session is not an outage: the proxy cleared this request on
     // signature alone, so recovery is to drop the cookie and sign in again.
@@ -104,7 +108,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
   );
 }
 
-async function getDashboardPageData(month: string) {
+async function getDashboardPageData(month: string, includePersonalBudget: boolean) {
   'use cache: private';
   cacheLife({ stale: 30, revalidate: 30, expire: 60 });
 
@@ -134,7 +138,7 @@ async function getDashboardPageData(month: string) {
 
           throw error;
         }),
-        getPersonalBudgetForecast(month, serverReadInit),
+        includePersonalBudget ? getPersonalBudgetForecast(month, serverReadInit) : Promise.resolve(null),
       ]),
   );
 

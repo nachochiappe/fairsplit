@@ -155,6 +155,7 @@ export interface ExpenseTotalsResponse {
 }
 
 export interface PersonalBudgetSettings {
+  enabled: boolean;
   fixedCommitments: string;
   savingsTarget: string;
   safetyBuffer: string;
@@ -736,6 +737,7 @@ export async function getPersonalBudgetForecast(
 }
 
 export async function updatePersonalBudgetPlan(payload: {
+  enabled: boolean;
   fixedCommitments: number;
   savingsTarget: number;
   safetyBuffer: number;

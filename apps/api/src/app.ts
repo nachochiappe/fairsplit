@@ -97,6 +97,7 @@ const expenseMonthQuerySchema = monthQuerySchema.strict();
 const materializeExpenseMonthSchema = z.object({ month: monthSchema }).strict();
 const personalBudgetAmountSchema = z.coerce.number().finite().min(0).max(999_999_999_999.99);
 export const updatePersonalBudgetPlanSchema = z.object({
+  enabled: z.boolean(),
   fixedCommitments: personalBudgetAmountSchema,
   savingsTarget: personalBudgetAmountSchema,
   safetyBuffer: personalBudgetAmountSchema,
@@ -2972,6 +2973,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     const month = parsed.data.month;
     const plan = await prisma.personalBudgetPlan.findUnique({ where: { userId: auth.userId } });
     const settings = {
+      enabled: plan?.enabled ?? true,
       fixedCommitments: plan?.fixedCommitments.toFixed(2) ?? '0.00',
       savingsTarget: plan?.savingsTarget.toFixed(2) ?? '0.00',
       safetyBuffer: plan?.safetyBuffer.toFixed(2) ?? '0.00',
@@ -3051,6 +3053,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const values = {
+      enabled: parsed.data.enabled,
       fixedCommitments: new Decimal(parsed.data.fixedCommitments).toFixed(2),
       savingsTarget: new Decimal(parsed.data.savingsTarget).toFixed(2),
       safetyBuffer: new Decimal(parsed.data.safetyBuffer).toFixed(2),
@@ -3063,6 +3066,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
 
     return res.json({
+      enabled: plan.enabled,
       fixedCommitments: plan.fixedCommitments.toFixed(2),
       savingsTarget: plan.savingsTarget.toFixed(2),
       safetyBuffer: plan.safetyBuffer.toFixed(2),

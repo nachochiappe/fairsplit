@@ -43,6 +43,7 @@ model User {
 model PersonalBudgetPlan {
   userId           String   @id
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enabled          Boolean  @default(true)
   fixedCommitments Decimal  @default(0) @db.Decimal(14, 2)
   savingsTarget    Decimal  @default(0) @db.Decimal(14, 2)
   safetyBuffer     Decimal  @default(0) @db.Decimal(14, 2)

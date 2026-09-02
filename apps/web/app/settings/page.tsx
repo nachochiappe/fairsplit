@@ -5,6 +5,7 @@ import {
   getCategories,
   getHouseholdSplitPolicy,
   getPasskeys,
+  getPersonalBudgetForecast,
   getSuperCategories,
   getUser,
   getUsers,
@@ -35,7 +36,7 @@ export default function SettingsPage() {
 }
 
 async function SettingsPageContent() {
-  const { categories, currentUser, householdUsers, month, passkeys, splitPolicy, superCategories } =
+  const { categories, currentUser, householdUsers, month, passkeys, personalBudget, splitPolicy, superCategories } =
     await getSettingsPageData();
 
   return (
@@ -46,6 +47,7 @@ async function SettingsPageContent() {
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}
       initialPasskeys={passkeys.passkeys}
+      initialPersonalBudget={personalBudget}
       initialSplitPolicy={splitPolicy}
       initialSuperCategories={superCategories}
       isOnlyHouseholdMember={householdUsers.length <= 1}
@@ -71,7 +73,7 @@ async function getSettingsPageData() {
 
   const sessionUserId = session?.userId ?? null;
 
-  const [categories, superCategories, currentUser, passkeys, householdUsers, splitPolicy] =
+  const [categories, superCategories, currentUser, passkeys, householdUsers, splitPolicy, personalBudget] =
     await withSessionRecovery(() =>
       withServerApiLogging(requestId, { month, route: '/settings' }, async () =>
         Promise.all([
@@ -81,6 +83,7 @@ async function getSettingsPageData() {
           getPasskeys(serverReadInit),
           getUsers(serverReadInit),
           getHouseholdSplitPolicy(serverReadInit),
+          getPersonalBudgetForecast(month, serverReadInit),
         ]),
       ),
     );
@@ -91,6 +94,7 @@ async function getSettingsPageData() {
     householdUsers,
     month,
     passkeys,
+    personalBudget,
     splitPolicy,
     superCategories,
   };

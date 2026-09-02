@@ -122,6 +122,7 @@ describe('personal budget forecast', () => {
 
   it('stores private planning totals and returns an explainable estimate', async () => {
     const update = await request(app).put('/api/personal-budget').set('x-fairsplit-session', userAToken).send({
+      enabled: true,
       fixedCommitments: 280,
       savingsTarget: 200,
       safetyBuffer: 100,
@@ -130,6 +131,7 @@ describe('personal budget forecast', () => {
 
     expect(update.status).toBe(200);
     expect(update.body).toEqual({
+      enabled: true,
       fixedCommitments: '280.00',
       savingsTarget: '200.00',
       safetyBuffer: '100.00',
@@ -167,6 +169,7 @@ describe('personal budget forecast', () => {
     expect(partnerForecast.status).toBe(200);
     expect(partnerForecast.body.configured).toBe(false);
     expect(partnerForecast.body.settings).toEqual({
+      enabled: true,
       fixedCommitments: '0.00',
       savingsTarget: '0.00',
       safetyBuffer: '0.00',
@@ -176,6 +179,7 @@ describe('personal budget forecast', () => {
 
   it('rejects invalid planning values', async () => {
     const response = await request(app).put('/api/personal-budget').set('x-fairsplit-session', userAToken).send({
+      enabled: true,
       fixedCommitments: -1,
       savingsTarget: 0,
       safetyBuffer: 0,
@@ -183,5 +187,30 @@ describe('personal budget forecast', () => {
     });
 
     expect(response.status).toBe(400);
+  });
+
+  it('can disable the feature without deleting private planning values', async () => {
+    const response = await request(app).put('/api/personal-budget').set('x-fairsplit-session', userAToken).send({
+      enabled: false,
+      fixedCommitments: 280,
+      savingsTarget: 200,
+      safetyBuffer: 100,
+      averagingMonths: 3,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.enabled).toBe(false);
+
+    const forecast = await request(app)
+      .get('/api/personal-budget')
+      .set('x-fairsplit-session', userAToken)
+      .query({ month });
+
+    expect(forecast.body.settings).toMatchObject({
+      enabled: false,
+      fixedCommitments: '280.00',
+      savingsTarget: '200.00',
+      safetyBuffer: '100.00',
+    });
   });
 });
