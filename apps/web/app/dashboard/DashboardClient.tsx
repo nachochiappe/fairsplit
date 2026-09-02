@@ -8,6 +8,7 @@ import {
   materializeExpenseMonth,
   type AppLocale,
   type Income,
+  type PersonalBudgetForecastResponse,
   type SettlementResponse,
   type User,
 } from '../../lib/api';
@@ -23,12 +24,14 @@ import { TitleMark } from '../../components/TitleMark';
 import { LocaleSync } from '../../components/LocaleSync';
 import { getSuperCategoryAccentColor } from '../../lib/theme';
 import { formatCountLabel, localeTags, t } from '../../lib/i18n';
+import { PersonalAllowanceCard } from './PersonalAllowanceCard';
 
 interface DashboardClientProps {
   month: string;
   users: User[];
   incomes: Income[];
   settlement: SettlementResponse;
+  personalBudget: PersonalBudgetForecastResponse | null;
   expenseCategorySlices?: Array<{
     categoryName: string;
     totalArs: number;
@@ -45,6 +48,7 @@ export function DashboardClient({
   users,
   incomes,
   settlement,
+  personalBudget,
   expenseCategorySlices = [],
   warning,
   locale,
@@ -56,6 +60,7 @@ export function DashboardClient({
         users={users}
         incomes={incomes}
         settlement={settlement}
+        personalBudget={personalBudget}
         expenseCategorySlices={expenseCategorySlices}
         warning={warning}
         locale={locale}
@@ -69,6 +74,7 @@ function DashboardClientContent({
   users,
   incomes,
   settlement,
+  personalBudget,
   expenseCategorySlices = [],
   warning,
   locale,
@@ -184,6 +190,10 @@ function DashboardClientContent({
             value={formatPercent(settlement.expenseRatio, locale)}
           />
         </section>
+
+        {personalBudget?.settings.enabled ? (
+          <PersonalAllowanceCard forecast={personalBudget} locale={locale} month={month} />
+        ) : null}
 
         <section className="rounded-3xl border border-brand-100 bg-surface-soft px-6 py-7 shadow-sm md:px-9">
           <h2 className="text-sm font-semibold text-brand-700">{copy.settlement}</h2>

@@ -47,6 +47,7 @@ import {
 } from './lib/user-context-cache';
 import { verifySupabaseAccessToken } from './lib/supabase-auth';
 import { createRateLimit, hashedRateLimitKey, requestIpKey } from './lib/rate-limit';
+import { calculatePersonalBudgetForecast, previousMonths } from './lib/personal-budget';
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -94,6 +95,14 @@ const boundedWebauthnRecordSchema = z
 export const monthQuerySchema = z.object({ month: monthSchema });
 const expenseMonthQuerySchema = monthQuerySchema.strict();
 const materializeExpenseMonthSchema = z.object({ month: monthSchema }).strict();
+const personalBudgetAmountSchema = z.coerce.number().finite().min(0).max(999_999_999_999.99);
+export const updatePersonalBudgetPlanSchema = z.object({
+  enabled: z.boolean(),
+  fixedCommitments: personalBudgetAmountSchema,
+  savingsTarget: personalBudgetAmountSchema,
+  safetyBuffer: personalBudgetAmountSchema,
+  averagingMonths: z.coerce.number().int().min(1).max(12),
+}).strict();
 export const expenseListQuerySchema = z.object({
   month: monthSchema,
   search: z.string().trim().min(1).max(API_FIELD_LIMITS.search).optional(),
@@ -2948,6 +2957,121 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
             : 'Unable to calculate settlement for the provided month.',
       });
     }
+  });
+
+  app.get('/api/personal-budget', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = expenseMonthQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const month = parsed.data.month;
+    const plan = await prisma.personalBudgetPlan.findUnique({ where: { userId: auth.userId } });
+    const settings = {
+      enabled: plan?.enabled ?? true,
+      fixedCommitments: plan?.fixedCommitments.toFixed(2) ?? '0.00',
+      savingsTarget: plan?.savingsTarget.toFixed(2) ?? '0.00',
+      safetyBuffer: plan?.safetyBuffer.toFixed(2) ?? '0.00',
+      averagingMonths: plan?.averagingMonths ?? 3,
+    };
+    const historyMonths = previousMonths(month, settings.averagingMonths);
+
+    const [userIncome, householdIncome, currentSharedExpenses, userPaid, historicalExpenses, household] =
+      await Promise.all([
+        prisma.monthlyIncome.aggregate({
+          where: { month, userId: auth.userId, householdId: auth.householdId },
+          _sum: { amount: true },
+        }),
+        prisma.monthlyIncome.aggregate({
+          where: { month, householdId: auth.householdId },
+          _sum: { amount: true },
+        }),
+        prisma.expense.aggregate({
+          where: { month, householdId: auth.householdId },
+          _sum: { amountArs: true },
+        }),
+        prisma.expense.aggregate({
+          where: { month, householdId: auth.householdId, paidByUserId: auth.userId },
+          _sum: { amountArs: true },
+        }),
+        prisma.expense.groupBy({
+          by: ['month'],
+          where: { month: { in: historyMonths }, householdId: auth.householdId },
+          _sum: { amountArs: true },
+        }),
+        prisma.household.findUniqueOrThrow({
+          where: { id: auth.householdId },
+          select: {
+            splitMethod: true,
+            splitShares: { where: { userId: auth.userId }, select: { percentage: true } },
+          },
+        }),
+      ]);
+
+    const totalHouseholdIncome = new Decimal((householdIncome._sum.amount ?? 0).toString());
+    const currentUserIncome = new Decimal((userIncome._sum.amount ?? 0).toString());
+    const splitPercentage = household.splitMethod === 'custom'
+      ? household.splitShares[0]?.percentage.toString() ?? '0'
+      : totalHouseholdIncome.gt(0)
+        ? currentUserIncome.div(totalHouseholdIncome).mul(100).toString()
+        : '0';
+    const historicalSharedExpenses = historicalExpenses
+      .map((entry) => new Decimal((entry._sum.amountArs ?? 0).toString()))
+      .filter((total) => total.gt(0))
+      .map((total) => total.toString());
+
+    const forecast = calculatePersonalBudgetForecast({
+      month,
+      monthlyIncome: currentUserIncome,
+      currentSharedExpenses: (currentSharedExpenses._sum.amountArs ?? 0).toString(),
+      historicalSharedExpenses,
+      splitPercentage,
+      alreadyPaid: (userPaid._sum.amountArs ?? 0).toString(),
+      fixedCommitments: settings.fixedCommitments,
+      savingsTarget: settings.savingsTarget,
+      safetyBuffer: settings.safetyBuffer,
+      historyMonthsRequested: settings.averagingMonths,
+    });
+
+    return res.json({ configured: plan !== null, settings, ...forecast });
+  });
+
+  app.put('/api/personal-budget', async (req: Request, res: Response) => {
+    const auth = await requireAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+
+    const parsed = updatePersonalBudgetPlanSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const values = {
+      enabled: parsed.data.enabled,
+      fixedCommitments: new Decimal(parsed.data.fixedCommitments).toFixed(2),
+      savingsTarget: new Decimal(parsed.data.savingsTarget).toFixed(2),
+      safetyBuffer: new Decimal(parsed.data.safetyBuffer).toFixed(2),
+      averagingMonths: parsed.data.averagingMonths,
+    };
+    const plan = await prisma.personalBudgetPlan.upsert({
+      where: { userId: auth.userId },
+      create: { userId: auth.userId, ...values },
+      update: values,
+    });
+
+    return res.json({
+      enabled: plan.enabled,
+      fixedCommitments: plan.fixedCommitments.toFixed(2),
+      savingsTarget: plan.savingsTarget.toFixed(2),
+      safetyBuffer: plan.safetyBuffer.toFixed(2),
+      averagingMonths: plan.averagingMonths,
+    });
   });
 
   options.configureApp?.(app);
