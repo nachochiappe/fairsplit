@@ -13,6 +13,7 @@ import { LOCALE_COOKIE, parseLocaleCookie } from '../../lib/locale-cookie';
 import {
   getExpenseTotals,
   getIncomes,
+  getPersonalBudgetForecast,
   getSettlement,
   getUsers,
   isSessionExpiredError,
@@ -73,11 +74,12 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
         incomes={[]}
         warning={t(fallbackLocale).dashboard.backendUnavailable(message)}
         locale={fallbackLocale}
+        personalBudget={null}
       />
     );
   }
 
-  const { expenseTotals, incomes, locale, settlementResult, users } = pageData;
+  const { expenseTotals, incomes, locale, personalBudget, settlementResult, users } = pageData;
   let settlement: SettlementResponse;
   let warning: string | null = null;
 
@@ -97,6 +99,7 @@ async function DashboardPageContent({ searchParams }: DashboardPageProps) {
       warning={warning}
       expenseCategorySlices={buildExpenseCategorySlices(expenseTotals?.byCategory ?? [])}
       locale={locale}
+      personalBudget={personalBudget}
     />
   );
 }
@@ -115,7 +118,7 @@ async function getDashboardPageData(month: string) {
     sessionToken ? { 'x-fairsplit-session': sessionToken } : undefined,
   );
 
-  const [users, incomes, expenseTotals, settlementResult] = await withServerApiLogging(
+  const [users, incomes, expenseTotals, settlementResult, personalBudget] = await withServerApiLogging(
     requestId,
     { month, route: '/dashboard' },
     () =>
@@ -131,6 +134,7 @@ async function getDashboardPageData(month: string) {
 
           throw error;
         }),
+        getPersonalBudgetForecast(month, serverReadInit),
       ]),
   );
 
@@ -138,6 +142,7 @@ async function getDashboardPageData(month: string) {
     expenseTotals,
     incomes,
     locale: resolveLocaleForUser(users, session?.userId ?? null),
+    personalBudget,
     settlementResult,
     users,
   };

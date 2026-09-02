@@ -154,6 +154,33 @@ export interface ExpenseTotalsResponse {
   byUser: Record<string, string>;
 }
 
+export interface PersonalBudgetSettings {
+  fixedCommitments: string;
+  savingsTarget: string;
+  safetyBuffer: string;
+  averagingMonths: number;
+}
+
+export interface PersonalBudgetForecastResponse {
+  month: string;
+  configured: boolean;
+  settings: PersonalBudgetSettings;
+  monthlyIncome: string;
+  historicalAverageSharedExpenses: string;
+  projectedSharedExpenses: string;
+  splitPercentage: string;
+  projectedFairShare: string;
+  alreadyPaid: string;
+  remainingSharedReserve: string;
+  fixedCommitments: string;
+  savingsTarget: string;
+  safetyBuffer: string;
+  availableForPersonalUse: string;
+  historyMonthsRequested: number;
+  historyMonthsUsed: number;
+  confidence: 'none' | 'low' | 'medium' | 'high';
+}
+
 export interface HouseholdSetupStatus {
   needsHouseholdSetup: boolean;
   decisionLocked: boolean;
@@ -694,6 +721,33 @@ export async function getExpenseTotals(
     init ?? { cache: 'no-store' },
   );
   return parseResponse<ExpenseTotalsResponse>(response);
+}
+
+export async function getPersonalBudgetForecast(
+  month: string,
+  init?: NextRequestInit,
+): Promise<PersonalBudgetForecastResponse> {
+  const params = new URLSearchParams({ month });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/personal-budget?${params.toString()}`,
+    init ?? { cache: 'no-store' },
+  );
+  return parseResponse<PersonalBudgetForecastResponse>(response);
+}
+
+export async function updatePersonalBudgetPlan(payload: {
+  fixedCommitments: number;
+  savingsTarget: number;
+  safetyBuffer: number;
+  averagingMonths: number;
+}): Promise<PersonalBudgetSettings> {
+  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/personal-budget` : '/api/personal-budget';
+  const response = await fetchFromApi(endpoint, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseResponse<PersonalBudgetSettings>(response);
 }
 
 export async function getHouseholdSetupStatus(init?: NextRequestInit): Promise<HouseholdSetupStatus> {

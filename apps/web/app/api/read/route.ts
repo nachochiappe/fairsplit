@@ -16,6 +16,7 @@ const ALLOWED_READ_PATH_PREFIXES = [
   '/super-categories',
   '/exchange-rates',
   '/settlement',
+  '/personal-budget',
   '/household/setup-status',
   '/household/split-policy',
   '/auth/passkeys',

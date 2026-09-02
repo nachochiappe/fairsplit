@@ -31,9 +31,24 @@ model User {
   passkeys                      UserPasskey[]
   revokedSessions               RevokedSession[]
   customSplitShares             HouseholdSplitShare[]
+  personalBudgetPlan            PersonalBudgetPlan?
 
   @@unique([authUserId])
   @@index([householdId])
+}
+
+/// Private planning inputs used to estimate how much of a user's monthly
+/// income remains flexible after shared obligations and personal priorities.
+/// Personal purchases themselves are intentionally not stored.
+model PersonalBudgetPlan {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fixedCommitments Decimal  @default(0) @db.Decimal(14, 2)
+  savingsTarget    Decimal  @default(0) @db.Decimal(14, 2)
+  safetyBuffer     Decimal  @default(0) @db.Decimal(14, 2)
+  averagingMonths  Int      @default(3)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 /// A single session signed out before its token would have expired.
