@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { formatMoney, formatPercent } from '../../lib/currency';
+import { formatMoney } from '../../lib/currency';
 import {
   updatePersonalBudgetPlan,
   type AppLocale,
@@ -190,8 +190,8 @@ export function PersonalAllowanceCard({ forecast, locale, month }: PersonalAllow
 
       {isExpanded ? (
         <>
-          <div className="grid gap-0 border-t border-stroke/70 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-            <div className="px-5 py-6 sm:px-6 md:px-8 md:py-8">
+          <div className="border-t border-stroke/70 px-5 py-6 sm:px-6 md:px-8 md:py-8">
+            <div className="mx-auto max-w-4xl">
               {hasIncome ? (
                 <div>
                   <p
@@ -223,9 +223,15 @@ export function PersonalAllowanceCard({ forecast, locale, month }: PersonalAllow
 
               {hasIncome ? (
                 <>
+                  <div className="mt-7 flex items-center justify-between gap-4 border-b border-stroke/70 pb-3 text-sm">
+                    <span className="font-semibold text-ink-strong">{copy.monthlyIncome}</span>
+                    <span className="text-base font-bold tabular-nums text-ink-strong">
+                      {formatMoney(income, locale)}
+                    </span>
+                  </div>
                   <div
                     aria-label={copy.allocationAria}
-                    className="mt-7 flex h-3 w-full overflow-hidden rounded-full bg-surface-muted"
+                    className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-surface-muted"
                     role="img"
                   >
                     {allocations.map((item) =>
@@ -256,109 +262,26 @@ export function PersonalAllowanceCard({ forecast, locale, month }: PersonalAllow
                   </ul>
                 </>
               ) : null}
-            </div>
 
-            <div className="border-t border-stroke/70 bg-surface-muted/55 px-5 py-6 sm:px-6 md:px-8 md:py-8 lg:border-l lg:border-t-0">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-ink-strong">{copy.howCalculated}</h3>
-                  <p className="mt-1 text-sm leading-6 text-ink-muted">
-                    {forecast.historyMonthsUsed === 0
-                      ? copy.noHistory
-                      : copy.historyUsed(
-                          forecast.historyMonthsUsed,
-                          forecast.historyMonthsRequested,
-                        )}
+              <div className="mt-6 flex flex-col gap-3 border-t border-stroke/70 pt-5 sm:flex-row sm:items-center sm:justify-end">
+                {status ? (
+                  <p className="text-sm font-medium text-emerald-700 sm:mr-auto" role="status">
+                    {status}
                   </p>
-                </div>
-                <span className="shrink-0 whitespace-nowrap rounded-full border border-stroke bg-white px-3 py-1 text-xs font-semibold text-ink-muted">
-                  {copy.confidence[forecast.confidence]}
-                </span>
+                ) : null}
+                <button
+                  aria-expanded={isEditing}
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-stroke bg-white px-5 py-2 text-sm font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 sm:w-auto"
+                  type="button"
+                  onClick={() => {
+                    setIsEditing((current) => !current);
+                    setError(null);
+                    setStatus(null);
+                  }}
+                >
+                  {forecast.configured ? copy.adjustPlan : copy.setUpPlan}
+                </button>
               </div>
-
-              <dl className="mt-6 space-y-3 text-sm">
-                <BudgetLine label={copy.monthlyIncome} locale={locale} value={income} strong />
-                <BudgetLine
-                  label={copy.projectedContribution}
-                  locale={locale}
-                  value={-Number(forecast.projectedFairShare)}
-                />
-                <BudgetLine
-                  label={copy.fixedCommitments}
-                  locale={locale}
-                  value={-Number(forecast.fixedCommitments)}
-                />
-                <BudgetLine
-                  label={copy.savingsTarget}
-                  locale={locale}
-                  value={-Number(forecast.savingsTarget)}
-                />
-                <BudgetLine
-                  label={copy.safetyBuffer}
-                  locale={locale}
-                  value={-Number(forecast.safetyBuffer)}
-                />
-                <div className="border-t border-stroke pt-3">
-                  <BudgetLine
-                    label={hasShortfall ? copy.shortfall : copy.available}
-                    locale={locale}
-                    value={available}
-                    strong
-                  />
-                </div>
-              </dl>
-
-              <details className="mt-5 border-t border-stroke/70 pt-4 text-sm">
-                <summary className="min-h-11 cursor-pointer select-none py-3 font-semibold text-ink-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2">
-                  {copy.forecastDetails}
-                </summary>
-                <dl className="space-y-3 pb-2 pt-2">
-                  <BudgetLine
-                    label={copy.historicalAverage}
-                    locale={locale}
-                    value={Number(forecast.historicalAverageSharedExpenses)}
-                  />
-                  <BudgetLine
-                    label={copy.projectedShared}
-                    locale={locale}
-                    value={Number(forecast.projectedSharedExpenses)}
-                  />
-                  <div className="flex items-center justify-between gap-4">
-                    <dt className="text-ink-muted">{copy.yourSplit}</dt>
-                    <dd className="font-semibold tabular-nums text-ink-strong">
-                      {formatPercent(Number(forecast.splitPercentage) / 100, locale)}
-                    </dd>
-                  </div>
-                  <BudgetLine
-                    label={copy.alreadyPaid}
-                    locale={locale}
-                    value={Number(forecast.alreadyPaid)}
-                  />
-                  <BudgetLine
-                    label={copy.stillToReserve}
-                    locale={locale}
-                    value={Number(forecast.remainingSharedReserve)}
-                  />
-                </dl>
-              </details>
-
-              <button
-                aria-expanded={isEditing}
-                className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-stroke bg-white px-4 py-2 text-sm font-semibold text-ink-base hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2"
-                type="button"
-                onClick={() => {
-                  setIsEditing((current) => !current);
-                  setError(null);
-                  setStatus(null);
-                }}
-              >
-                {forecast.configured ? copy.adjustPlan : copy.setUpPlan}
-              </button>
-              {status ? (
-                <p className="mt-3 text-sm font-medium text-emerald-700" role="status">
-                  {status}
-                </p>
-              ) : null}
             </div>
           </div>
 
@@ -452,27 +375,6 @@ export function PersonalAllowanceCard({ forecast, locale, month }: PersonalAllow
         </>
       ) : null}
     </section>
-  );
-}
-
-function BudgetLine({
-  label,
-  locale,
-  strong = false,
-  value,
-}: {
-  label: string;
-  locale: AppLocale;
-  strong?: boolean;
-  value: number;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <dt className={strong ? 'font-semibold text-ink-strong' : 'text-ink-muted'}>{label}</dt>
-      <dd className={`${strong ? 'font-bold' : 'font-semibold'} tabular-nums text-ink-strong`}>
-        {value < 0 ? `−${formatMoney(Math.abs(value), locale)}` : formatMoney(value, locale)}
-      </dd>
-    </div>
   );
 }
 
