@@ -277,6 +277,9 @@ const en = {
     },
     form: {
       date: 'Date',
+      today: 'Today',
+      yesterday: 'Yesterday',
+      chooseDate: 'Choose date',
       description: 'Description',
       category: 'Category',
       currency: 'Currency',
@@ -862,6 +865,9 @@ const es: Translation = {
     },
     form: {
       date: 'Fecha',
+      today: 'Hoy',
+      yesterday: 'Ayer',
+      chooseDate: 'Elegir fecha',
       description: 'Descripción',
       category: 'Categoría',
       currency: 'Moneda',
