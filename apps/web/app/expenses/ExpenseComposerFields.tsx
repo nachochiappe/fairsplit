@@ -2,11 +2,19 @@
 
 import { computeInstallmentAmounts } from '@fairsplit/shared';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
 import { formatMoney } from '../../lib/currency';
-import type { Translation } from '../../lib/i18n';
+import { localeTags, type Translation } from '../../lib/i18n';
 import {
   Category,
   ExchangeRate,
@@ -24,7 +32,9 @@ import {
 import {
   DEFAULT_CURRENCY_CODE,
   ExpenseForm,
+  getTodayDateInputValue,
   resolveInstallmentTotalAmountOnEnable,
+  shiftDateInputValue,
   supportedCurrencyCodes,
   type SupportedCurrencyCode,
 } from './expense-form';
@@ -406,6 +416,144 @@ function ControlledAmountField({
   );
 }
 
+type QuickDateChoice = 'today' | 'yesterday' | 'custom';
+
+interface ExpenseDateFieldProps {
+  copy: ExpensesCopy['form'];
+  form: UseFormReturn<ExpenseForm>;
+  locale: AppLocale;
+}
+
+function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
+  const dateInputId = useId();
+  const date = useWatch({ control: form.control, name: 'date' });
+  const today = getTodayDateInputValue();
+  const yesterday = shiftDateInputValue(today, -1);
+  const choice: QuickDateChoice =
+    date === today ? 'today' : date === yesterday ? 'yesterday' : 'custom';
+  const barRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
+  const positionedRef = useRef(false);
+
+  const customDateLabel = useMemo(() => {
+    if (!date) {
+      return copy.chooseDate;
+    }
+
+    const parsedDate = new Date(`${date}T12:00:00`);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return copy.chooseDate;
+    }
+
+    return new Intl.DateTimeFormat(localeTags[locale], {
+      day: 'numeric',
+      month: 'short',
+    }).format(parsedDate);
+  }, [copy.chooseDate, date, locale]);
+
+  const positionPill = useCallback((animate: boolean) => {
+    const pill = pillRef.current;
+    const target = barRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+
+    if (!pill || !target) {
+      return;
+    }
+
+    if (!animate) {
+      const previousTransition = pill.style.transition;
+      pill.style.transition = 'none';
+      pill.style.transform = `translateX(${target.offsetLeft}px)`;
+      pill.style.width = `${target.offsetWidth}px`;
+      void pill.offsetWidth;
+      pill.style.transition = previousTransition;
+      return;
+    }
+
+    pill.style.transform = `translateX(${target.offsetLeft}px)`;
+    pill.style.width = `${target.offsetWidth}px`;
+  }, []);
+
+  useLayoutEffect(() => {
+    positionPill(positionedRef.current);
+    positionedRef.current = true;
+  }, [customDateLabel, positionPill]);
+
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => positionPill(false));
+    resizeObserver.observe(bar);
+    return () => resizeObserver.disconnect();
+  }, [positionPill]);
+
+  const selectQuickDate = (nextDate: string) => {
+    form.setValue('date', nextDate, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  };
+
+  return (
+    <div className="block text-sm">
+      <span className="mb-1 block text-xs font-medium text-slate-600">{copy.date}</span>
+      <div
+        ref={barRef}
+        aria-label={copy.date}
+        className="t-tabs expense-date-tabs"
+        role="group"
+      >
+        <span ref={pillRef} aria-hidden="true" className="t-tabs-pill" />
+        <button
+          aria-pressed={choice === 'today'}
+          className="t-tab"
+          onClick={() => selectQuickDate(today)}
+          type="button"
+        >
+          {copy.today}
+        </button>
+        <button
+          aria-pressed={choice === 'yesterday'}
+          className="t-tab"
+          onClick={() => selectQuickDate(yesterday)}
+          type="button"
+        >
+          {copy.yesterday}
+        </button>
+        <label
+          aria-pressed={choice === 'custom'}
+          className="t-tab"
+          htmlFor={dateInputId}
+          role="button"
+        >
+          <span className="truncate">{choice === 'custom' ? customDateLabel : copy.chooseDate}</span>
+          <Controller
+            control={form.control}
+            name="date"
+            render={({ field }) => (
+              <input
+                aria-label={copy.chooseDate}
+                className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
+                id={dateInputId}
+                lang={localeTags[locale]}
+                name={field.name}
+                onBlur={field.onBlur}
+                onChange={field.onChange}
+                ref={field.ref}
+                type="date"
+                value={field.value}
+              />
+            )}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 export function ExpenseComposerFields({
   form,
   copy,
@@ -600,15 +748,7 @@ export function ExpenseComposerFields({
             </span>
           </label>
 
-          <label className="block text-sm">
-            <span className="mb-1 block text-xs font-medium text-slate-600">{copy.form.date}</span>
-            <input
-              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-2 [color-scheme:light] [&::-webkit-date-and-time-value]:text-left"
-              lang="en"
-              type="date"
-              {...form.register('date')}
-            />
-          </label>
+          <ExpenseDateField copy={copy.form} form={form} locale={locale} />
 
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">

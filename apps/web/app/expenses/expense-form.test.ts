@@ -5,6 +5,7 @@ import {
   expenseSchema,
   resolveExpenseMonth,
   resolveInstallmentTotalAmountOnEnable,
+  shiftDateInputValue,
 } from './expense-form';
 
 describe('expense form defaults', () => {
@@ -71,6 +72,16 @@ describe('resolveExpenseMonth', () => {
         nextMonthExpense: true,
       }),
     ).toBe('2026-09');
+  });
+});
+
+describe('shiftDateInputValue', () => {
+  it('moves across month boundaries without UTC drift', () => {
+    expect(shiftDateInputValue('2026-03-01', -1)).toBe('2026-02-28');
+  });
+
+  it('preserves leap days', () => {
+    expect(shiftDateInputValue('2028-03-01', -1)).toBe('2028-02-29');
   });
 });
 
