@@ -236,11 +236,7 @@ const OPTIMISTIC_EXPENSE_ID_PREFIX = 'optimistic:expense:';
 type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
 
 export function createOptimisticExpenseId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `${OPTIMISTIC_EXPENSE_ID_PREFIX}${crypto.randomUUID()}`;
-  }
-
-  return `${OPTIMISTIC_EXPENSE_ID_PREFIX}${Math.random().toString(36).slice(2, 10)}`;
+  return `${OPTIMISTIC_EXPENSE_ID_PREFIX}${crypto.randomUUID()}`;
 }
 
 export function isOptimisticExpenseId(id: string): boolean {
@@ -353,9 +349,7 @@ export async function getUser(id: string, init?: NextRequestInit): Promise<User>
 }
 
 export async function updateUser(id: string, payload: { name?: string; locale?: AppLocale }): Promise<User> {
-  const endpoint =
-    typeof window === 'undefined' ? `${API_BASE_URL}/users/${encodeURIComponent(id)}` : `/api/users/${encodeURIComponent(id)}`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -386,8 +380,7 @@ export async function replaceIncomesForUser(payload: {
     fxRate?: number;
   }>;
 }): Promise<Income[]> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/incomes` : '/api/incomes';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/incomes`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -437,9 +430,7 @@ export async function getExpenses(
 }
 
 export async function materializeExpenseMonth(month: string): Promise<ExpenseMaterializationResponse> {
-  const endpoint =
-    typeof window === 'undefined' ? `${API_BASE_URL}/expenses/materialize` : '/api/expenses/materialize';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/expenses/materialize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ month }),
@@ -477,8 +468,7 @@ export async function createExpense(payload: {
     totalAmount?: number;
   };
 }): Promise<Expense> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/expenses` : '/api/expenses';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/expenses`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -512,9 +502,7 @@ export async function updateExpense(
     applyToFuture: boolean;
   }>,
 ): Promise<Expense> {
-  const endpoint =
-    typeof window === 'undefined' ? `${API_BASE_URL}/expenses/${id}` : `/api/expenses/${encodeURIComponent(id)}`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/expenses/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -524,9 +512,7 @@ export async function updateExpense(
 }
 
 export async function deleteExpense(id: string, applyScope?: 'single' | 'future' | 'all'): Promise<void> {
-  const endpoint =
-    typeof window === 'undefined' ? `${API_BASE_URL}/expenses/${id}` : `/api/expenses/${encodeURIComponent(id)}`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/expenses/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(applyScope ? { applyScope } : {}),
@@ -546,8 +532,7 @@ export async function createCategory(payload: {
   icon: CategoryIconKey;
   superCategoryId?: string | null;
 }): Promise<Category> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/categories` : '/api/categories';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/categories`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -560,9 +545,7 @@ export async function updateCategory(
   id: string,
   payload: Partial<{ name: string; icon: CategoryIconKey }>,
 ): Promise<Category> {
-  const endpoint =
-    typeof window === 'undefined' ? `${API_BASE_URL}/categories/${id}` : `/api/categories/${encodeURIComponent(id)}`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -572,11 +555,7 @@ export async function updateCategory(
 }
 
 export async function archiveCategory(id: string, payload?: { replacementCategoryId?: string }): Promise<void> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/categories/${id}/archive`
-      : `/api/categories/${encodeURIComponent(id)}/archive`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(id)}/archive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {}),
@@ -588,11 +567,7 @@ export async function archiveCategory(id: string, payload?: { replacementCategor
 }
 
 export async function unarchiveCategory(id: string): Promise<void> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/categories/${id}/unarchive`
-      : `/api/categories/${encodeURIComponent(id)}/unarchive`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(id)}/unarchive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
@@ -607,11 +582,7 @@ export async function assignCategorySuperCategory(
   categoryId: string,
   payload: { superCategoryId: string | null },
 ): Promise<Category> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/categories/${categoryId}/super-category`
-      : `/api/categories/${encodeURIComponent(categoryId)}/super-category`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(categoryId)}/super-category`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -631,8 +602,7 @@ export async function createSuperCategory(payload: {
   icon?: CategoryIconKey;
   sortOrder?: number;
 }): Promise<SuperCategory> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/super-categories` : '/api/super-categories';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/super-categories`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -645,11 +615,7 @@ export async function updateSuperCategory(
   id: string,
   payload: Partial<{ name: string; color: string; icon: CategoryIconKey; sortOrder: number }>,
 ): Promise<SuperCategory> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/super-categories/${id}`
-      : `/api/super-categories/${encodeURIComponent(id)}`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/super-categories/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -662,11 +628,7 @@ export async function archiveSuperCategory(
   id: string,
   payload?: { replacementSuperCategoryId?: string },
 ): Promise<void> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/super-categories/${id}/archive`
-      : `/api/super-categories/${encodeURIComponent(id)}/archive`;
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/super-categories/${encodeURIComponent(id)}/archive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {}),
@@ -690,8 +652,7 @@ export async function upsertExchangeRate(payload: {
   currencyCode: string;
   rateToArs: number;
 }): Promise<ExchangeRate> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/exchange-rates` : '/api/exchange-rates';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/exchange-rates`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -743,8 +704,7 @@ export async function updatePersonalBudgetPlan(payload: {
   safetyBuffer: number;
   averagingMonths: number;
 }): Promise<PersonalBudgetSettings> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/personal-budget` : '/api/personal-budget';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/personal-budget`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -771,11 +731,7 @@ export async function updateHouseholdSplitPolicy(payload: {
   method: HouseholdSplitPolicy['method'];
   shares: Array<{ userId: string; percentage: number }>;
 }): Promise<HouseholdSplitPolicy> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/household/split-policy`
-      : '/api/household/split-policy';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/split-policy`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -784,8 +740,7 @@ export async function updateHouseholdSplitPolicy(payload: {
 }
 
 export async function createHouseholdInvite(init?: NextRequestInit): Promise<HouseholdInvite> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/household/invites` : '/api/household/invites';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/invites`, {
     ...(init ?? {}),
     method: 'POST',
     headers: { ...(init?.headers ?? {}), 'Content-Type': 'application/json' },
@@ -795,9 +750,7 @@ export async function createHouseholdInvite(init?: NextRequestInit): Promise<Hou
 }
 
 export async function joinHouseholdWithCode(code: string, init?: NextRequestInit): Promise<AuthLinkResponse> {
-  const endpoint =
-    typeof window === 'undefined' ? `${API_BASE_URL}/household/join-with-code` : '/api/household/join-with-code';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/join-with-code`, {
     ...(init ?? {}),
     method: 'POST',
     headers: { ...(init?.headers ?? {}), 'Content-Type': 'application/json' },
@@ -812,19 +765,14 @@ export async function getPasskeys(init?: NextRequestInit): Promise<PasskeyListRe
 }
 
 export async function deletePasskey(id: string): Promise<void> {
-  const endpoint =
-    typeof window === 'undefined'
-      ? `${API_BASE_URL}/auth/passkeys/${id}`
-      : `/api/auth/passkeys/${encodeURIComponent(id)}`;
-  const response = await fetchFromApi(endpoint, { method: 'DELETE' });
+  const response = await fetchFromApi(`${API_BASE_URL}/auth/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' });
   if (!response.ok) {
     await throwApiError(response, 'Failed to remove passkey');
   }
 }
 
 export async function skipHouseholdSetup(init?: NextRequestInit): Promise<AuthLinkResponse> {
-  const endpoint = typeof window === 'undefined' ? `${API_BASE_URL}/household/skip-setup` : '/api/household/skip-setup';
-  const response = await fetchFromApi(endpoint, {
+  const response = await fetchFromApi(`${API_BASE_URL}/household/skip-setup`, {
     ...(init ?? {}),
     method: 'POST',
     headers: { ...(init?.headers ?? {}), 'Content-Type': 'application/json' },

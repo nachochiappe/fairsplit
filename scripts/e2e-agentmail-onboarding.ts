@@ -1,41 +1,7 @@
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-function loadDotEnvFile(pathname: string): void {
-  if (!existsSync(pathname)) {
-    return;
-  }
-  const lines = readFileSync(pathname, 'utf8').split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-    const separator = trimmed.indexOf('=');
-    if (separator <= 0) {
-      continue;
-    }
-    const key = trimmed.slice(0, separator).trim();
-    if (!key || process.env[key] !== undefined) {
-      continue;
-    }
-    let value = trimmed.slice(separator + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    process.env[key] = value;
-  }
-}
-
 const repoRoot = resolve(__dirname, '..');
-loadDotEnvFile(resolve(repoRoot, '.env'));
-loadDotEnvFile(resolve(repoRoot, '.env.local'));
-loadDotEnvFile(resolve(repoRoot, 'apps/web/.env.local'));
-loadDotEnvFile(resolve(repoRoot, 'apps/api/.env'));
 
 const env = {
   agentmailApiKey: process.env.AGENTMAIL_API_KEY,

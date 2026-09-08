@@ -1,21 +1,17 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-import { REQUEST_ID_HEADER } from '@fairsplit/logging';
 import { CSRF_COOKIE, SESSION_COOKIE } from '../../../lib/session';
 import { appendRequestId, getOrCreateRequestId, withRequestId } from '../../../lib/request-id';
 import { webLogger } from '../../../lib/server-logger';
-import { applySessionCookies, isSameOrigin, readSessionToken, sanitizeJsonBody } from './auth-cookies';
+import { isSameOrigin } from './auth-cookies';
+import { forwardApiResponse } from './proxy-response';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 
 interface ProxyMutationOptions {
   upstreamPath: string;
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  revalidatePaths?: string[];
 }
-
-const BODYLESS_STATUS_CODES = new Set([204, 205, 304]);
 
 export async function proxyMutation(request: Request, options: ProxyMutationOptions): Promise<Response> {
   const requestId = getOrCreateRequestId(new Headers(request.headers));
@@ -79,44 +75,14 @@ export async function proxyMutation(request: Request, options: ProxyMutationOpti
     return appendRequestId(Response.json({ error: 'Failed to reach API.' }, { status: 502 }), requestId);
   }
 
-  const responseBody = await upstreamResponse.text();
-  const contentTypeHeader = upstreamResponse.headers.get('content-type') ?? 'application/json';
-  const upstreamRequestId = upstreamResponse.headers.get(REQUEST_ID_HEADER) ?? requestId;
-  if (upstreamResponse.status >= 500) {
-    webLogger.error(
-      {
-        method: options.method,
-        requestId: upstreamRequestId,
-        route: options.upstreamPath,
-        upstreamStatus: upstreamResponse.status,
-      },
-      'Mutation proxy received API 5xx response',
-    );
-  }
   if (upstreamResponse.ok) {
-    for (const path of options.revalidatePaths ?? []) {
-      revalidatePath(path);
-    }
+    revalidatePath('/', 'layout');
   }
-  const isJsonResponse = contentTypeHeader.includes('application/json');
-  const safeBody = isJsonResponse ? sanitizeJsonBody(responseBody) : responseBody;
-  const response = BODYLESS_STATUS_CODES.has(upstreamResponse.status)
-    ? new NextResponse(null, { status: upstreamResponse.status })
-    : new NextResponse(safeBody, {
-        status: upstreamResponse.status,
-        headers: { 'Content-Type': contentTypeHeader },
-      });
-
-  if (upstreamResponse.ok && isJsonResponse) {
-    const rotatedSessionToken = readSessionToken(responseBody);
-    if (rotatedSessionToken) {
-      applySessionCookies(response, rotatedSessionToken);
-    }
-  }
-
-  if (!BODYLESS_STATUS_CODES.has(upstreamResponse.status)) {
-    response.headers.set('Content-Type', contentTypeHeader);
-  }
-  response.headers.set('Cache-Control', 'no-store');
-  return appendRequestId(response, upstreamRequestId);
+  return forwardApiResponse(upstreamResponse, {
+    method: options.method,
+    requestId,
+    rotateSession: true,
+    sanitizeJson: true,
+    upstreamPath: options.upstreamPath,
+  });
 }

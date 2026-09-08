@@ -1,9 +1,8 @@
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-import { REQUEST_ID_HEADER } from '@fairsplit/logging';
 import { SESSION_COOKIE } from '../../../lib/session';
 import { appendRequestId, getOrCreateRequestId, withRequestId } from '../../../lib/request-id';
 import { webLogger } from '../../../lib/server-logger';
+import { forwardApiResponse } from '../_lib/proxy-response';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 const ALLOWED_READ_PATH_PREFIXES = [
@@ -23,7 +22,9 @@ const ALLOWED_READ_PATH_PREFIXES = [
 ] as const;
 
 function isAllowedPath(path: string): boolean {
-  return ALLOWED_READ_PATH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}?`) || path.startsWith(`${prefix}/`));
+  return ALLOWED_READ_PATH_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}?`) || path.startsWith(`${prefix}/`),
+  );
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -64,28 +65,9 @@ export async function GET(request: Request): Promise<Response> {
     return appendRequestId(Response.json({ error: 'Failed to reach API.' }, { status: 502 }), requestId);
   }
 
-  const body = await upstreamResponse.text();
-  const contentType = upstreamResponse.headers.get('content-type') ?? 'application/json';
-  const upstreamRequestId = upstreamResponse.headers.get(REQUEST_ID_HEADER) ?? requestId;
-  if (upstreamResponse.status >= 500) {
-    webLogger.error(
-      {
-        method: 'GET',
-        requestId: upstreamRequestId,
-        route: upstreamPath,
-        upstreamStatus: upstreamResponse.status,
-      },
-      'Read proxy received API 5xx response',
-    );
-  }
-  return appendRequestId(
-    new NextResponse(body, {
-    status: upstreamResponse.status,
-    headers: {
-      'Content-Type': contentType,
-      'Cache-Control': 'no-store',
-    },
-    }),
-    upstreamRequestId,
-  );
+  return forwardApiResponse(upstreamResponse, {
+    method: 'GET',
+    requestId,
+    upstreamPath,
+  });
 }

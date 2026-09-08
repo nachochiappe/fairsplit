@@ -23,29 +23,22 @@ export interface SessionClaims {
 }
 
 function toBase64Url(value: string): string {
-  return Buffer.from(value, 'utf8')
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+  return Buffer.from(value, 'utf8').toString('base64url');
 }
 
 function fromBase64Url(value: string): string | null {
   if (!value || /[^A-Za-z0-9\-_]/.test(value)) {
     return null;
   }
-  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
   try {
-    return Buffer.from(padded, 'base64').toString('utf8');
+    return Buffer.from(value, 'base64url').toString('utf8');
   } catch {
     return null;
   }
 }
 
 function sign(payloadB64: string, secret: string): string {
-  const digest = createHmac('sha256', secret).update(payloadB64).digest('base64');
-  return digest.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  return createHmac('sha256', secret).update(payloadB64).digest('base64url');
 }
 
 function assertValidSecret(secret: string | undefined): asserts secret is string {

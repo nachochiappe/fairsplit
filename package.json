@@ -3,14 +3,14 @@
   "private": true,
   "packageManager": "pnpm@10.4.1",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.9.0"
   },
   "scripts": {
     "prebuild": "pnpm --filter @fairsplit/db prisma:generate",
     "dev": "pnpm -r --parallel dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "test:e2e:agentmail:onboarding": "pnpm --filter @fairsplit/api exec tsx ../../scripts/e2e-agentmail-onboarding.ts",
+    "test:e2e:agentmail:onboarding": "pnpm --filter @fairsplit/api exec node --env-file-if-exists=.env --env-file-if-exists=../web/.env.local --env-file-if-exists=../../.env.local --env-file-if-exists=../../.env --import tsx ../../scripts/e2e-agentmail-onboarding.ts",
     "lint": "pnpm -r lint",
     "format": "prettier --write .",
     "db:generate": "pnpm --filter @fairsplit/db prisma:generate",
@@ -25,7 +25,6 @@
   "pnpm": {
     "overrides": {
       "defu": "6.1.7",
-      "express>path-to-regexp": "0.1.13",
       "next>postcss": "8.5.23",
       "next>sharp": "0.35.3"
     }
