@@ -517,8 +517,7 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
   };
 
   return (
-    <div className="block text-sm">
-      <span className="mb-1 block text-xs font-medium text-slate-600">{copy.date}</span>
+    <div>
       <div
         ref={barRef}
         aria-label={copy.date}
@@ -622,6 +621,8 @@ export function ExpenseComposerFields({
 
   return (
     <fieldset className="min-w-0 space-y-4" disabled={submitState !== 'idle'}>
+      <ExpenseDateField copy={copy.form} form={form} locale={locale} />
+
       {installmentEnabled && installmentEntryMode === 'total' ? (
         <ControlledAmountField
           copy={copy}
@@ -772,8 +773,6 @@ export function ExpenseComposerFields({
               <span aria-hidden="true" className={pillToggleThumbClass} />
             </span>
           </label>
-
-          <ExpenseDateField copy={copy.form} form={form} locale={locale} />
 
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">
