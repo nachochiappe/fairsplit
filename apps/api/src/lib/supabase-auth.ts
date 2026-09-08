@@ -14,10 +14,8 @@ function normalizeAccessToken(rawToken: string): string {
 }
 
 function decodeJwtPart(part: string): Record<string, unknown> | null {
-  const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
   try {
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<string, unknown>;
+    return JSON.parse(Buffer.from(part, 'base64url').toString('utf8')) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -40,10 +38,7 @@ function verifyHs256Jwt(token: string, secret: string): SupabaseAuthIdentity | n
 
   const expectedSig = createHmac('sha256', secret)
     .update(`${headerPart}.${payloadPart}`)
-    .digest('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+    .digest('base64url');
 
   const givenSig = Buffer.from(signaturePart);
   const computedSig = Buffer.from(expectedSig);

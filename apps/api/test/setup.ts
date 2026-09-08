@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { TEST_SESSION_SECRET } from '@fairsplit/shared';
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
