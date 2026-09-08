@@ -432,6 +432,7 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
   const choice: QuickDateChoice =
     date === today ? 'today' : date === yesterday ? 'yesterday' : 'custom';
   const barRef = useRef<HTMLDivElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
   const positionedRef = useRef(false);
 
@@ -497,6 +498,24 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
     });
   };
 
+  const openDatePicker = () => {
+    const input = dateInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Fall through for browsers that restrict showPicker().
+      }
+    }
+
+    input.click();
+  };
+
   return (
     <div className="block text-sm">
       <span className="mb-1 block text-xs font-medium text-slate-600">{copy.date}</span>
@@ -523,32 +542,38 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
         >
           {copy.yesterday}
         </button>
-        <label
+        <button
+          aria-controls={dateInputId}
           aria-pressed={choice === 'custom'}
           className="t-tab"
-          htmlFor={dateInputId}
-          role="button"
+          onClick={openDatePicker}
+          type="button"
         >
           <span className="truncate">{choice === 'custom' ? customDateLabel : copy.chooseDate}</span>
-          <Controller
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <input
-                aria-label={copy.chooseDate}
-                className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
-                id={dateInputId}
-                lang={localeTags[locale]}
-                name={field.name}
-                onBlur={field.onBlur}
-                onChange={field.onChange}
-                ref={field.ref}
-                type="date"
-                value={field.value}
-              />
-            )}
-          />
-        </label>
+        </button>
+        <Controller
+          control={form.control}
+          name="date"
+          render={({ field }) => (
+            <input
+              aria-hidden="true"
+              aria-label={copy.chooseDate}
+              className="sr-only"
+              id={dateInputId}
+              lang={localeTags[locale]}
+              name={field.name}
+              onBlur={field.onBlur}
+              onChange={field.onChange}
+              ref={(input) => {
+                field.ref(input);
+                dateInputRef.current = input;
+              }}
+              tabIndex={-1}
+              type="date"
+              value={field.value}
+            />
+          )}
+        />
       </div>
     </div>
   );
