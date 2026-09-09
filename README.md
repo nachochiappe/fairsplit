@@ -3,7 +3,7 @@
   Fairsplit
 </h1>
 
-<img width="1481" height="889" alt="image" src="https://github.com/user-attachments/assets/197d0687-e52a-492d-9b52-1a656e882e61" />
+<img width="1617" height="972" alt="Fairsplit monthly expenses screen" src="./docs/screenshots/expenses-readme.png" />
 
 Fairsplit helps couples and households split shared expenses based on income, not a flat 50/50 rule.
 
