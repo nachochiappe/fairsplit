@@ -1,9 +1,9 @@
 <h1>
-  <img src="./apps/web/public/branding/logo-prism-v3-symbol.svg" alt="Fairsplit icon" width="28" height="28" />
+  <img src="./apps/web/public/branding/icon-32.png" alt="Fairsplit icon" width="28" height="28" />
   Fairsplit
 </h1>
 
-<img width="1481" height="889" alt="image" src="https://github.com/user-attachments/assets/197d0687-e52a-492d-9b52-1a656e882e61" />
+<img width="1618" height="972" alt="Fairsplit monthly expenses screen" src="./docs/screenshots/expenses-readme.png" />
 
 Fairsplit helps couples and households split shared expenses based on income, not a flat 50/50 rule.
 
