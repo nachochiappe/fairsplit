@@ -2,7 +2,6 @@ import { cookies } from 'next/headers';
 import { cacheLife } from 'next/cache';
 import type { CategoryIconKey } from '@fairsplit/shared';
 import { redirect } from 'next/navigation';
-import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { DashboardClient } from './DashboardClient';
 import { AppRouteLoading } from '../../components/AppRouteLoading';
@@ -50,7 +49,6 @@ export default function DashboardPage(props: DashboardPageProps) {
 }
 
 async function DashboardPageContent({ searchParams }: DashboardPageProps) {
-  await connection();
   const resolvedSearchParams = await searchParams;
   const currentMonth = getCurrentMonth();
   const month = resolvedSearchParams?.month ?? currentMonth;
