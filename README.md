@@ -1,5 +1,5 @@
 <h1>
-  <img src="./apps/web/public/branding/logo-prism-v3-symbol.svg" alt="Fairsplit icon" width="28" height="28" />
+  <img src="./apps/web/public/branding/icon-32.png" alt="Fairsplit icon" width="28" height="28" />
   Fairsplit
 </h1>
 
