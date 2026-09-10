@@ -141,13 +141,19 @@ html {
 }
 
 .expense-date-tabs .t-tab:hover,
-.expense-date-tabs .t-tab[aria-pressed='true'] {
+.expense-date-tabs .t-tab[data-selected='true'] {
   color: var(--tabs-text-active);
 }
 
-.expense-date-tabs .t-tab:disabled {
+.expense-date-tabs .t-tab:disabled,
+.expense-date-tabs .t-tab:has(input:disabled) {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.expense-date-tabs .t-tab:has(input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--brand-strong) 90%, white 10%);
+  outline-offset: 2px;
 }
 
 .expense-date-tabs .t-tabs-pill {

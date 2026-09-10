@@ -432,7 +432,6 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
   const choice: QuickDateChoice =
     date === today ? 'today' : date === yesterday ? 'yesterday' : 'custom';
   const barRef = useRef<HTMLDivElement>(null);
-  const dateInputRef = useRef<HTMLInputElement>(null);
   const pillRef = useRef<HTMLSpanElement>(null);
   const positionedRef = useRef(false);
 
@@ -454,7 +453,7 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
 
   const positionPill = useCallback((animate: boolean) => {
     const pill = pillRef.current;
-    const target = barRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    const target = barRef.current?.querySelector<HTMLElement>('[data-selected="true"]');
 
     if (!pill || !target) {
       return;
@@ -498,36 +497,14 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
     });
   };
 
-  const openDatePicker = () => {
-    const input = dateInputRef.current;
-    if (!input) {
-      return;
-    }
-
-    if (typeof input.showPicker === 'function') {
-      try {
-        input.showPicker();
-        return;
-      } catch {
-        // Fall through for browsers that restrict showPicker().
-      }
-    }
-
-    input.click();
-  };
-
   return (
     <div>
-      <div
-        ref={barRef}
-        aria-label={copy.date}
-        className="t-tabs expense-date-tabs"
-        role="group"
-      >
+      <div ref={barRef} aria-label={copy.date} className="t-tabs expense-date-tabs" role="group">
         <span ref={pillRef} aria-hidden="true" className="t-tabs-pill" />
         <button
           aria-pressed={choice === 'today'}
           className="t-tab"
+          data-selected={choice === 'today'}
           onClick={() => selectQuickDate(today)}
           type="button"
         >
@@ -536,43 +513,49 @@ function ExpenseDateField({ copy, form, locale }: ExpenseDateFieldProps) {
         <button
           aria-pressed={choice === 'yesterday'}
           className="t-tab"
+          data-selected={choice === 'yesterday'}
           onClick={() => selectQuickDate(yesterday)}
           type="button"
         >
           {copy.yesterday}
         </button>
-        <button
-          aria-controls={dateInputId}
-          aria-pressed={choice === 'custom'}
-          className="t-tab"
-          onClick={openDatePicker}
-          type="button"
-        >
-          <span className="truncate">{choice === 'custom' ? customDateLabel : copy.chooseDate}</span>
-        </button>
-        <Controller
-          control={form.control}
-          name="date"
-          render={({ field }) => (
-            <input
-              aria-hidden="true"
-              aria-label={copy.chooseDate}
-              className="sr-only"
-              id={dateInputId}
-              lang={localeTags[locale]}
-              name={field.name}
-              onBlur={field.onBlur}
-              onChange={field.onChange}
-              ref={(input) => {
-                field.ref(input);
-                dateInputRef.current = input;
-              }}
-              tabIndex={-1}
-              type="date"
-              value={field.value}
-            />
-          )}
-        />
+        <label className="t-tab" data-selected={choice === 'custom'} htmlFor={dateInputId}>
+          <span className="truncate">
+            {choice === 'custom' ? customDateLabel : copy.chooseDate}
+          </span>
+          <Controller
+            control={form.control}
+            name="date"
+            render={({ field }) => (
+              <input
+                aria-label={copy.chooseDate}
+                className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
+                id={dateInputId}
+                lang={localeTags[locale]}
+                name={field.name}
+                onBlur={field.onBlur}
+                onChange={field.onChange}
+                onPointerDown={(event) => {
+                  if (
+                    event.pointerType === 'touch' ||
+                    typeof event.currentTarget.showPicker !== 'function'
+                  ) {
+                    return;
+                  }
+
+                  try {
+                    event.currentTarget.showPicker();
+                  } catch {
+                    // The native input remains directly interactive as a fallback.
+                  }
+                }}
+                ref={field.ref}
+                type="date"
+                value={field.value}
+              />
+            )}
+          />
+        </label>
       </div>
     </div>
   );
