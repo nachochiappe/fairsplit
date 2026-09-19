@@ -11,6 +11,14 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   outputFileTracingRoot: path.join(__dirname, '../../'),
+  async rewrites() {
+    return [
+      {
+        source: '/mcp',
+        destination: 'https://fairsplit-mcp.onrender.com/mcp',
+      },
+    ];
+  },
   async headers() {
     return [
       {
