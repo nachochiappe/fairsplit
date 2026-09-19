@@ -9,6 +9,7 @@ const ALLOWED_MUTATIONS: ReadonlyArray<readonly [MutationMethod, RegExp]> = [
   ['POST', /^\/super-categories(?:\/[^/]+\/archive)?$/],
   ['POST', /^\/household\/(?:invites|join-with-code|skip-setup)$/],
   ['POST', /^\/auth\/passkeys\/registration\/(?:options|verify)$/],
+  ['POST', /^\/integration-tokens$/],
   ['PUT', /^\/(?:incomes|exchange-rates|personal-budget)$/],
   ['PUT', /^\/household\/split-policy$/],
   ['PUT', /^\/expenses\/[^/]+$/],
@@ -17,6 +18,7 @@ const ALLOWED_MUTATIONS: ReadonlyArray<readonly [MutationMethod, RegExp]> = [
   ['PATCH', /^\/users\/[^/]+$/],
   ['DELETE', /^\/expenses\/[^/]+$/],
   ['DELETE', /^\/auth\/passkeys\/[^/]+$/],
+  ['DELETE', /^\/integration-tokens\/[^/]+$/],
 ];
 
 async function handleMutation(

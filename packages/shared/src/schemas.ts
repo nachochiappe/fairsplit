@@ -122,6 +122,24 @@ export const replaceIncomeEntriesSchema = z.object({
     ),
 });
 
+const incomeEntryFields = {
+  month: monthSchema,
+  userId: z.string().min(1).max(MAX_ENTITY_ID_LENGTH),
+  description: z.string().trim().min(1, 'description is required').max(MAX_DESCRIPTION_LENGTH),
+  amount: incomeAmountInputSchema,
+  currencyCode: currencyCodeSchema.default('ARS'),
+  fxRate: optionalFxRateInputSchema,
+};
+
+export const createIncomeEntrySchema = z.object(incomeEntryFields).strict();
+export const updateIncomeEntrySchema = z
+  .object(incomeEntryFields)
+  .partial()
+  .strict()
+  .refine((value) => Object.values(value).some((entry) => entry !== undefined), {
+    message: 'At least one income field is required.',
+  });
+
 export const applyScopeSchema = z.enum(['single', 'future', 'all']);
 
 export const installmentInputSchema = z
@@ -259,6 +277,8 @@ export const updateExpenseSchema = createExpenseBaseSchema
   });
 
 export type ReplaceIncomeEntriesInput = z.infer<typeof replaceIncomeEntriesSchema>;
+export type CreateIncomeEntryInput = z.infer<typeof createIncomeEntrySchema>;
+export type UpdateIncomeEntryInput = z.infer<typeof updateIncomeEntrySchema>;
 export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
 export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
 export type InstallmentInput = z.infer<typeof installmentInputSchema>;

@@ -13,28 +13,46 @@ enum SplitMethod {
 }
 
 model User {
-  id                            String            @id @default(cuid())
+  id                            String                @id @default(cuid())
   name                          String
   email                         String?
   authUserId                    String?
-  locale                        String            @default("en") @db.VarChar(5)
+  locale                        String                @default("en") @db.VarChar(5)
   householdId                   String?
   onboardingHouseholdDecisionAt DateTime?
   sessionRevokedAt              DateTime?
-  household                     Household?        @relation(fields: [householdId], references: [id], onDelete: SetNull)
-  createdAt                     DateTime          @default(now())
+  household                     Household?            @relation(fields: [householdId], references: [id], onDelete: SetNull)
+  createdAt                     DateTime              @default(now())
   incomes                       MonthlyIncome[]
-  paidExpenses                  Expense[]         @relation("ExpensePaidByUser")
-  fixedTemplates                ExpenseTemplate[] @relation("TemplatePaidByUser")
-  createdInvites                HouseholdInvite[] @relation("InviteCreatedBy")
-  consumedInvites               HouseholdInvite[] @relation("InviteConsumedBy")
+  paidExpenses                  Expense[]             @relation("ExpensePaidByUser")
+  fixedTemplates                ExpenseTemplate[]     @relation("TemplatePaidByUser")
+  createdInvites                HouseholdInvite[]     @relation("InviteCreatedBy")
+  consumedInvites               HouseholdInvite[]     @relation("InviteConsumedBy")
   passkeys                      UserPasskey[]
   revokedSessions               RevokedSession[]
   customSplitShares             HouseholdSplitShare[]
   personalBudgetPlan            PersonalBudgetPlan?
+  integrationTokens             IntegrationToken[]
 
   @@unique([authUserId])
   @@index([householdId])
+}
+
+/// Revocable credential for transaction-only integrations such as the
+/// Fairsplit MCP server. Only a SHA-256 digest is stored; the plaintext token is
+/// returned once when it is created.
+model IntegrationToken {
+  id          String    @id @default(cuid())
+  name        String    @db.VarChar(80)
+  tokenHash   String    @unique @db.VarChar(64)
+  tokenPrefix String    @db.VarChar(12)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+
+  @@index([userId, revokedAt])
 }
 
 /// Private planning inputs used to estimate how much of a user's monthly

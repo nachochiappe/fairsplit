@@ -30,6 +30,7 @@ import {
   getSuperCategories,
   updateCategory,
   type Passkey,
+  type IntegrationToken,
   type HouseholdSplitPolicy,
   type PersonalBudgetForecastResponse,
   SuperCategory,
@@ -42,6 +43,7 @@ import {
 import { formatCountLabel, localeLabels, localeTags, resolveLocale, t } from '../../lib/i18n';
 import { useRouter } from 'next/navigation';
 import { PasskeysCard } from './PasskeysCard';
+import { IntegrationTokensCard } from './IntegrationTokensCard';
 import { SplitPolicyCard } from './SplitPolicyCard';
 
 interface SettingsClientProps {
@@ -53,6 +55,7 @@ interface SettingsClientProps {
   currentUserEmail: string | null;
   currentUserLocale: AppLocale;
   initialPasskeys: Passkey[];
+  initialIntegrationTokens: IntegrationToken[];
   initialPersonalBudget: PersonalBudgetForecastResponse;
   initialSplitPolicy: HouseholdSplitPolicy;
   passkeysConfigured: boolean;
@@ -320,6 +323,7 @@ export function SettingsClient({
   currentUserEmail,
   currentUserLocale,
   initialPasskeys,
+  initialIntegrationTokens,
   initialPersonalBudget,
   initialSplitPolicy,
   passkeysConfigured,
@@ -1317,7 +1321,9 @@ export function SettingsClient({
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex items-center justify-between gap-5">
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-ink-strong">{copy.monthlyFlexibilityTitle}</h2>
+              <h2 className="text-base font-semibold text-ink-strong">
+                {copy.monthlyFlexibilityTitle}
+              </h2>
               <p className="mt-1 max-w-[68ch] text-sm leading-6 text-ink-muted">
                 {copy.monthlyFlexibilityHelp}
               </p>
@@ -1383,6 +1389,8 @@ export function SettingsClient({
           initialPasskeys={initialPasskeys}
           locale={resolvedLocale}
         />
+
+        <IntegrationTokensCard initialTokens={initialIntegrationTokens} locale={resolvedLocale} />
 
         <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

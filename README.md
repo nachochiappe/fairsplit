@@ -141,6 +141,7 @@ This repository contains the Fairsplit product codebase. If you are working on t
 
 - `apps/web`: Next.js web app
 - `apps/api`: Express API
+- `apps/mcp`: MCP server for agent-based expense and income management
 - `packages/db`: Prisma schema and migrations
 - `packages/shared`: shared domain logic and validation
 
@@ -201,6 +202,10 @@ Default local URLs:
 
 - web: `http://localhost:3000`
 - api: `http://localhost:4000/api`
+
+### Agent integrations
+
+Fairsplit includes an MCP server for Codex, Claude, Claude Code, ChatGPT-compatible remote MCP clients, and other MCP hosts. Create a revocable token in **Settings → Security → Agent integrations**, then follow the [MCP setup guide](./apps/mcp/README.md).
 
 ### Quality Checks
 

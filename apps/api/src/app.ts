@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import Decimal from 'decimal.js';
 import express, { type ErrorRequestHandler, Express, Request, Response } from 'express';
 import { prisma } from '@fairsplit/db';
@@ -7,6 +7,7 @@ import {
   applyScopeSchema,
   calculateSettlement,
   CATEGORY_ICON_KEYS,
+  createIncomeEntrySchema,
   currencyCodeSchema,
   createExpenseSchema,
   fxRateInputSchema,
@@ -17,6 +18,7 @@ import {
   replaceIncomeEntriesSchema,
   resolveCategoryIcon,
   updateHouseholdSplitPolicySchema,
+  updateIncomeEntrySchema,
   updateExpenseSchema,
 } from '@fairsplit/shared';
 import { z } from 'zod';
@@ -36,7 +38,12 @@ import {
 } from './lib/fixed-expenses';
 import { computeArsAmount } from './lib/money';
 import { createApiHttpLogger, createApiLogger } from './lib/logger';
-import { getSessionSecret, issueSessionToken, verifySessionToken, type SessionClaims } from './lib/session';
+import {
+  getSessionSecret,
+  issueSessionToken,
+  verifySessionToken,
+  type SessionClaims,
+} from './lib/session';
 import {
   getCachedUserContext,
   invalidateUserContext,
@@ -94,40 +101,45 @@ export const monthQuerySchema = z.object({ month: monthSchema });
 const expenseMonthQuerySchema = monthQuerySchema.strict();
 const materializeExpenseMonthSchema = z.object({ month: monthSchema }).strict();
 const personalBudgetAmountSchema = z.coerce.number().finite().min(0).max(999_999_999_999.99);
-export const updatePersonalBudgetPlanSchema = z.object({
-  enabled: z.boolean(),
-  fixedCommitments: personalBudgetAmountSchema,
-  savingsTarget: personalBudgetAmountSchema,
-  safetyBuffer: personalBudgetAmountSchema,
-  averagingMonths: z.coerce.number().int().min(1).max(12),
-}).strict();
-export const expenseListQuerySchema = z.object({
-  month: monthSchema,
-  search: z.string().trim().min(1).max(API_FIELD_LIMITS.search).optional(),
-  categoryId: entityIdSchema.optional(),
-  paidByUserId: entityIdSchema.optional(),
-  type: z.enum(['oneTime', 'fixed', 'installment']).optional(),
-  sortBy: z.enum(['date', 'description', 'category', 'amountArs', 'paidBy']).optional(),
-  sortDir: z.enum(['asc', 'desc']).optional(),
-  limit: z.coerce.number().int().min(1).max(200).optional(),
-  cursor: entityIdSchema.optional(),
-  includeCount: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
-    .optional(),
-  includeTotals: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
-    .optional(),
-}).strict().superRefine((value, ctx) => {
-  if (value.cursor && !value.limit) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['cursor'],
-      message: 'cursor requires limit',
-    });
-  }
-});
+export const updatePersonalBudgetPlanSchema = z
+  .object({
+    enabled: z.boolean(),
+    fixedCommitments: personalBudgetAmountSchema,
+    savingsTarget: personalBudgetAmountSchema,
+    safetyBuffer: personalBudgetAmountSchema,
+    averagingMonths: z.coerce.number().int().min(1).max(12),
+  })
+  .strict();
+export const expenseListQuerySchema = z
+  .object({
+    month: monthSchema,
+    search: z.string().trim().min(1).max(API_FIELD_LIMITS.search).optional(),
+    categoryId: entityIdSchema.optional(),
+    paidByUserId: entityIdSchema.optional(),
+    type: z.enum(['oneTime', 'fixed', 'installment']).optional(),
+    sortBy: z.enum(['date', 'description', 'category', 'amountArs', 'paidBy']).optional(),
+    sortDir: z.enum(['asc', 'desc']).optional(),
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+    cursor: entityIdSchema.optional(),
+    includeCount: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
+      .optional(),
+    includeTotals: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .transform((value) => (typeof value === 'boolean' ? value : value === 'true'))
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.cursor && !value.limit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cursor'],
+        message: 'cursor requires limit',
+      });
+    }
+  });
 export const expenseDescriptionSuggestionQuerySchema = z.object({
   q: z.string().trim().min(2).max(120),
   limit: z.coerce.number().int().min(1).max(20).default(8),
@@ -150,13 +162,20 @@ function withExpenseTypeConstraint(
 }
 const localeSchema = z.enum(['es', 'en']);
 export const createUserSchema = z.object({ name: nameSchema, locale: localeSchema.optional() });
-export const updateUserSchema = z.object({
-  name: nameSchema.optional(),
-  locale: localeSchema.optional(),
-}).refine((value) => value.name !== undefined || value.locale !== undefined, {
-  message: 'At least one profile field is required.',
-});
+export const updateUserSchema = z
+  .object({
+    name: nameSchema.optional(),
+    locale: localeSchema.optional(),
+  })
+  .refine((value) => value.name !== undefined || value.locale !== undefined, {
+    message: 'At least one profile field is required.',
+  });
 export const deleteExpenseSchema = z.object({ applyScope: applyScopeSchema.optional() });
+export const createIntegrationTokenSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+  })
+  .strict();
 export const createCategorySchema = z.object({
   name: nameSchema,
   icon: categoryIconSchema.optional(),
@@ -196,7 +215,9 @@ export const updateSuperCategorySchema = z.object({
 export const archiveSuperCategorySchema = z.object({
   replacementSuperCategoryId: entityIdSchema.optional(),
 });
-export const assignCategorySuperCategorySchema = z.object({ superCategoryId: entityIdSchema.nullable() });
+export const assignCategorySuperCategorySchema = z.object({
+  superCategoryId: entityIdSchema.nullable(),
+});
 export const upsertMonthlyExchangeRateSchema = z.object({
   month: monthSchema,
   currencyCode: currencyCodeSchema,
@@ -227,9 +248,7 @@ export const passkeyAuthenticationVerifySchema = z.object({
   response: webauthnResponseSchema,
 });
 
-type ExpenseWithRelations = Awaited<
-  ReturnType<typeof prisma.expense.findFirstOrThrow>
-> & {
+type ExpenseWithRelations = Awaited<ReturnType<typeof prisma.expense.findFirstOrThrow>> & {
   paidByUser: {
     id: string;
     name: string;
@@ -270,6 +289,31 @@ function serializeExpense(expense: ExpenseWithRelations) {
   };
 }
 
+function serializeIncome(income: {
+  id: string;
+  month: string;
+  userId: string;
+  description: string;
+  amount: Decimal.Value;
+  amountOriginal: Decimal.Value;
+  currencyCode: string;
+  fxRateUsed: Decimal.Value;
+  user?: { name: string };
+}) {
+  return {
+    id: income.id,
+    month: income.month,
+    userId: income.userId,
+    ...(income.user ? { userName: income.user.name } : {}),
+    description: income.description,
+    amount: toMoneyString(income.amountOriginal),
+    amountOriginal: toMoneyString(income.amountOriginal),
+    amountArs: toMoneyString(income.amount),
+    currencyCode: income.currencyCode,
+    fxRateUsed: new Decimal(income.fxRateUsed).toFixed(6),
+  };
+}
+
 function slugify(value: string): string {
   return value
     .trim()
@@ -289,17 +333,15 @@ function getPrismaErrorCode(error: unknown): string | null {
   return typeof candidate.code === 'string' ? candidate.code : null;
 }
 
-function serializeCategory(
-  category: {
-    id: string;
-    name: string;
-    icon: string;
-    archivedAt: Date | null;
-    superCategoryId: string | null;
-    superCategory: { id: string; name: string; color: string } | null;
-    _count: { expenses: number; expenseTemplates: number };
-  },
-) {
+function serializeCategory(category: {
+  id: string;
+  name: string;
+  icon: string;
+  archivedAt: Date | null;
+  superCategoryId: string | null;
+  superCategory: { id: string; name: string; color: string } | null;
+  _count: { expenses: number; expenseTemplates: number };
+}) {
   return {
     id: category.id,
     name: category.name,
@@ -313,19 +355,17 @@ function serializeCategory(
   };
 }
 
-function serializeSuperCategory(
-  superCategory: {
-    id: string;
-    name: string;
-    slug: string;
-    color: string;
-    icon: string;
-    sortOrder: number;
-    isSystem: boolean;
-    archivedAt: Date | null;
-    _count: { categories: number };
-  },
-) {
+function serializeSuperCategory(superCategory: {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  icon: string;
+  sortOrder: number;
+  isSystem: boolean;
+  archivedAt: Date | null;
+  _count: { categories: number };
+}) {
   return {
     id: superCategory.id,
     name: superCategory.name,
@@ -396,6 +436,11 @@ function buildAuthSessionResponse(user: AuthSessionUser, created: boolean, sessi
 interface RequestAuthContext {
   userId: string;
   householdId: string;
+  authMethod: 'session' | 'integration';
+}
+
+function hashIntegrationToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 interface RequestUserContext {
@@ -417,7 +462,12 @@ function disableAutoRequestLog(res: Response): void {
   res.locals.disableAutoRequestLog = true;
 }
 
-function logWarnAndDisableAutoLog(req: Request, res: Response, message: string, extra?: Record<string, unknown>): void {
+function logWarnAndDisableAutoLog(
+  req: Request,
+  res: Response,
+  message: string,
+  extra?: Record<string, unknown>,
+): void {
   disableAutoRequestLog(res);
   req.log.warn(
     {
@@ -428,7 +478,12 @@ function logWarnAndDisableAutoLog(req: Request, res: Response, message: string, 
   );
 }
 
-function logErrorAndDisableAutoLog(req: Request, res: Response, error: unknown, message: string): void {
+function logErrorAndDisableAutoLog(
+  req: Request,
+  res: Response,
+  error: unknown,
+  message: string,
+): void {
   disableAutoRequestLog(res);
   req.log.error(
     {
@@ -478,7 +533,9 @@ function findRevocation(user: CachedUserContext, session: SessionClaims): string
   if (user.revokedSessionIds.includes(session.sid)) {
     return 'Rejected API request for a signed-out session';
   }
-  const revokedAt = user.sessionRevokedAt ? Math.floor(user.sessionRevokedAt.getTime() / 1000) : null;
+  const revokedAt = user.sessionRevokedAt
+    ? Math.floor(user.sessionRevokedAt.getTime() / 1000)
+    : null;
   if (revokedAt !== null && session.iat <= revokedAt) {
     return 'Rejected API request for revoked session';
   }
@@ -492,7 +549,9 @@ async function requireUserContext(req: Request, res: Response): Promise<RequestU
   } catch (error) {
     res.status(500);
     logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid');
-    res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+    res
+      .status(500)
+      .json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     return null;
   }
 
@@ -567,11 +626,72 @@ async function requireAuthContext(req: Request, res: Response): Promise<RequestA
     return null;
   }
 
-  return { userId: user.userId, householdId: user.householdId };
+  return { userId: user.userId, householdId: user.householdId, authMethod: 'session' };
+}
+
+/**
+ * Transaction routes accept either the normal browser session or a revocable
+ * integration token. Other API routes remain session-only so an MCP credential
+ * cannot alter account security, household membership, or settings.
+ */
+async function requireTransactionAuthContext(
+  req: Request,
+  res: Response,
+): Promise<RequestAuthContext | null> {
+  const authorization = req.header('authorization')?.trim();
+  if (!authorization) {
+    return requireAuthContext(req, res);
+  }
+
+  const match = /^Bearer\s+(fsp_[A-Za-z0-9_-]{43})$/i.exec(authorization);
+  if (!match) {
+    res.status(401).json({ error: 'Invalid integration token.' });
+    return null;
+  }
+
+  const record = await prisma.integrationToken.findUnique({
+    where: { tokenHash: hashIntegrationToken(match[1]) },
+    include: {
+      user: {
+        select: {
+          id: true,
+          householdId: true,
+          onboardingHouseholdDecisionAt: true,
+        },
+      },
+    },
+  });
+
+  if (!record || record.revokedAt) {
+    res.status(401).json({ error: 'Invalid integration token.' });
+    return null;
+  }
+  if (!record.user.householdId) {
+    res.status(403).json({ error: 'Authenticated user is not linked to a household.' });
+    return null;
+  }
+  if (!record.user.onboardingHouseholdDecisionAt) {
+    res.status(403).json({ error: 'Household setup is required before accessing this endpoint.' });
+    return null;
+  }
+
+  await prisma.integrationToken.update({
+    where: { id: record.id },
+    data: { lastUsedAt: new Date() },
+  });
+
+  return {
+    userId: record.user.id,
+    householdId: record.user.householdId,
+    authMethod: 'integration',
+  };
 }
 
 function normalizeInviteCode(rawCode: string): string {
-  return rawCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return rawCode
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
 }
 
 const INVITE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -602,12 +722,73 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     const parsed = currencyCodeSchema.safeParse(value);
     return parsed.success ? parsed.data : 'ARS';
   };
+  const resolveIncomeMoney = async (input: {
+    amount: Decimal.Value;
+    currencyCode: string;
+    explicitFxRate?: number;
+    householdId: string;
+    month: string;
+    preserveFxRate?: Decimal.Value;
+  }) => {
+    const currencyCode = normalizeCurrencyCode(input.currencyCode);
+    let fxRateUsed = '1.000000';
+
+    if (currencyCode !== 'ARS') {
+      if (input.explicitFxRate !== undefined) {
+        fxRateUsed = new Decimal(input.explicitFxRate).toFixed(6);
+        await prisma.monthlyExchangeRate.upsert({
+          where: {
+            householdId_month_currencyCode: {
+              householdId: input.householdId,
+              month: input.month,
+              currencyCode,
+            },
+          },
+          update: {},
+          create: {
+            householdId: input.householdId,
+            month: input.month,
+            currencyCode,
+            rateToArs: fxRateUsed,
+          },
+        });
+      } else if (input.preserveFxRate !== undefined) {
+        fxRateUsed = new Decimal(input.preserveFxRate).toFixed(6);
+      } else {
+        const rate = await prisma.monthlyExchangeRate.findUnique({
+          where: {
+            householdId_month_currencyCode: {
+              householdId: input.householdId,
+              month: input.month,
+              currencyCode,
+            },
+          },
+        });
+        if (!rate) {
+          throw new Error(
+            `Missing exchange rate for ${currencyCode} in ${input.month}. Configure a monthly exchange rate or provide an override.`,
+          );
+        }
+        fxRateUsed = rate.rateToArs.toFixed(6);
+      }
+    }
+
+    const amountOriginal = new Decimal(input.amount).toFixed(2);
+    return {
+      amountOriginal,
+      amountArs: computeArsAmount(amountOriginal, fxRateUsed),
+      currencyCode,
+      fxRateUsed,
+    };
+  };
 
   app.use(createApiHttpLogger(logger));
   app.use(express.json());
   app.param('id', (_req, res, next, id) => {
     if (!entityIdSchema.safeParse(id).success) {
-      return res.status(400).json({ error: `Resource id must be at most ${MAX_ENTITY_ID_LENGTH} characters.` });
+      return res
+        .status(400)
+        .json({ error: `Resource id must be at most ${MAX_ENTITY_ID_LENGTH} characters.` });
     }
     return next();
   });
@@ -623,11 +804,12 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   const authLinkTokenLimit = createRateLimit({
     limit: AUTH_TOKEN_RATE_LIMIT_MAX,
     windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
-    key: (request) => hashedRateLimitKey(
-      'auth-token',
-      typeof request.body?.accessToken === 'string' ? request.body.accessToken : undefined,
-      requestIpKey(request),
-    ),
+    key: (request) =>
+      hashedRateLimitKey(
+        'auth-token',
+        typeof request.body?.accessToken === 'string' ? request.body.accessToken : undefined,
+        requestIpKey(request),
+      ),
   });
   const passkeyLoginIpLimit = createRateLimit({
     limit: AUTH_RATE_LIMIT_MAX,
@@ -637,163 +819,168 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   const passkeyCredentialLimit = createRateLimit({
     limit: PASSKEY_CREDENTIAL_RATE_LIMIT_MAX,
     windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
-    key: (request) => hashedRateLimitKey(
-      'passkey-credential',
-      typeof request.body?.response?.id === 'string' ? request.body.response.id : undefined,
-      requestIpKey(request),
-    ),
+    key: (request) =>
+      hashedRateLimitKey(
+        'passkey-credential',
+        typeof request.body?.response?.id === 'string' ? request.body.response.id : undefined,
+        requestIpKey(request),
+      ),
   });
   const passkeyRegistrationLimit = createRateLimit({
     limit: AUTHENTICATED_SECURITY_RATE_LIMIT_MAX,
     windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
-    key: (request) => hashedRateLimitKey(
-      'session',
-      request.get('x-fairsplit-session'),
-      requestIpKey(request),
-    ),
+    key: (request) =>
+      hashedRateLimitKey('session', request.get('x-fairsplit-session'), requestIpKey(request)),
   });
   const inviteCreateLimit = createRateLimit({
     limit: INVITE_CREATE_RATE_LIMIT_MAX,
     windowMs: INVITE_CREATE_RATE_LIMIT_WINDOW_MS,
-    key: (request) => hashedRateLimitKey(
-      'session',
-      request.get('x-fairsplit-session'),
-      requestIpKey(request),
-    ),
+    key: (request) =>
+      hashedRateLimitKey('session', request.get('x-fairsplit-session'), requestIpKey(request)),
   });
   const inviteJoinLimit = createRateLimit({
     limit: INVITE_JOIN_RATE_LIMIT_MAX,
     windowMs: INVITE_JOIN_RATE_LIMIT_WINDOW_MS,
-    key: (request) => hashedRateLimitKey(
-      'session',
-      request.get('x-fairsplit-session'),
-      requestIpKey(request),
-    ),
+    key: (request) =>
+      hashedRateLimitKey('session', request.get('x-fairsplit-session'), requestIpKey(request)),
   });
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true });
   });
 
-  app.post('/api/auth/link', authLinkIpLimit, authLinkTokenLimit, async (req: Request, res: Response) => {
-    const parsed = authLinkSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-
-    const identity = await verifySupabaseAccessToken(parsed.data.accessToken).catch(() => null);
-    if (!identity) {
-      res.status(401);
-      logWarnAndDisableAutoLog(req, res, 'Rejected auth link request with invalid access token');
-      return res.status(401).json({ error: 'Invalid access token.' });
-    }
-
-    const authUserId = identity.authUserId;
-    const email = identity.email;
-    const displayName = parsed.data.name?.trim() ?? defaultNameFromEmail(identity.email);
-    let sessionSecret: string;
-    try {
-      sessionSecret = getSessionSecret();
-    } catch (error) {
-      res.status(500);
-      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during auth link');
-      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
-    }
-
-    const toResponse = (user: AuthSessionUser, created: boolean) =>
-      buildAuthSessionResponse(user, created, sessionSecret);
-
-    try {
-      const linkedByAuthId = await prisma.user.findUnique({
-        where: { authUserId },
-        include: { household: true },
-      });
-      if (linkedByAuthId) {
-        return res.json(toResponse(linkedByAuthId, false));
+  app.post(
+    '/api/auth/link',
+    authLinkIpLimit,
+    authLinkTokenLimit,
+    async (req: Request, res: Response) => {
+      const parsed = authLinkSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
       }
 
-      const candidateMatches = await prisma.user.findMany({
-        where: { email: { equals: email, mode: 'insensitive' as const }, authUserId: null },
-        include: { household: true },
-        take: 2,
-      });
-
-      if (candidateMatches.length > 1) {
-        return res.status(409).json({
-          error: 'Ambiguous email mapping for this account. Manual remap required before linking.',
-        });
+      const identity = await verifySupabaseAccessToken(parsed.data.accessToken).catch(() => null);
+      if (!identity) {
+        res.status(401);
+        logWarnAndDisableAutoLog(req, res, 'Rejected auth link request with invalid access token');
+        return res.status(401).json({ error: 'Invalid access token.' });
       }
 
-      if (candidateMatches.length === 1) {
-        const matched = candidateMatches[0];
-        const claimed = await prisma.user.updateMany({
-          where: {
-            id: matched.id,
-            authUserId: null,
-          },
-          data: {
-            authUserId,
-            email,
-          },
-        });
+      const authUserId = identity.authUserId;
+      const email = identity.email;
+      const displayName = parsed.data.name?.trim() ?? defaultNameFromEmail(identity.email);
+      let sessionSecret: string;
+      try {
+        sessionSecret = getSessionSecret();
+      } catch (error) {
+        res.status(500);
+        logErrorAndDisableAutoLog(
+          req,
+          res,
+          error,
+          'Session secret is missing or invalid during auth link',
+        );
+        return res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+      }
 
-        if (claimed.count === 0) {
-          const winner = await prisma.user.findUnique({
-            where: { authUserId },
-            include: { household: true },
-          });
-          if (!winner) {
-            return res.status(409).json({ error: 'Failed to claim user account. Please retry.' });
-          }
-          return res.json(toResponse(winner, false));
-        }
+      const toResponse = (user: AuthSessionUser, created: boolean) =>
+        buildAuthSessionResponse(user, created, sessionSecret);
 
-        const linked = await prisma.user.findUniqueOrThrow({
-          where: { id: matched.id },
+      try {
+        const linkedByAuthId = await prisma.user.findUnique({
+          where: { authUserId },
           include: { household: true },
         });
-        return res.json(toResponse(linked, false));
-      }
+        if (linkedByAuthId) {
+          return res.json(toResponse(linkedByAuthId, false));
+        }
 
-      // Deliberately left without a household: `needsHouseholdSetup` turns true,
-      // the web middleware routes to `/onboarding/household`, and the user picks
-      // between redeeming an invite code and starting their own household. Creating
-      // one here instead would decide for them and make invite codes unredeemable,
-      // since both onboarding endpoints refuse a user who already has a household.
-      const created = await prisma.user.create({
-        data: {
-          name: displayName,
-          email,
-          authUserId,
-          householdId: null,
-          onboardingHouseholdDecisionAt: null,
-        },
-        include: { household: true },
-      });
+        const candidateMatches = await prisma.user.findMany({
+          where: { email: { equals: email, mode: 'insensitive' as const }, authUserId: null },
+          include: { household: true },
+          take: 2,
+        });
 
-      return res.status(201).json(toResponse(created, true));
-    } catch (error) {
-      const knownError = error as { code?: string; meta?: { target?: unknown } };
-      if (knownError.code === 'P2002') {
-        const target = Array.isArray(knownError.meta?.target) ? knownError.meta?.target : [];
-        if (target.includes('authUserId')) {
-          const winner = await prisma.user.findUnique({
-            where: { authUserId },
-            include: { household: true },
+        if (candidateMatches.length > 1) {
+          return res.status(409).json({
+            error:
+              'Ambiguous email mapping for this account. Manual remap required before linking.',
           });
-          if (winner) {
+        }
+
+        if (candidateMatches.length === 1) {
+          const matched = candidateMatches[0];
+          const claimed = await prisma.user.updateMany({
+            where: {
+              id: matched.id,
+              authUserId: null,
+            },
+            data: {
+              authUserId,
+              email,
+            },
+          });
+
+          if (claimed.count === 0) {
+            const winner = await prisma.user.findUnique({
+              where: { authUserId },
+              include: { household: true },
+            });
+            if (!winner) {
+              return res.status(409).json({ error: 'Failed to claim user account. Please retry.' });
+            }
             return res.json(toResponse(winner, false));
           }
-        }
-      }
 
-      res.status(500);
-      logErrorAndDisableAutoLog(req, res, error, 'Failed to link auth identity');
-      return res.status(500).json({
-        error: error instanceof Error ? error.message : 'Failed to link auth identity.',
-      });
-    }
-  });
+          const linked = await prisma.user.findUniqueOrThrow({
+            where: { id: matched.id },
+            include: { household: true },
+          });
+          return res.json(toResponse(linked, false));
+        }
+
+        // Deliberately left without a household: `needsHouseholdSetup` turns true,
+        // the web middleware routes to `/onboarding/household`, and the user picks
+        // between redeeming an invite code and starting their own household. Creating
+        // one here instead would decide for them and make invite codes unredeemable,
+        // since both onboarding endpoints refuse a user who already has a household.
+        const created = await prisma.user.create({
+          data: {
+            name: displayName,
+            email,
+            authUserId,
+            householdId: null,
+            onboardingHouseholdDecisionAt: null,
+          },
+          include: { household: true },
+        });
+
+        return res.status(201).json(toResponse(created, true));
+      } catch (error) {
+        const knownError = error as { code?: string; meta?: { target?: unknown } };
+        if (knownError.code === 'P2002') {
+          const target = Array.isArray(knownError.meta?.target) ? knownError.meta?.target : [];
+          if (target.includes('authUserId')) {
+            const winner = await prisma.user.findUnique({
+              where: { authUserId },
+              include: { household: true },
+            });
+            if (winner) {
+              return res.json(toResponse(winner, false));
+            }
+          }
+        }
+
+        res.status(500);
+        logErrorAndDisableAutoLog(req, res, error, 'Failed to link auth identity');
+        return res.status(500).json({
+          error: error instanceof Error ? error.message : 'Failed to link auth identity.',
+        });
+      }
+    },
+  );
 
   /**
    * Signs out the calling device only. The user's other sessions — phone,
@@ -863,6 +1050,83 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
   };
 
+  app.get('/api/integration-tokens', async (req: Request, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+
+    const tokens = await prisma.integrationToken.findMany({
+      where: { userId: user.userId, revokedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        tokenPrefix: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+    });
+
+    return res.json(
+      tokens.map((token) => ({
+        ...token,
+        createdAt: token.createdAt.toISOString(),
+        lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+      })),
+    );
+  });
+
+  app.post(
+    '/api/integration-tokens',
+    passkeyRegistrationLimit,
+    async (req: Request, res: Response) => {
+      const user = await requireUserContext(req, res);
+      if (!user) {
+        return;
+      }
+      const parsed = createIntegrationTokenSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+
+      const plaintextToken = `fsp_${randomBytes(32).toString('base64url')}`;
+      const created = await prisma.integrationToken.create({
+        data: {
+          name: parsed.data.name,
+          tokenHash: hashIntegrationToken(plaintextToken),
+          tokenPrefix: plaintextToken.slice(0, 12),
+          userId: user.userId,
+        },
+      });
+
+      return res.status(201).json({
+        id: created.id,
+        name: created.name,
+        tokenPrefix: created.tokenPrefix,
+        token: plaintextToken,
+        createdAt: created.createdAt.toISOString(),
+        lastUsedAt: null,
+      });
+    },
+  );
+
+  app.delete('/api/integration-tokens/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const user = await requireUserContext(req, res);
+    if (!user) {
+      return;
+    }
+
+    const result = await prisma.integrationToken.updateMany({
+      where: { id: req.params.id, userId: user.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (result.count === 0) {
+      return res.status(404).json({ error: 'Integration token not found.' });
+    }
+    return res.status(204).send();
+  });
+
   app.get('/api/auth/passkeys', async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
     if (!user) {
@@ -895,133 +1159,145 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     });
   });
 
-  app.post('/api/auth/passkeys/registration/options', passkeyRegistrationLimit, async (req: Request, res: Response) => {
-    const user = await requireUserContext(req, res);
-    if (!user) {
-      return;
-    }
-    const config = resolveWebAuthnConfig(req, res);
-    if (!config) {
-      return;
-    }
-
-    const record = await prisma.user.findUnique({
-      where: { id: user.userId },
-      select: { id: true, name: true, email: true },
-    });
-    if (!record) {
-      return res.status(401).json({ error: 'Invalid authentication context.' });
-    }
-
-    const existing = await prisma.userPasskey.findMany({
-      where: { userId: user.userId },
-      select: { credentialId: true, transports: true },
-    });
-    if (existing.length >= MAX_PASSKEYS_PER_USER) {
-      return res.status(409).json({ error: 'Passkey limit reached. Remove one before adding another.' });
-    }
-
-    const options = await generateRegistrationOptions({
-      rpName: config.rpName,
-      rpID: config.rpId,
-      userName: record.email ?? record.name,
-      userDisplayName: record.name,
-      userID: userIdToUserHandle(record.id),
-      attestationType: 'none',
-      // Stops the same authenticator from being enrolled twice.
-      excludeCredentials: existing.map((passkey) => ({
-        id: passkey.credentialId,
-        transports: passkey.transports as AuthenticatorTransportFuture[],
-      })),
-      authenticatorSelection: {
-        // A discoverable credential is what makes the usernameless sign-in
-        // button work: the browser can offer the account without an email.
-        residentKey: 'required',
-        userVerification: 'required',
-      },
-    });
-
-    await storeChallenge(options.challenge, 'registration', user.userId);
-    return res.json(options);
-  });
-
-  app.post('/api/auth/passkeys/registration/verify', passkeyRegistrationLimit, async (req: Request, res: Response) => {
-    const user = await requireUserContext(req, res);
-    if (!user) {
-      return;
-    }
-    const parsed = passkeyRegistrationVerifySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-    const config = resolveWebAuthnConfig(req, res);
-    if (!config) {
-      return;
-    }
-
-    let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
-    try {
-      verification = await verifyRegistrationResponse({
-        response: parsed.data.response as unknown as RegistrationResponseJSON,
-        expectedChallenge: (challenge) => consumeChallenge(challenge, 'registration', user.userId),
-        expectedOrigin: config.origins,
-        expectedRPID: config.rpId,
-        requireUserVerification: true,
-      });
-    } catch (error) {
-      res.status(400);
-      logWarnAndDisableAutoLog(req, res, 'Rejected passkey registration', {
-        reason: error instanceof Error ? error.message : 'unknown',
-      });
-      return res.status(400).json({ error: 'Could not verify this passkey. Please try again.' });
-    }
-
-    if (!verification.verified) {
-      res.status(400);
-      logWarnAndDisableAutoLog(req, res, 'Rejected unverified passkey registration');
-      return res.status(400).json({ error: 'Could not verify this passkey. Please try again.' });
-    }
-
-    const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
-    const label = parsed.data.label ?? defaultPasskeyLabel(credentialDeviceType);
-
-    try {
-      const created = await prisma.userPasskey.create({
-        data: {
-          userId: user.userId,
-          credentialId: credential.id,
-          publicKey: Buffer.from(credential.publicKey),
-          counter: BigInt(credential.counter),
-          transports: sanitizeTransports(credential.transports),
-          deviceType: credentialDeviceType,
-          backedUp: credentialBackedUp,
-          label,
-        },
-        select: {
-          id: true,
-          label: true,
-          deviceType: true,
-          backedUp: true,
-          createdAt: true,
-          lastUsedAt: true,
-        },
-      });
-
-      return res.status(201).json({
-        id: created.id,
-        label: created.label,
-        deviceType: created.deviceType,
-        backedUp: created.backedUp,
-        createdAt: created.createdAt.toISOString(),
-        lastUsedAt: created.lastUsedAt?.toISOString() ?? null,
-      });
-    } catch (error) {
-      if ((error as { code?: string }).code === 'P2002') {
-        return res.status(409).json({ error: 'This passkey is already registered.' });
+  app.post(
+    '/api/auth/passkeys/registration/options',
+    passkeyRegistrationLimit,
+    async (req: Request, res: Response) => {
+      const user = await requireUserContext(req, res);
+      if (!user) {
+        return;
       }
-      throw error;
-    }
-  });
+      const config = resolveWebAuthnConfig(req, res);
+      if (!config) {
+        return;
+      }
+
+      const record = await prisma.user.findUnique({
+        where: { id: user.userId },
+        select: { id: true, name: true, email: true },
+      });
+      if (!record) {
+        return res.status(401).json({ error: 'Invalid authentication context.' });
+      }
+
+      const existing = await prisma.userPasskey.findMany({
+        where: { userId: user.userId },
+        select: { credentialId: true, transports: true },
+      });
+      if (existing.length >= MAX_PASSKEYS_PER_USER) {
+        return res
+          .status(409)
+          .json({ error: 'Passkey limit reached. Remove one before adding another.' });
+      }
+
+      const options = await generateRegistrationOptions({
+        rpName: config.rpName,
+        rpID: config.rpId,
+        userName: record.email ?? record.name,
+        userDisplayName: record.name,
+        userID: userIdToUserHandle(record.id),
+        attestationType: 'none',
+        // Stops the same authenticator from being enrolled twice.
+        excludeCredentials: existing.map((passkey) => ({
+          id: passkey.credentialId,
+          transports: passkey.transports as AuthenticatorTransportFuture[],
+        })),
+        authenticatorSelection: {
+          // A discoverable credential is what makes the usernameless sign-in
+          // button work: the browser can offer the account without an email.
+          residentKey: 'required',
+          userVerification: 'required',
+        },
+      });
+
+      await storeChallenge(options.challenge, 'registration', user.userId);
+      return res.json(options);
+    },
+  );
+
+  app.post(
+    '/api/auth/passkeys/registration/verify',
+    passkeyRegistrationLimit,
+    async (req: Request, res: Response) => {
+      const user = await requireUserContext(req, res);
+      if (!user) {
+        return;
+      }
+      const parsed = passkeyRegistrationVerifySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      const config = resolveWebAuthnConfig(req, res);
+      if (!config) {
+        return;
+      }
+
+      let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
+      try {
+        verification = await verifyRegistrationResponse({
+          response: parsed.data.response as unknown as RegistrationResponseJSON,
+          expectedChallenge: (challenge) =>
+            consumeChallenge(challenge, 'registration', user.userId),
+          expectedOrigin: config.origins,
+          expectedRPID: config.rpId,
+          requireUserVerification: true,
+        });
+      } catch (error) {
+        res.status(400);
+        logWarnAndDisableAutoLog(req, res, 'Rejected passkey registration', {
+          reason: error instanceof Error ? error.message : 'unknown',
+        });
+        return res.status(400).json({ error: 'Could not verify this passkey. Please try again.' });
+      }
+
+      if (!verification.verified) {
+        res.status(400);
+        logWarnAndDisableAutoLog(req, res, 'Rejected unverified passkey registration');
+        return res.status(400).json({ error: 'Could not verify this passkey. Please try again.' });
+      }
+
+      const { credential, credentialDeviceType, credentialBackedUp } =
+        verification.registrationInfo;
+      const label = parsed.data.label ?? defaultPasskeyLabel(credentialDeviceType);
+
+      try {
+        const created = await prisma.userPasskey.create({
+          data: {
+            userId: user.userId,
+            credentialId: credential.id,
+            publicKey: Buffer.from(credential.publicKey),
+            counter: BigInt(credential.counter),
+            transports: sanitizeTransports(credential.transports),
+            deviceType: credentialDeviceType,
+            backedUp: credentialBackedUp,
+            label,
+          },
+          select: {
+            id: true,
+            label: true,
+            deviceType: true,
+            backedUp: true,
+            createdAt: true,
+            lastUsedAt: true,
+          },
+        });
+
+        return res.status(201).json({
+          id: created.id,
+          label: created.label,
+          deviceType: created.deviceType,
+          backedUp: created.backedUp,
+          createdAt: created.createdAt.toISOString(),
+          lastUsedAt: created.lastUsedAt?.toISOString() ?? null,
+        });
+      } catch (error) {
+        if ((error as { code?: string }).code === 'P2002') {
+          return res.status(409).json({ error: 'This passkey is already registered.' });
+        }
+        throw error;
+      }
+    },
+  );
 
   app.delete('/api/auth/passkeys/:id', async (req: Request, res: Response) => {
     const user = await requireUserContext(req, res);
@@ -1046,111 +1322,123 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     return res.status(204).send();
   });
 
-  app.post('/api/auth/passkeys/authentication/options', passkeyLoginIpLimit, async (req: Request, res: Response) => {
-    const config = resolveWebAuthnConfig(req, res);
-    if (!config) {
-      return;
-    }
+  app.post(
+    '/api/auth/passkeys/authentication/options',
+    passkeyLoginIpLimit,
+    async (req: Request, res: Response) => {
+      const config = resolveWebAuthnConfig(req, res);
+      if (!config) {
+        return;
+      }
 
-    // No `allowCredentials`: the browser picks a discoverable credential, which
-    // keeps the flow usernameless and avoids revealing whether an account or a
-    // passkey exists for any given email.
-    const options = await generateAuthenticationOptions({
-      rpID: config.rpId,
-      userVerification: 'required',
-    });
+      // No `allowCredentials`: the browser picks a discoverable credential, which
+      // keeps the flow usernameless and avoids revealing whether an account or a
+      // passkey exists for any given email.
+      const options = await generateAuthenticationOptions({
+        rpID: config.rpId,
+        userVerification: 'required',
+      });
 
-    await storeChallenge(options.challenge, 'authentication', null);
-    return res.json(options);
-  });
+      await storeChallenge(options.challenge, 'authentication', null);
+      return res.json(options);
+    },
+  );
 
   app.post(
     '/api/auth/passkeys/authentication/verify',
     passkeyLoginIpLimit,
     passkeyCredentialLimit,
     async (req: Request, res: Response) => {
-    const parsed = passkeyAuthenticationVerifySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-    const config = resolveWebAuthnConfig(req, res);
-    if (!config) {
-      return;
-    }
-    let sessionSecret: string;
-    try {
-      sessionSecret = getSessionSecret();
-    } catch (error) {
-      res.status(500);
-      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during passkey sign-in');
-      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
-    }
+      const parsed = passkeyAuthenticationVerifySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
+      const config = resolveWebAuthnConfig(req, res);
+      if (!config) {
+        return;
+      }
+      let sessionSecret: string;
+      try {
+        sessionSecret = getSessionSecret();
+      } catch (error) {
+        res.status(500);
+        logErrorAndDisableAutoLog(
+          req,
+          res,
+          error,
+          'Session secret is missing or invalid during passkey sign-in',
+        );
+        return res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+      }
 
-    const response = parsed.data.response as unknown as AuthenticationResponseJSON;
-    const rejectSignIn = (reason: string) => {
-      res.status(401);
-      logWarnAndDisableAutoLog(req, res, 'Rejected passkey sign-in', { reason });
-      return res.status(401).json({ error: 'Could not sign in with this passkey.' });
-    };
+      const response = parsed.data.response as unknown as AuthenticationResponseJSON;
+      const rejectSignIn = (reason: string) => {
+        res.status(401);
+        logWarnAndDisableAutoLog(req, res, 'Rejected passkey sign-in', { reason });
+        return res.status(401).json({ error: 'Could not sign in with this passkey.' });
+      };
 
-    const passkey = await prisma.userPasskey.findUnique({
-      where: { credentialId: response.id },
-      include: { user: { include: { household: true } } },
-    });
-    if (!passkey) {
-      return rejectSignIn('unknown-credential');
-    }
+      const passkey = await prisma.userPasskey.findUnique({
+        where: { credentialId: response.id },
+        include: { user: { include: { household: true } } },
+      });
+      if (!passkey) {
+        return rejectSignIn('unknown-credential');
+      }
 
-    // The user handle is the account the authenticator believes this credential
-    // belongs to. If it disagrees with our record, something is wrong.
-    const userHandle = response.response.userHandle;
-    if (userHandle && userHandleToUserId(userHandle) !== passkey.userId) {
-      return rejectSignIn('user-handle-mismatch');
-    }
+      // The user handle is the account the authenticator believes this credential
+      // belongs to. If it disagrees with our record, something is wrong.
+      const userHandle = response.response.userHandle;
+      if (userHandle && userHandleToUserId(userHandle) !== passkey.userId) {
+        return rejectSignIn('user-handle-mismatch');
+      }
 
-    const storedCounter = Number(passkey.counter);
-    let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
-    try {
-      verification = await verifyAuthenticationResponse({
-        response,
-        expectedChallenge: (challenge) => consumeChallenge(challenge, 'authentication', null),
-        expectedOrigin: config.origins,
-        expectedRPID: config.rpId,
-        requireUserVerification: true,
-        credential: {
-          id: passkey.credentialId,
-          publicKey: toCredentialPublicKey(passkey.publicKey),
-          counter: storedCounter,
-          transports: passkey.transports as AuthenticatorTransportFuture[],
+      const storedCounter = Number(passkey.counter);
+      let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+      try {
+        verification = await verifyAuthenticationResponse({
+          response,
+          expectedChallenge: (challenge) => consumeChallenge(challenge, 'authentication', null),
+          expectedOrigin: config.origins,
+          expectedRPID: config.rpId,
+          requireUserVerification: true,
+          credential: {
+            id: passkey.credentialId,
+            publicKey: toCredentialPublicKey(passkey.publicKey),
+            counter: storedCounter,
+            transports: passkey.transports as AuthenticatorTransportFuture[],
+          },
+        });
+      } catch (error) {
+        return rejectSignIn(error instanceof Error ? error.message : 'verification-threw');
+      }
+
+      if (!verification.verified) {
+        return rejectSignIn('unverified');
+      }
+
+      const { newCounter, credentialBackedUp, credentialDeviceType } =
+        verification.authenticationInfo;
+      // Authenticators that keep a signature counter must advance it. A counter
+      // that stands still or goes backwards suggests a cloned credential. Many
+      // passkeys report 0 forever, which is why 0 is exempt.
+      if (newCounter > 0 && newCounter <= storedCounter) {
+        return rejectSignIn('counter-did-not-advance');
+      }
+
+      await prisma.userPasskey.update({
+        where: { id: passkey.id },
+        data: {
+          counter: BigInt(newCounter),
+          backedUp: credentialBackedUp,
+          deviceType: credentialDeviceType,
+          lastUsedAt: new Date(),
         },
       });
-    } catch (error) {
-      return rejectSignIn(error instanceof Error ? error.message : 'verification-threw');
-    }
 
-    if (!verification.verified) {
-      return rejectSignIn('unverified');
-    }
-
-    const { newCounter, credentialBackedUp, credentialDeviceType } = verification.authenticationInfo;
-    // Authenticators that keep a signature counter must advance it. A counter
-    // that stands still or goes backwards suggests a cloned credential. Many
-    // passkeys report 0 forever, which is why 0 is exempt.
-    if (newCounter > 0 && newCounter <= storedCounter) {
-      return rejectSignIn('counter-did-not-advance');
-    }
-
-    await prisma.userPasskey.update({
-      where: { id: passkey.id },
-      data: {
-        counter: BigInt(newCounter),
-        backedUp: credentialBackedUp,
-        deviceType: credentialDeviceType,
-        lastUsedAt: new Date(),
-      },
-    });
-
-    return res.json(buildAuthSessionResponse(passkey.user, false, sessionSecret));
+      return res.json(buildAuthSessionResponse(passkey.user, false, sessionSecret));
     },
   );
 
@@ -1160,7 +1448,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       return;
     }
 
-    const needsHouseholdSetup = auth.householdId === null && auth.onboardingHouseholdDecisionAt === null;
+    const needsHouseholdSetup =
+      auth.householdId === null && auth.onboardingHouseholdDecisionAt === null;
     return res.json({
       needsHouseholdSetup,
       decisionLocked: auth.onboardingHouseholdDecisionAt !== null,
@@ -1303,171 +1592,190 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     res.status(500);
-    logErrorAndDisableAutoLog(req, res, null, 'Failed to create household invite code after repeated collisions');
+    logErrorAndDisableAutoLog(
+      req,
+      res,
+      null,
+      'Failed to create household invite code after repeated collisions',
+    );
     return res.status(500).json({ error: 'Failed to create invite code. Please retry.' });
   });
 
-  app.post('/api/household/join-with-code', inviteJoinLimit, async (req: Request, res: Response) => {
-    const auth = await requireUserContext(req, res);
-    if (!auth) {
-      return;
-    }
-    const parsed = joinHouseholdWithCodeSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-
-    // A user may redeem a code either before choosing a household at all, or from
-    // a household they are alone in and have not put anything into. Both people
-    // signing up separately before either thought to send a code is the ordinary
-    // way a couple arrives here, and refusing that left the invite feature usable
-    // only in the window before the second person's first sign-in.
-    const joiner = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      select: { id: true, householdId: true },
-    });
-    if (!joiner) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    if (joiner.householdId) {
-      const [members, expenses, incomes, templates] = await Promise.all([
-        prisma.user.count({ where: { householdId: joiner.householdId } }),
-        prisma.expense.count({ where: { householdId: joiner.householdId } }),
-        prisma.monthlyIncome.count({ where: { householdId: joiner.householdId } }),
-        prisma.expenseTemplate.count({ where: { householdId: joiner.householdId } }),
-      ]);
-      if (members > 1) {
-        return res.status(409).json({
-          error: 'Leave your current household before joining another one.',
-        });
+  app.post(
+    '/api/household/join-with-code',
+    inviteJoinLimit,
+    async (req: Request, res: Response) => {
+      const auth = await requireUserContext(req, res);
+      if (!auth) {
+        return;
       }
-      if (expenses > 0 || incomes > 0 || templates > 0) {
-        return res.status(409).json({
-          error:
-            'Your household already has expenses or income recorded. Joining another household would leave them behind.',
-        });
-      }
-    }
-
-    const normalizedCode = normalizeInviteCode(parsed.data.code);
-    const invite = await prisma.householdInvite.findUnique({
-      where: { code: normalizedCode },
-      include: { household: true },
-    });
-    if (!invite) {
-      return res.status(404).json({ error: 'Invite code not found.' });
-    }
-    if (invite.isRevoked || invite.consumedAt || invite.expiresAt.getTime() <= Date.now()) {
-      return res.status(410).json({ error: 'Invite code is no longer valid.' });
-    }
-    if (invite.householdId === joiner.householdId) {
-      return res.status(409).json({ error: 'You are already in that household.' });
-    }
-
-    const decisionAt = new Date();
-    const vacatedHouseholdId = joiner.householdId;
-    const result = await prisma.$transaction(async (tx) => {
-      // Matching on the household read a moment ago keeps this safe against a
-      // concurrent second attempt: whichever transaction lands first moves the
-      // user, and the other one sees no rows and gives up.
-      const updatedUser = await tx.user.updateMany({
-        where: {
-          id: auth.userId,
-          householdId: vacatedHouseholdId,
-        },
-        data: {
-          householdId: invite.householdId,
-          onboardingHouseholdDecisionAt: decisionAt,
-        },
-      });
-      if (updatedUser.count !== 1) {
-        throw new Error('Household setup has already been completed.');
+      const parsed = joinHouseholdWithCodeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
       }
 
-      const consumed = await tx.householdInvite.updateMany({
-        where: {
-          id: invite.id,
-          consumedAt: null,
-          isRevoked: false,
-        },
-        data: {
-          consumedAt: decisionAt,
-          consumedByUserId: auth.userId,
-        },
-      });
-      if (consumed.count !== 1) {
-        throw new Error('Invite code is no longer valid.');
-      }
-
-      if (vacatedHouseholdId) {
-        // Every dependent row has to go explicitly. The foreign keys say
-        // `ON DELETE SET NULL` while the columns are NOT NULL, so deleting the
-        // household outright would raise a not-null violation — and for
-        // `SuperCategory`, whose column *is* nullable, it would silently null the
-        // owner and promote a private super category to a global system one.
-        // Expenses, income and templates cannot exist here: joining is refused
-        // above when any are present.
-        await tx.monthlyExchangeRate.deleteMany({ where: { householdId: vacatedHouseholdId } });
-        await tx.category.deleteMany({ where: { householdId: vacatedHouseholdId } });
-        await tx.superCategory.deleteMany({ where: { householdId: vacatedHouseholdId } });
-        await tx.household.delete({ where: { id: vacatedHouseholdId } });
-      }
-
-      return tx.user.findUniqueOrThrow({
+      // A user may redeem a code either before choosing a household at all, or from
+      // a household they are alone in and have not put anything into. Both people
+      // signing up separately before either thought to send a code is the ordinary
+      // way a couple arrives here, and refusing that left the invite feature usable
+      // only in the window before the second person's first sign-in.
+      const joiner = await prisma.user.findUnique({
         where: { id: auth.userId },
+        select: { id: true, householdId: true },
+      });
+      if (!joiner) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+
+      if (joiner.householdId) {
+        const [members, expenses, incomes, templates] = await Promise.all([
+          prisma.user.count({ where: { householdId: joiner.householdId } }),
+          prisma.expense.count({ where: { householdId: joiner.householdId } }),
+          prisma.monthlyIncome.count({ where: { householdId: joiner.householdId } }),
+          prisma.expenseTemplate.count({ where: { householdId: joiner.householdId } }),
+        ]);
+        if (members > 1) {
+          return res.status(409).json({
+            error: 'Leave your current household before joining another one.',
+          });
+        }
+        if (expenses > 0 || incomes > 0 || templates > 0) {
+          return res.status(409).json({
+            error:
+              'Your household already has expenses or income recorded. Joining another household would leave them behind.',
+          });
+        }
+      }
+
+      const normalizedCode = normalizeInviteCode(parsed.data.code);
+      const invite = await prisma.householdInvite.findUnique({
+        where: { code: normalizedCode },
         include: { household: true },
       });
-    }).catch((error: unknown) => {
-      if (error instanceof Error && error.message.includes('Invite code')) {
-        return null;
+      if (!invite) {
+        return res.status(404).json({ error: 'Invite code not found.' });
       }
-      if (error instanceof Error && error.message.includes('setup has already')) {
-        return 'LOCKED' as const;
+      if (invite.isRevoked || invite.consumedAt || invite.expiresAt.getTime() <= Date.now()) {
+        return res.status(410).json({ error: 'Invite code is no longer valid.' });
       }
-      throw error;
-    });
+      if (invite.householdId === joiner.householdId) {
+        return res.status(409).json({ error: 'You are already in that household.' });
+      }
 
-    if (result === null) {
-      return res.status(410).json({ error: 'Invite code is no longer valid.' });
-    }
-    if (result === 'LOCKED') {
-      return res.status(409).json({ error: 'Household setup has already been completed.' });
-    }
-    // The user just gained a household, so the cached pre-onboarding context is stale.
-    invalidateUserContext(auth.userId);
-
-    let sessionSecret: string;
-    try {
-      sessionSecret = getSessionSecret();
-    } catch (error) {
-      res.status(500);
-      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during household join');
-      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
-    }
-
-    return res.json({
-      user: {
-        id: result.id,
-        name: result.name,
-        email: result.email,
-        authUserId: result.authUserId,
-        locale: result.locale,
-        householdId: result.householdId,
-        onboardingHouseholdDecisionAt: result.onboardingHouseholdDecisionAt?.toISOString() ?? null,
-        createdAt: result.createdAt.toISOString(),
-      },
-      household: result.household
-        ? {
-            id: result.household.id,
-            name: result.household.name,
-            createdAt: result.household.createdAt.toISOString(),
+      const decisionAt = new Date();
+      const vacatedHouseholdId = joiner.householdId;
+      const result = await prisma
+        .$transaction(async (tx) => {
+          // Matching on the household read a moment ago keeps this safe against a
+          // concurrent second attempt: whichever transaction lands first moves the
+          // user, and the other one sees no rows and gives up.
+          const updatedUser = await tx.user.updateMany({
+            where: {
+              id: auth.userId,
+              householdId: vacatedHouseholdId,
+            },
+            data: {
+              householdId: invite.householdId,
+              onboardingHouseholdDecisionAt: decisionAt,
+            },
+          });
+          if (updatedUser.count !== 1) {
+            throw new Error('Household setup has already been completed.');
           }
-        : null,
-      needsHouseholdSetup: false,
-      sessionToken: issueSessionToken(result, sessionSecret),
-    });
-  });
+
+          const consumed = await tx.householdInvite.updateMany({
+            where: {
+              id: invite.id,
+              consumedAt: null,
+              isRevoked: false,
+            },
+            data: {
+              consumedAt: decisionAt,
+              consumedByUserId: auth.userId,
+            },
+          });
+          if (consumed.count !== 1) {
+            throw new Error('Invite code is no longer valid.');
+          }
+
+          if (vacatedHouseholdId) {
+            // Every dependent row has to go explicitly. The foreign keys say
+            // `ON DELETE SET NULL` while the columns are NOT NULL, so deleting the
+            // household outright would raise a not-null violation — and for
+            // `SuperCategory`, whose column *is* nullable, it would silently null the
+            // owner and promote a private super category to a global system one.
+            // Expenses, income and templates cannot exist here: joining is refused
+            // above when any are present.
+            await tx.monthlyExchangeRate.deleteMany({ where: { householdId: vacatedHouseholdId } });
+            await tx.category.deleteMany({ where: { householdId: vacatedHouseholdId } });
+            await tx.superCategory.deleteMany({ where: { householdId: vacatedHouseholdId } });
+            await tx.household.delete({ where: { id: vacatedHouseholdId } });
+          }
+
+          return tx.user.findUniqueOrThrow({
+            where: { id: auth.userId },
+            include: { household: true },
+          });
+        })
+        .catch((error: unknown) => {
+          if (error instanceof Error && error.message.includes('Invite code')) {
+            return null;
+          }
+          if (error instanceof Error && error.message.includes('setup has already')) {
+            return 'LOCKED' as const;
+          }
+          throw error;
+        });
+
+      if (result === null) {
+        return res.status(410).json({ error: 'Invite code is no longer valid.' });
+      }
+      if (result === 'LOCKED') {
+        return res.status(409).json({ error: 'Household setup has already been completed.' });
+      }
+      // The user just gained a household, so the cached pre-onboarding context is stale.
+      invalidateUserContext(auth.userId);
+
+      let sessionSecret: string;
+      try {
+        sessionSecret = getSessionSecret();
+      } catch (error) {
+        res.status(500);
+        logErrorAndDisableAutoLog(
+          req,
+          res,
+          error,
+          'Session secret is missing or invalid during household join',
+        );
+        return res
+          .status(500)
+          .json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+      }
+
+      return res.json({
+        user: {
+          id: result.id,
+          name: result.name,
+          email: result.email,
+          authUserId: result.authUserId,
+          locale: result.locale,
+          householdId: result.householdId,
+          onboardingHouseholdDecisionAt:
+            result.onboardingHouseholdDecisionAt?.toISOString() ?? null,
+          createdAt: result.createdAt.toISOString(),
+        },
+        household: result.household
+          ? {
+              id: result.household.id,
+              name: result.household.name,
+              createdAt: result.household.createdAt.toISOString(),
+            }
+          : null,
+        needsHouseholdSetup: false,
+        sessionToken: issueSessionToken(result, sessionSecret),
+      });
+    },
+  );
 
   app.post('/api/household/skip-setup', async (req: Request, res: Response) => {
     const auth = await requireUserContext(req, res);
@@ -1487,38 +1795,40 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const decisionAt = new Date();
-    const result = await prisma.$transaction(async (tx) => {
-      const household = await tx.household.create({
-        data: {
-          name: `${existingUser.name}'s Household`,
-        },
-      });
+    const result = await prisma
+      .$transaction(async (tx) => {
+        const household = await tx.household.create({
+          data: {
+            name: `${existingUser.name}'s Household`,
+          },
+        });
 
-      const updated = await tx.user.updateMany({
-        where: {
-          id: auth.userId,
-          householdId: null,
-          onboardingHouseholdDecisionAt: null,
-        },
-        data: {
-          householdId: household.id,
-          onboardingHouseholdDecisionAt: decisionAt,
-        },
-      });
-      if (updated.count !== 1) {
-        throw new Error('Household setup has already been completed.');
-      }
+        const updated = await tx.user.updateMany({
+          where: {
+            id: auth.userId,
+            householdId: null,
+            onboardingHouseholdDecisionAt: null,
+          },
+          data: {
+            householdId: household.id,
+            onboardingHouseholdDecisionAt: decisionAt,
+          },
+        });
+        if (updated.count !== 1) {
+          throw new Error('Household setup has already been completed.');
+        }
 
-      return tx.user.findUniqueOrThrow({
-        where: { id: auth.userId },
-        include: { household: true },
+        return tx.user.findUniqueOrThrow({
+          where: { id: auth.userId },
+          include: { household: true },
+        });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message.includes('setup has already')) {
+          return null;
+        }
+        throw error;
       });
-    }).catch((error: unknown) => {
-      if (error instanceof Error && error.message.includes('setup has already')) {
-        return null;
-      }
-      throw error;
-    });
 
     if (!result) {
       return res.status(409).json({ error: 'Household setup has already been completed.' });
@@ -1531,8 +1841,15 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       sessionSecret = getSessionSecret();
     } catch (error) {
       res.status(500);
-      logErrorAndDisableAutoLog(req, res, error, 'Session secret is missing or invalid during household setup skip');
-      return res.status(500).json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
+      logErrorAndDisableAutoLog(
+        req,
+        res,
+        error,
+        'Session secret is missing or invalid during household setup skip',
+      );
+      return res
+        .status(500)
+        .json({ error: error instanceof Error ? error.message : 'Missing session secret.' });
     }
 
     return res.json({
@@ -1577,12 +1894,14 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       }),
     ]);
 
-    const months = Array.from(new Set([...incomeMonths, ...expenseMonths].map((entry) => entry.month))).sort();
+    const months = Array.from(
+      new Set([...incomeMonths, ...expenseMonths].map((entry) => entry.month)),
+    ).sort();
     res.json(months);
   });
 
   app.get('/api/users', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -1595,7 +1914,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       users.map((user) => ({
         id: user.id,
         name: user.name,
-        email: user.id === auth.userId ? user.email : null,
+        email: auth.authMethod === 'session' && user.id === auth.userId ? user.email : null,
         locale: user.locale,
         createdAt: user.createdAt.toISOString(),
       })),
@@ -1646,7 +1965,11 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     const user = await prisma.user.create({
-      data: { name: parsed.data.name, locale: parsed.data.locale ?? 'en', householdId: auth.householdId },
+      data: {
+        name: parsed.data.name,
+        locale: parsed.data.locale ?? 'en',
+        householdId: auth.householdId,
+      },
     });
     return res.status(201).json({
       id: user.id,
@@ -1702,7 +2025,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.get('/api/categories', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -1734,10 +2057,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     const superCategories = await prisma.superCategory.findMany({
       where: {
-        OR: [
-          { householdId: auth.householdId },
-          { householdId: null, isSystem: true },
-        ],
+        OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
       },
       orderBy: [{ archivedAt: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
       include: {
@@ -1861,58 +2181,61 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
   });
 
-  app.put('/api/categories/:id/super-category', async (req: Request<{ id: string }>, res: Response) => {
-    const auth = await requireAuthContext(req, res);
-    if (!auth) {
-      return;
-    }
-
-    const parsed = assignCategorySuperCategorySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
-
-    if (parsed.data.superCategoryId) {
-      const superCategory = await prisma.superCategory.findFirst({
-        where: {
-          id: parsed.data.superCategoryId,
-          archivedAt: null,
-          OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
-        },
-      });
-      if (!superCategory) {
-        return res.status(400).json({ error: 'Super category must exist and be active.' });
+  app.put(
+    '/api/categories/:id/super-category',
+    async (req: Request<{ id: string }>, res: Response) => {
+      const auth = await requireAuthContext(req, res);
+      if (!auth) {
+        return;
       }
-    }
 
-    try {
-      const category = await prisma.category.findFirst({
-        where: { id: req.params.id, householdId: auth.householdId },
-        select: { id: true },
-      });
-      if (!category) {
-        return res.status(404).json({ error: 'Category not found.' });
+      const parsed = assignCategorySuperCategorySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
       }
-      const updated = await prisma.category.update({
-        where: { id: category.id },
-        data: { superCategoryId: parsed.data.superCategoryId },
-        include: {
-          superCategory: {
-            select: { id: true, name: true, color: true },
+
+      if (parsed.data.superCategoryId) {
+        const superCategory = await prisma.superCategory.findFirst({
+          where: {
+            id: parsed.data.superCategoryId,
+            archivedAt: null,
+            OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
           },
-          _count: {
-            select: {
-              expenses: true,
-              expenseTemplates: true,
+        });
+        if (!superCategory) {
+          return res.status(400).json({ error: 'Super category must exist and be active.' });
+        }
+      }
+
+      try {
+        const category = await prisma.category.findFirst({
+          where: { id: req.params.id, householdId: auth.householdId },
+          select: { id: true },
+        });
+        if (!category) {
+          return res.status(404).json({ error: 'Category not found.' });
+        }
+        const updated = await prisma.category.update({
+          where: { id: category.id },
+          data: { superCategoryId: parsed.data.superCategoryId },
+          include: {
+            superCategory: {
+              select: { id: true, name: true, color: true },
+            },
+            _count: {
+              select: {
+                expenses: true,
+                expenseTemplates: true,
+              },
             },
           },
-        },
-      });
-      return res.json(serializeCategory(updated));
-    } catch (error) {
-      return res.status(404).json({ error: 'Category not found.' });
-    }
-  });
+        });
+        return res.json(serializeCategory(updated));
+      } catch (error) {
+        return res.status(404).json({ error: 'Category not found.' });
+      }
+    },
+  );
 
   app.post('/api/categories/:id/archive', async (req: Request<{ id: string }>, res: Response) => {
     const auth = await requireAuthContext(req, res);
@@ -1942,7 +2265,10 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
           where: { id: parsed.data.replacementCategoryId, householdId: auth.householdId },
         })
       : null;
-    if (parsed.data.replacementCategoryId && (!replacementCategory || replacementCategory.archivedAt)) {
+    if (
+      parsed.data.replacementCategoryId &&
+      (!replacementCategory || replacementCategory.archivedAt)
+    ) {
       return res.status(400).json({ error: 'Replacement category must exist and be active.' });
     }
     if (replacementCategory && replacementCategory.id === sourceCategory.id) {
@@ -2109,65 +2435,70 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
   });
 
-  app.post('/api/super-categories/:id/archive', async (req: Request<{ id: string }>, res: Response) => {
-    const auth = await requireAuthContext(req, res);
-    if (!auth) {
-      return;
-    }
+  app.post(
+    '/api/super-categories/:id/archive',
+    async (req: Request<{ id: string }>, res: Response) => {
+      const auth = await requireAuthContext(req, res);
+      if (!auth) {
+        return;
+      }
 
-    const parsed = archiveSuperCategorySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.flatten() });
-    }
+      const parsed = archiveSuperCategorySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.flatten() });
+      }
 
-    // Same widening as the edit route, for the same reason: the `isSystem` refusal
-    // below should be what stops this, not the household scoping happening to miss.
-    const source = await prisma.superCategory.findFirst({
-      where: {
-        id: req.params.id,
-        OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
-      },
-      include: {
-        _count: {
-          select: { categories: true },
+      // Same widening as the edit route, for the same reason: the `isSystem` refusal
+      // below should be what stops this, not the household scoping happening to miss.
+      const source = await prisma.superCategory.findFirst({
+        where: {
+          id: req.params.id,
+          OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
         },
-      },
-    });
-    if (!source) {
-      return res.status(404).json({ error: 'Super category not found.' });
-    }
-    if (source.isSystem) {
-      return res.status(400).json({ error: 'System super categories cannot be archived.' });
-    }
-
-    const replacement = parsed.data.replacementSuperCategoryId
-      ? await prisma.superCategory.findFirst({
-          where: {
-            id: parsed.data.replacementSuperCategoryId,
-            OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+        include: {
+          _count: {
+            select: { categories: true },
           },
-        })
-      : null;
-    if (parsed.data.replacementSuperCategoryId && (!replacement || replacement.archivedAt)) {
-      return res.status(400).json({ error: 'Replacement super category must exist and be active.' });
-    }
-    if (replacement && replacement.id === source.id) {
-      return res.status(400).json({ error: 'Replacement super category must be different.' });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.category.updateMany({
-        where: { superCategoryId: source.id, householdId: auth.householdId },
-        data: { superCategoryId: replacement?.id ?? null },
+        },
       });
-      await tx.superCategory.update({
-        where: { id: source.id },
-        data: { archivedAt: new Date() },
-      });
-    });
+      if (!source) {
+        return res.status(404).json({ error: 'Super category not found.' });
+      }
+      if (source.isSystem) {
+        return res.status(400).json({ error: 'System super categories cannot be archived.' });
+      }
 
-    return res.status(204).send();
-  });
+      const replacement = parsed.data.replacementSuperCategoryId
+        ? await prisma.superCategory.findFirst({
+            where: {
+              id: parsed.data.replacementSuperCategoryId,
+              OR: [{ householdId: auth.householdId }, { householdId: null, isSystem: true }],
+            },
+          })
+        : null;
+      if (parsed.data.replacementSuperCategoryId && (!replacement || replacement.archivedAt)) {
+        return res
+          .status(400)
+          .json({ error: 'Replacement super category must exist and be active.' });
+      }
+      if (replacement && replacement.id === source.id) {
+        return res.status(400).json({ error: 'Replacement super category must be different.' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.category.updateMany({
+          where: { superCategoryId: source.id, householdId: auth.householdId },
+          data: { superCategoryId: replacement?.id ?? null },
+        });
+        await tx.superCategory.update({
+          where: { id: source.id },
+          data: { archivedAt: new Date() },
+        });
+      });
+
+      return res.status(204).send();
+    },
+  );
 
   app.get('/api/exchange-rates', async (req: Request, res: Response) => {
     const auth = await requireAuthContext(req, res);
@@ -2238,7 +2569,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.get('/api/incomes', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2271,7 +2602,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.put('/api/incomes', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2292,7 +2623,11 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     try {
       incomes = await prisma.$transaction(async (tx) => {
         const requestedCurrencies = Array.from(
-          new Set(parsed.data.entries.map((entry) => entry.currencyCode.toUpperCase()).filter((code) => code !== 'ARS')),
+          new Set(
+            parsed.data.entries
+              .map((entry) => entry.currencyCode.toUpperCase())
+              .filter((code) => code !== 'ARS'),
+          ),
         );
         const monthlyRates = requestedCurrencies.length
           ? await tx.monthlyExchangeRate.findMany({
@@ -2303,7 +2638,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
               },
             })
           : [];
-        const monthRateByCurrency = new Map(monthlyRates.map((rate) => [rate.currencyCode, rate.rateToArs.toFixed(6)]));
+        const monthRateByCurrency = new Map(
+          monthlyRates.map((rate) => [rate.currencyCode, rate.rateToArs.toFixed(6)]),
+        );
 
         await tx.monthlyIncome.deleteMany({
           where: {
@@ -2326,13 +2663,13 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
               if (!monthRate) {
                 const createdRate = await tx.monthlyExchangeRate.create({
-                    data: {
-                      month: parsed.data.month,
-                      currencyCode,
-                      rateToArs: normalizedFxRate,
-                      householdId: auth.householdId,
-                    },
-                  });
+                  data: {
+                    month: parsed.data.month,
+                    currencyCode,
+                    rateToArs: normalizedFxRate,
+                    householdId: auth.householdId,
+                  },
+                });
                 monthRateByCurrency.set(currencyCode, createdRate.rateToArs.toFixed(6));
               }
             } else if (monthRate) {
@@ -2391,8 +2728,140 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     );
   });
 
+  app.post('/api/incomes', async (req: Request, res: Response) => {
+    const auth = await requireTransactionAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+    const parsed = createIncomeEntrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { id: parsed.data.userId, householdId: auth.householdId },
+    });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    try {
+      const money = await resolveIncomeMoney({
+        amount: parsed.data.amount,
+        currencyCode: parsed.data.currencyCode,
+        explicitFxRate: parsed.data.fxRate,
+        householdId: auth.householdId,
+        month: parsed.data.month,
+      });
+      const created = await prisma.monthlyIncome.create({
+        data: {
+          month: parsed.data.month,
+          userId: parsed.data.userId,
+          householdId: auth.householdId,
+          description: parsed.data.description,
+          amount: money.amountArs,
+          amountOriginal: money.amountOriginal,
+          currencyCode: money.currencyCode,
+          fxRateUsed: money.fxRateUsed,
+        },
+        include: { user: { select: { name: true } } },
+      });
+      return res.status(201).json(serializeIncome(created));
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Missing exchange rate')) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (error instanceof RangeError) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.put('/api/incomes/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireTransactionAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+    const parsed = updateIncomeEntrySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+
+    const existing = await prisma.monthlyIncome.findFirst({
+      where: { id: req.params.id, householdId: auth.householdId },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: 'Income not found' });
+    }
+
+    const userId = parsed.data.userId ?? existing.userId;
+    if (parsed.data.userId) {
+      const user = await prisma.user.findFirst({
+        where: { id: userId, householdId: auth.householdId },
+      });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+    }
+
+    const month = parsed.data.month ?? existing.month;
+    const currencyCode = parsed.data.currencyCode ?? existing.currencyCode;
+    const canPreserveFxRate =
+      parsed.data.fxRate === undefined &&
+      month === existing.month &&
+      currencyCode === existing.currencyCode;
+
+    try {
+      const money = await resolveIncomeMoney({
+        amount: parsed.data.amount ?? existing.amountOriginal,
+        currencyCode,
+        explicitFxRate: parsed.data.fxRate,
+        householdId: auth.householdId,
+        month,
+        ...(canPreserveFxRate ? { preserveFxRate: existing.fxRateUsed } : {}),
+      });
+      const updated = await prisma.monthlyIncome.update({
+        where: { id: existing.id },
+        data: {
+          month,
+          userId,
+          description: parsed.data.description ?? existing.description,
+          amount: money.amountArs,
+          amountOriginal: money.amountOriginal,
+          currencyCode: money.currencyCode,
+          fxRateUsed: money.fxRateUsed,
+        },
+        include: { user: { select: { name: true } } },
+      });
+      return res.json(serializeIncome(updated));
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Missing exchange rate')) {
+        return res.status(400).json({ error: error.message });
+      }
+      if (error instanceof RangeError) {
+        return res.status(400).json({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
+  app.delete('/api/incomes/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const auth = await requireTransactionAuthContext(req, res);
+    if (!auth) {
+      return;
+    }
+    const result = await prisma.monthlyIncome.deleteMany({
+      where: { id: req.params.id, householdId: auth.householdId },
+    });
+    if (result.count === 0) {
+      return res.status(404).json({ error: 'Income not found' });
+    }
+    return res.status(204).send();
+  });
+
   app.get('/api/expenses', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2404,7 +2873,10 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     const shouldIncludeCount = parsed.data.includeCount ?? true;
 
-    const baseWhere: Record<string, unknown> = { month: parsed.data.month, householdId: auth.householdId };
+    const baseWhere: Record<string, unknown> = {
+      month: parsed.data.month,
+      householdId: auth.householdId,
+    };
     if (parsed.data.search) {
       baseWhere.OR = [
         { description: { contains: parsed.data.search, mode: 'insensitive' } },
@@ -2509,7 +2981,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       ]);
       const hasMore = pagedExpenses.length > parsed.data.limit;
       const expenses = hasMore ? pagedExpenses.slice(0, parsed.data.limit) : pagedExpenses;
-      const nextCursor = hasMore ? expenses[expenses.length - 1]?.id ?? null : null;
+      const nextCursor = hasMore ? (expenses[expenses.length - 1]?.id ?? null) : null;
 
       return res.json({
         month: parsed.data.month,
@@ -2525,7 +2997,10 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
       });
     }
 
-    const [expenses, totals] = await Promise.all([prisma.expense.findMany(baseFindManyArgs), totalsPromise]);
+    const [expenses, totals] = await Promise.all([
+      prisma.expense.findMany(baseFindManyArgs),
+      totalsPromise,
+    ]);
 
     return res.json({
       month: parsed.data.month,
@@ -2576,7 +3051,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.post('/api/expenses/materialize', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2593,7 +3068,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.post('/api/expenses', async (req: Request, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2689,7 +3164,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.put('/api/expenses/:id', async (req: Request<{ id: string }>, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2725,7 +3200,8 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     let payload = parsedBody.data;
     if (parsedBody.data.currencyCode || parsedBody.data.fxRate !== undefined) {
-      const resolvedCurrencyCode = parsedBody.data.currencyCode ?? normalizeCurrencyCode(existing.currencyCode);
+      const resolvedCurrencyCode =
+        parsedBody.data.currencyCode ?? normalizeCurrencyCode(existing.currencyCode);
       const resolvedFxRate = await resolveFxRateForMonth({
         month: existing.month,
         currencyCode: resolvedCurrencyCode,
@@ -2781,7 +3257,7 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
   });
 
   app.delete('/api/expenses/:id', async (req: Request<{ id: string }>, res: Response) => {
-    const auth = await requireAuthContext(req, res);
+    const auth = await requireTransactionAuthContext(req, res);
     if (!auth) {
       return;
     }
@@ -2892,7 +3368,10 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     const month = parsed.data.month;
     const [users, incomes, expenses, household] = await Promise.all([
-      prisma.user.findMany({ where: { householdId: auth.householdId }, orderBy: { createdAt: 'asc' } }),
+      prisma.user.findMany({
+        where: { householdId: auth.householdId },
+        orderBy: { createdAt: 'asc' },
+      }),
       prisma.monthlyIncome.findMany({ where: { month, householdId: auth.householdId } }),
       prisma.expense.findMany({ where: { month, householdId: auth.householdId } }),
       prisma.household.findUniqueOrThrow({
@@ -2913,7 +3392,9 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     }
 
     for (const income of incomes) {
-      incomesByUser[income.userId] = new Decimal(incomesByUser[income.userId]).plus(income.amount).toString();
+      incomesByUser[income.userId] = new Decimal(incomesByUser[income.userId])
+        .plus(income.amount)
+        .toString();
     }
 
     for (const expense of expenses) {
@@ -2979,45 +3460,52 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
     };
     const historyMonths = previousMonths(month, settings.averagingMonths);
 
-    const [userIncome, householdIncome, currentSharedExpenses, userPaid, historicalExpenses, household] =
-      await Promise.all([
-        prisma.monthlyIncome.aggregate({
-          where: { month, userId: auth.userId, householdId: auth.householdId },
-          _sum: { amount: true },
-        }),
-        prisma.monthlyIncome.aggregate({
-          where: { month, householdId: auth.householdId },
-          _sum: { amount: true },
-        }),
-        prisma.expense.aggregate({
-          where: { month, householdId: auth.householdId },
-          _sum: { amountArs: true },
-        }),
-        prisma.expense.aggregate({
-          where: { month, householdId: auth.householdId, paidByUserId: auth.userId },
-          _sum: { amountArs: true },
-        }),
-        prisma.expense.groupBy({
-          by: ['month'],
-          where: { month: { in: historyMonths }, householdId: auth.householdId },
-          _sum: { amountArs: true },
-        }),
-        prisma.household.findUniqueOrThrow({
-          where: { id: auth.householdId },
-          select: {
-            splitMethod: true,
-            splitShares: { where: { userId: auth.userId }, select: { percentage: true } },
-          },
-        }),
-      ]);
+    const [
+      userIncome,
+      householdIncome,
+      currentSharedExpenses,
+      userPaid,
+      historicalExpenses,
+      household,
+    ] = await Promise.all([
+      prisma.monthlyIncome.aggregate({
+        where: { month, userId: auth.userId, householdId: auth.householdId },
+        _sum: { amount: true },
+      }),
+      prisma.monthlyIncome.aggregate({
+        where: { month, householdId: auth.householdId },
+        _sum: { amount: true },
+      }),
+      prisma.expense.aggregate({
+        where: { month, householdId: auth.householdId },
+        _sum: { amountArs: true },
+      }),
+      prisma.expense.aggregate({
+        where: { month, householdId: auth.householdId, paidByUserId: auth.userId },
+        _sum: { amountArs: true },
+      }),
+      prisma.expense.groupBy({
+        by: ['month'],
+        where: { month: { in: historyMonths }, householdId: auth.householdId },
+        _sum: { amountArs: true },
+      }),
+      prisma.household.findUniqueOrThrow({
+        where: { id: auth.householdId },
+        select: {
+          splitMethod: true,
+          splitShares: { where: { userId: auth.userId }, select: { percentage: true } },
+        },
+      }),
+    ]);
 
     const totalHouseholdIncome = new Decimal((householdIncome._sum.amount ?? 0).toString());
     const currentUserIncome = new Decimal((userIncome._sum.amount ?? 0).toString());
-    const splitPercentage = household.splitMethod === 'custom'
-      ? household.splitShares[0]?.percentage.toString() ?? '0'
-      : totalHouseholdIncome.gt(0)
-        ? currentUserIncome.div(totalHouseholdIncome).mul(100).toString()
-        : '0';
+    const splitPercentage =
+      household.splitMethod === 'custom'
+        ? (household.splitShares[0]?.percentage.toString() ?? '0')
+        : totalHouseholdIncome.gt(0)
+          ? currentUserIncome.div(totalHouseholdIncome).mul(100).toString()
+          : '0';
     const historicalSharedExpenses = historicalExpenses
       .map((entry) => new Decimal((entry._sum.amountArs ?? 0).toString()))
       .filter((total) => total.gt(0))

@@ -231,6 +231,18 @@ export interface PasskeyListResponse {
   passkeys: Passkey[];
 }
 
+export interface IntegrationToken {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface CreatedIntegrationToken extends IntegrationToken {
+  token: string;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000/api';
 const OPTIMISTIC_EXPENSE_ID_PREFIX = 'optimistic:expense:';
 type NextRequestInit = RequestInit & { next?: { revalidate?: number; tags?: string[] } };
@@ -288,7 +300,9 @@ async function fetchFromApi(input: string, init?: RequestInit): Promise<Response
       if (input.startsWith(API_BASE_URL)) {
         const upstreamPath = input.slice(API_BASE_URL.length);
         if (upstreamPath.startsWith('/')) {
-          endpoint = isReadRequest ? `/api/read?path=${encodeURIComponent(upstreamPath)}` : `/api${upstreamPath}`;
+          endpoint = isReadRequest
+            ? `/api/read?path=${encodeURIComponent(upstreamPath)}`
+            : `/api${upstreamPath}`;
         }
       }
 
@@ -305,10 +319,7 @@ async function fetchFromApi(input: string, init?: RequestInit): Promise<Response
       headers,
     });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'Unknown network error';
+    const message = error instanceof Error ? error.message : 'Unknown network error';
     throw new Error(`Unable to reach API at ${API_BASE_URL}. ${message}`);
   }
 }
@@ -344,11 +355,17 @@ export async function getUsers(init?: NextRequestInit): Promise<User[]> {
 }
 
 export async function getUser(id: string, init?: NextRequestInit): Promise<User> {
-  const response = await fetchFromApi(`${API_BASE_URL}/users/${encodeURIComponent(id)}`, init ?? { cache: 'no-store' });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/users/${encodeURIComponent(id)}`,
+    init ?? { cache: 'no-store' },
+  );
   return parseResponse<User>(response);
 }
 
-export async function updateUser(id: string, payload: { name?: string; locale?: AppLocale }): Promise<User> {
+export async function updateUser(
+  id: string,
+  payload: { name?: string; locale?: AppLocale },
+): Promise<User> {
   const response = await fetchFromApi(`${API_BASE_URL}/users/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -425,11 +442,16 @@ export async function getExpenses(
   if (query?.includeTotals !== undefined) {
     params.set('includeTotals', String(query.includeTotals));
   }
-  const response = await fetchFromApi(`${API_BASE_URL}/expenses?${params.toString()}`, init ?? { cache: 'no-store' });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/expenses?${params.toString()}`,
+    init ?? { cache: 'no-store' },
+  );
   return parseResponse<ExpenseListResponse>(response);
 }
 
-export async function materializeExpenseMonth(month: string): Promise<ExpenseMaterializationResponse> {
+export async function materializeExpenseMonth(
+  month: string,
+): Promise<ExpenseMaterializationResponse> {
   const response = await fetchFromApi(`${API_BASE_URL}/expenses/materialize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -439,7 +461,10 @@ export async function materializeExpenseMonth(month: string): Promise<ExpenseMat
   return parseResponse<ExpenseMaterializationResponse>(response);
 }
 
-export async function getExpenseDescriptionSuggestions(query: string, init?: NextRequestInit): Promise<string[]> {
+export async function getExpenseDescriptionSuggestions(
+  query: string,
+  init?: NextRequestInit,
+): Promise<string[]> {
   const params = new URLSearchParams({ q: query.trim() });
   const response = await fetchFromApi(
     `${API_BASE_URL}/expense-description-suggestions?${params.toString()}`,
@@ -511,7 +536,10 @@ export async function updateExpense(
   return parseResponse<Expense>(response);
 }
 
-export async function deleteExpense(id: string, applyScope?: 'single' | 'future' | 'all'): Promise<void> {
+export async function deleteExpense(
+  id: string,
+  applyScope?: 'single' | 'future' | 'all',
+): Promise<void> {
   const response = await fetchFromApi(`${API_BASE_URL}/expenses/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
@@ -554,12 +582,18 @@ export async function updateCategory(
   return parseResponse<Category>(response);
 }
 
-export async function archiveCategory(id: string, payload?: { replacementCategoryId?: string }): Promise<void> {
-  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(id)}/archive`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload ?? {}),
-  });
+export async function archiveCategory(
+  id: string,
+  payload?: { replacementCategoryId?: string },
+): Promise<void> {
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/categories/${encodeURIComponent(id)}/archive`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload ?? {}),
+    },
+  );
 
   if (!response.ok) {
     await throwApiError(response, 'Archive failed');
@@ -567,11 +601,14 @@ export async function archiveCategory(id: string, payload?: { replacementCategor
 }
 
 export async function unarchiveCategory(id: string): Promise<void> {
-  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(id)}/unarchive`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({}),
-  });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/categories/${encodeURIComponent(id)}/unarchive`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+  );
 
   if (!response.ok) {
     await throwApiError(response, 'Unarchive failed');
@@ -582,17 +619,23 @@ export async function assignCategorySuperCategory(
   categoryId: string,
   payload: { superCategoryId: string | null },
 ): Promise<Category> {
-  const response = await fetchFromApi(`${API_BASE_URL}/categories/${encodeURIComponent(categoryId)}/super-category`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/categories/${encodeURIComponent(categoryId)}/super-category`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  );
 
   return parseResponse<Category>(response);
 }
 
 export async function getSuperCategories(init?: NextRequestInit): Promise<SuperCategory[]> {
-  const response = await fetchFromApi(`${API_BASE_URL}/super-categories`, init ?? { cache: 'no-store' });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/super-categories`,
+    init ?? { cache: 'no-store' },
+  );
   return parseResponse<SuperCategory[]>(response);
 }
 
@@ -615,11 +658,14 @@ export async function updateSuperCategory(
   id: string,
   payload: Partial<{ name: string; color: string; icon: CategoryIconKey; sortOrder: number }>,
 ): Promise<SuperCategory> {
-  const response = await fetchFromApi(`${API_BASE_URL}/super-categories/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/super-categories/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  );
 
   return parseResponse<SuperCategory>(response);
 }
@@ -628,18 +674,24 @@ export async function archiveSuperCategory(
   id: string,
   payload?: { replacementSuperCategoryId?: string },
 ): Promise<void> {
-  const response = await fetchFromApi(`${API_BASE_URL}/super-categories/${encodeURIComponent(id)}/archive`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload ?? {}),
-  });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/super-categories/${encodeURIComponent(id)}/archive`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload ?? {}),
+    },
+  );
 
   if (!response.ok) {
     await throwApiError(response, 'Archive failed');
   }
 }
 
-export async function getExchangeRates(month: string, init?: NextRequestInit): Promise<ExchangeRate[]> {
+export async function getExchangeRates(
+  month: string,
+  init?: NextRequestInit,
+): Promise<ExchangeRate[]> {
   const response = await fetchFromApi(
     `${API_BASE_URL}/exchange-rates?month=${encodeURIComponent(month)}`,
     init ?? { cache: 'no-store' },
@@ -712,8 +764,13 @@ export async function updatePersonalBudgetPlan(payload: {
   return parseResponse<PersonalBudgetSettings>(response);
 }
 
-export async function getHouseholdSetupStatus(init?: NextRequestInit): Promise<HouseholdSetupStatus> {
-  const response = await fetchFromApi(`${API_BASE_URL}/household/setup-status`, init ?? { cache: 'no-store' });
+export async function getHouseholdSetupStatus(
+  init?: NextRequestInit,
+): Promise<HouseholdSetupStatus> {
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/household/setup-status`,
+    init ?? { cache: 'no-store' },
+  );
   return parseResponse<HouseholdSetupStatus>(response);
 }
 
@@ -749,7 +806,10 @@ export async function createHouseholdInvite(init?: NextRequestInit): Promise<Hou
   return parseResponse<HouseholdInvite>(response);
 }
 
-export async function joinHouseholdWithCode(code: string, init?: NextRequestInit): Promise<AuthLinkResponse> {
+export async function joinHouseholdWithCode(
+  code: string,
+  init?: NextRequestInit,
+): Promise<AuthLinkResponse> {
   const response = await fetchFromApi(`${API_BASE_URL}/household/join-with-code`, {
     ...(init ?? {}),
     method: 'POST',
@@ -760,14 +820,48 @@ export async function joinHouseholdWithCode(code: string, init?: NextRequestInit
 }
 
 export async function getPasskeys(init?: NextRequestInit): Promise<PasskeyListResponse> {
-  const response = await fetchFromApi(`${API_BASE_URL}/auth/passkeys`, init ?? { cache: 'no-store' });
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/auth/passkeys`,
+    init ?? { cache: 'no-store' },
+  );
   return parseResponse<PasskeyListResponse>(response);
 }
 
 export async function deletePasskey(id: string): Promise<void> {
-  const response = await fetchFromApi(`${API_BASE_URL}/auth/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const response = await fetchFromApi(`${API_BASE_URL}/auth/passkeys/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
   if (!response.ok) {
     await throwApiError(response, 'Failed to remove passkey');
+  }
+}
+
+export async function getIntegrationTokens(init?: NextRequestInit): Promise<IntegrationToken[]> {
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/integration-tokens`,
+    init ?? { cache: 'no-store' },
+  );
+  return parseResponse<IntegrationToken[]>(response);
+}
+
+export async function createIntegrationToken(name: string): Promise<CreatedIntegrationToken> {
+  const response = await fetchFromApi(`${API_BASE_URL}/integration-tokens`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return parseResponse<CreatedIntegrationToken>(response);
+}
+
+export async function deleteIntegrationToken(id: string): Promise<void> {
+  const response = await fetchFromApi(
+    `${API_BASE_URL}/integration-tokens/${encodeURIComponent(id)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+  if (!response.ok) {
+    await throwApiError(response, 'Failed to revoke integration token');
   }
 }
 

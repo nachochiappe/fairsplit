@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import {
   getCategories,
   getHouseholdSplitPolicy,
+  getIntegrationTokens,
   getPasskeys,
   getPersonalBudgetForecast,
   getSuperCategories,
@@ -36,8 +37,17 @@ export default function SettingsPage() {
 }
 
 async function SettingsPageContent() {
-  const { categories, currentUser, householdUsers, month, passkeys, personalBudget, splitPolicy, superCategories } =
-    await getSettingsPageData();
+  const {
+    categories,
+    currentUser,
+    householdUsers,
+    integrationTokens,
+    month,
+    passkeys,
+    personalBudget,
+    splitPolicy,
+    superCategories,
+  } = await getSettingsPageData();
 
   return (
     <SettingsClient
@@ -47,6 +57,7 @@ async function SettingsPageContent() {
       currentUserName={currentUser?.name ?? null}
       initialCategories={categories}
       initialPasskeys={passkeys.passkeys}
+      initialIntegrationTokens={integrationTokens}
       initialPersonalBudget={personalBudget}
       initialSplitPolicy={splitPolicy}
       initialSuperCategories={superCategories}
@@ -73,25 +84,35 @@ async function getSettingsPageData() {
 
   const sessionUserId = session?.userId ?? null;
 
-  const [categories, superCategories, currentUser, passkeys, householdUsers, splitPolicy, personalBudget] =
-    await withSessionRecovery(() =>
-      withServerApiLogging(requestId, { month, route: '/settings' }, async () =>
-        Promise.all([
-          getCategories(serverReadInit),
-          getSuperCategories(serverReadInit),
-          sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
-          getPasskeys(serverReadInit),
-          getUsers(serverReadInit),
-          getHouseholdSplitPolicy(serverReadInit),
-          getPersonalBudgetForecast(month, serverReadInit),
-        ]),
-      ),
-    );
+  const [
+    categories,
+    superCategories,
+    currentUser,
+    passkeys,
+    integrationTokens,
+    householdUsers,
+    splitPolicy,
+    personalBudget,
+  ] = await withSessionRecovery(() =>
+    withServerApiLogging(requestId, { month, route: '/settings' }, async () =>
+      Promise.all([
+        getCategories(serverReadInit),
+        getSuperCategories(serverReadInit),
+        sessionUserId ? getUser(sessionUserId, serverReadInit) : Promise.resolve(null),
+        getPasskeys(serverReadInit),
+        getIntegrationTokens(serverReadInit),
+        getUsers(serverReadInit),
+        getHouseholdSplitPolicy(serverReadInit),
+        getPersonalBudgetForecast(month, serverReadInit),
+      ]),
+    ),
+  );
 
   return {
     categories,
     currentUser,
     householdUsers,
+    integrationTokens,
     month,
     passkeys,
     personalBudget,

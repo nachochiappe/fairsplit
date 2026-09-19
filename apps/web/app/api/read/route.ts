@@ -19,6 +19,7 @@ const ALLOWED_READ_PATH_PREFIXES = [
   '/household/setup-status',
   '/household/split-policy',
   '/auth/passkeys',
+  '/integration-tokens',
 ] as const;
 
 function isAllowedPath(path: string): boolean {
@@ -31,13 +32,24 @@ export async function GET(request: Request): Promise<Response> {
   const requestId = getOrCreateRequestId(new Headers(request.headers));
   const sessionToken = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!sessionToken) {
-    return appendRequestId(Response.json({ error: 'Missing authentication context.' }, { status: 401 }), requestId);
+    return appendRequestId(
+      Response.json({ error: 'Missing authentication context.' }, { status: 401 }),
+      requestId,
+    );
   }
 
   const requestUrl = new URL(request.url);
   const upstreamPath = requestUrl.searchParams.get('path')?.trim() ?? '';
-  if (!upstreamPath || !upstreamPath.startsWith('/') || upstreamPath.startsWith('//') || !isAllowedPath(upstreamPath)) {
-    return appendRequestId(Response.json({ error: 'Invalid read path.' }, { status: 400 }), requestId);
+  if (
+    !upstreamPath ||
+    !upstreamPath.startsWith('/') ||
+    upstreamPath.startsWith('//') ||
+    !isAllowedPath(upstreamPath)
+  ) {
+    return appendRequestId(
+      Response.json({ error: 'Invalid read path.' }, { status: 400 }),
+      requestId,
+    );
   }
 
   let upstreamResponse: Response;
@@ -62,7 +74,10 @@ export async function GET(request: Request): Promise<Response> {
       },
       'Read proxy failed to reach API',
     );
-    return appendRequestId(Response.json({ error: 'Failed to reach API.' }, { status: 502 }), requestId);
+    return appendRequestId(
+      Response.json({ error: 'Failed to reach API.' }, { status: 502 }),
+      requestId,
+    );
   }
 
   return forwardApiResponse(upstreamResponse, {
